@@ -194,13 +194,17 @@
 <!-- Storage inspector modal -->
 <div class="confirm-modal-overlay" id="storageModal">
   <div class="confirm-modal storage-modal" id="storageModalInner">
-    <div>
-      <div class="confirm-modal-title">💾 Données stockées localement</div><button class="panel-close" id="btnStorageClose">✕</button>
+    <div class="storage-modal-head">
+      <div class="storage-modal-head-text">
+        <div class="storage-modal-title">💾 Données stockées localement</div>
+        <div class="storage-modal-sub" id="storageModalSummary">—</div>
+      </div>
+      <button class="storage-modal-close" id="btnStorageClose" aria-label="Fermer">✕</button>
     </div>
-    <div id="storageInspectorBody"></div>
-    <div>
-      <button class="confirm-btn-delete" id="btnClearAllStorage">🗑 Tout vider</button>
-      <button class="confirm-btn-keep" id="btnStorageCloseFooter">Fermer</button>
+    <div id="storageInspectorBody" class="storage-modal-body"></div>
+    <div class="storage-modal-footer">
+      <button class="storage-btn-secondary" id="btnStorageCloseFooter">Fermer</button>
+      <button class="storage-btn-danger" id="btnClearAllStorage"><span aria-hidden="true">🗑</span> Tout vider</button>
     </div>
   </div>
 </div>
