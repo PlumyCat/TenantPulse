@@ -121,6 +121,81 @@ function toggleCollapsible(bodyId, arrowId) {
 // ── History ──
 const HISTORY_KEY = 'tenantIdHistory_v1';
 const HISTORY_OPT_KEY = 'tenantIdHistory_enabled';
+const HISTORY_MAX_KEY = 'tenantIdHistory_max';
+const HISTORY_RETENTION_KEY = 'tenantIdHistory_retentionMs';
+const HISTORY_MAX_DEFAULT = 20;
+const HISTORY_RETENTION_DEFAULT_MS = 24 * 3600 * 1000; // 24h
+const HISTORY_MAX_HARD_LIMIT = 40;
+
+// Slider mapping for retention (index → label + ms). ms=0 → unlimited.
+const RETENTION_STEPS = [
+  { label: '5 min',     ms: 5 * 60 * 1000 },
+  { label: '15 min',    ms: 15 * 60 * 1000 },
+  { label: '30 min',    ms: 30 * 60 * 1000 },
+  { label: '1 h',       ms: 1 * 3600 * 1000 },
+  { label: '3 h',       ms: 3 * 3600 * 1000 },
+  { label: '6 h',       ms: 6 * 3600 * 1000 },
+  { label: '12 h',      ms: 12 * 3600 * 1000 },
+  { label: '24 h',      ms: 24 * 3600 * 1000 },
+  { label: '3 jours',   ms: 3 * 86400 * 1000 },
+  { label: '7 jours',   ms: 7 * 86400 * 1000 },
+  { label: '14 jours',  ms: 14 * 86400 * 1000 },
+  { label: '30 jours',  ms: 30 * 86400 * 1000 },
+  { label: '90 jours',  ms: 90 * 86400 * 1000 },
+  { label: 'Illimité',  ms: 0 }
+];
+const RETENTION_DEFAULT_INDEX = 7; // = 24h
+
+function getHistoryMax() {
+  try {
+    const raw = localStorage.getItem(HISTORY_MAX_KEY);
+    if (raw === null) return HISTORY_MAX_DEFAULT;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) return HISTORY_MAX_DEFAULT;
+    return Math.min(n, HISTORY_MAX_HARD_LIMIT);
+  } catch { return HISTORY_MAX_DEFAULT; }
+}
+function setHistoryMax(n) {
+  const v = Math.max(0, Math.min(HISTORY_MAX_HARD_LIMIT, parseInt(n, 10) || 0));
+  try { localStorage.setItem(HISTORY_MAX_KEY, String(v)); } catch {}
+  // Trim existing history if new max is smaller
+  const items = loadHistory();
+  if (items.length > v) { saveHistory(items.slice(0, v)); }
+  renderHistory(); syncCacheIndicator();
+  return v;
+}
+function getRetentionIndex() {
+  try {
+    const raw = localStorage.getItem(HISTORY_RETENTION_KEY);
+    if (raw === null) return RETENTION_DEFAULT_INDEX;
+    const targetMs = parseInt(raw, 10);
+    if (!Number.isFinite(targetMs)) return RETENTION_DEFAULT_INDEX;
+    if (targetMs === 0) return RETENTION_STEPS.length - 1; // unlimited
+    // Find closest matching step
+    let idx = RETENTION_DEFAULT_INDEX;
+    for (let i = 0; i < RETENTION_STEPS.length - 1; i++) {
+      if (RETENTION_STEPS[i].ms === targetMs) { idx = i; break; }
+    }
+    return idx;
+  } catch { return RETENTION_DEFAULT_INDEX; }
+}
+function setRetentionIndex(idx) {
+  const i = Math.max(0, Math.min(RETENTION_STEPS.length - 1, parseInt(idx, 10) || 0));
+  const ms = RETENTION_STEPS[i].ms;
+  try { localStorage.setItem(HISTORY_RETENTION_KEY, String(ms)); } catch {}
+  pruneExpiredHistory();
+  renderHistory(); syncCacheIndicator();
+  return i;
+}
+function getRetentionMs() { return RETENTION_STEPS[getRetentionIndex()].ms; }
+function pruneExpiredHistory() {
+  const ms = getRetentionMs();
+  if (ms === 0) return; // unlimited, no prune
+  const now = Date.now();
+  const items = loadHistory();
+  const kept = items.filter(it => (now - (it.at || 0)) < ms);
+  if (kept.length !== items.length) saveHistory(kept);
+}
 
 function isHistoryEnabled() {
   try { return localStorage.getItem(HISTORY_OPT_KEY) === 'true'; } catch { return false; }
@@ -163,14 +238,18 @@ function confirmDisableKeep() {
 function syncHistoryToggleUI() {
   const sw = document.getElementById('historyOptSwitch');
   if (sw) sw.classList.toggle('on', isHistoryEnabled());
+  syncCacheSettingsAvailability();
 }
 function loadHistory()      { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
 function saveHistory(items) { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items)); } catch {} }
 function addToHistory(domain, tenantId) {
   if (!tenantId || !isHistoryEnabled()) return;
+  const max = getHistoryMax();
+  if (max <= 0) return; // user disabled storage via slider
+  pruneExpiredHistory();
   let items = loadHistory().filter(i => i.domain !== domain);
   items.unshift({ domain, tenantId, at: Date.now() });
-  saveHistory(items.slice(0, 7));
+  saveHistory(items.slice(0, max));
   renderHistory();
   syncCacheIndicator();
 }
@@ -223,6 +302,7 @@ function renderHistory() {
   if (!isHistoryEnabled()) {
     const empty = document.createElement('div'); empty.className = 'history-empty'; empty.textContent = 'Historique désactivé — activez-le dans Options'; list.appendChild(empty); return;
   }
+  pruneExpiredHistory();
   const items = loadHistory();
   if (!items.length) {
     const empty = document.createElement('div'); empty.className = 'history-empty'; empty.textContent = 'Aucune analyse effectuée'; list.appendChild(empty); return;
@@ -316,6 +396,66 @@ function bindEvents() {
   document.getElementById('btnProfilesNone').addEventListener('click', () => {
     document.querySelectorAll('.profile-item-switch').forEach(sw => sw.classList.remove('on'));
   });
+  const dropInfoBtn = document.getElementById('btnDropInfoToggle');
+  if (dropInfoBtn) {
+    dropInfoBtn.addEventListener('click', () => {
+      const body = document.getElementById('dropInfoBody');
+      const arrow = document.getElementById('dropInfoArrow');
+      const open = body.classList.toggle('open');
+      arrow.classList.toggle('open', open);
+      dropInfoBtn.classList.toggle('open', open);
+      dropInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+  bindCacheSettings();
+}
+
+// ── Cache settings sliders ──
+function bindCacheSettings() {
+  const maxSlider = document.getElementById('maxTenantsSlider');
+  const maxValue  = document.getElementById('maxTenantsValue');
+  const retSlider = document.getElementById('retentionSlider');
+  const retValue  = document.getElementById('retentionValue');
+  const retWarn   = document.getElementById('retentionWarning');
+  if (!maxSlider || !retSlider) return;
+
+  // Init from localStorage
+  const curMax = getHistoryMax();
+  maxSlider.value = String(curMax);
+  maxValue.textContent = curMax === 0 ? 'Désactivé' : String(curMax);
+
+  const curRetIdx = getRetentionIndex();
+  retSlider.value = String(curRetIdx);
+  retValue.textContent = RETENTION_STEPS[curRetIdx].label;
+  retWarn.hidden = curRetIdx !== RETENTION_STEPS.length - 1;
+
+  maxSlider.addEventListener('input', () => {
+    const v = parseInt(maxSlider.value, 10) || 0;
+    maxValue.textContent = v === 0 ? 'Désactivé' : String(v);
+  });
+  maxSlider.addEventListener('change', () => {
+    const applied = setHistoryMax(maxSlider.value);
+    maxValue.textContent = applied === 0 ? 'Désactivé' : String(applied);
+  });
+
+  retSlider.addEventListener('input', () => {
+    const i = parseInt(retSlider.value, 10) || 0;
+    retValue.textContent = RETENTION_STEPS[i].label;
+    retWarn.hidden = i !== RETENTION_STEPS.length - 1;
+  });
+  retSlider.addEventListener('change', () => {
+    const applied = setRetentionIndex(retSlider.value);
+    retValue.textContent = RETENTION_STEPS[applied].label;
+    retWarn.hidden = applied !== RETENTION_STEPS.length - 1;
+  });
+
+  syncCacheSettingsAvailability();
+}
+function syncCacheSettingsAvailability() {
+  const panel = document.getElementById('cacheSettings');
+  if (!panel) return;
+  const enabled = isHistoryEnabled();
+  panel.classList.toggle('disabled', !enabled);
 }
 
 // ── Profiles modal ──
