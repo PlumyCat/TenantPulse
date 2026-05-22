@@ -538,44 +538,66 @@ function hideConfTooltip() {
 document.addEventListener('mouseup', hideConfTooltip);
 
 // ── Storage inspector ──
+function fmtStorageSize(bytes) {
+  if (bytes < 1024) return bytes + ' o';
+  return (bytes / 1024).toFixed(1) + ' Ko';
+}
+function updateStorageSummary() {
+  const sum = document.getElementById('storageModalSummary');
+  if (!sum) return;
+  const entries = document.querySelectorAll('.storage-entry');
+  let total = 0;
+  entries.forEach(e => { total += parseInt(e.dataset.bytes || '0', 10); });
+  if (!entries.length) sum.textContent = 'Aucune donnée stockée';
+  else sum.textContent = entries.length + (entries.length > 1 ? ' entrées' : ' entrée') + ' · ' + fmtStorageSize(total) + ' au total';
+}
 function showStoragePanel() {
   document.getElementById('mainDropdown').classList.remove('open');
   const body = document.getElementById('storageInspectorBody');
-  body.textContent = '';
+  body.replaceChildren();
   const keys = [];
   try { for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); } catch {}
   if (!keys.length) {
-    const msg = document.createElement('div'); msg.className = 'storage-empty-msg'; msg.textContent = 'Aucune donnée stockée dans ce navigateur.';
+    const msg = document.createElement('div'); msg.className = 'storage-empty-msg';
+    const icon = document.createElement('div'); icon.className = 'storage-empty-icon'; icon.textContent = '📭';
+    const txt = document.createElement('div'); txt.textContent = 'Aucune donnée stockée dans ce navigateur.';
+    msg.appendChild(icon); msg.appendChild(txt);
     body.appendChild(msg);
   } else {
     keys.sort().forEach(key => {
       let raw = ''; try { raw = localStorage.getItem(key) || ''; } catch {}
       const sizeBytes = new Blob([raw]).size;
-      const sizeLabel = sizeBytes < 1024 ? sizeBytes + ' o' : (sizeBytes / 1024).toFixed(1) + ' Ko';
       let display = raw;
       try { const parsed = JSON.parse(raw); display = JSON.stringify(parsed, null, 2); } catch {}
-      const entry = document.createElement('div'); entry.className = 'storage-entry';
+      const entry = document.createElement('div'); entry.className = 'storage-entry'; entry.dataset.bytes = String(sizeBytes);
       const head  = document.createElement('div'); head.className = 'storage-entry-head';
-      const keyEl = document.createElement('span'); keyEl.className = 'storage-entry-key'; keyEl.textContent = key;
-      const right = document.createElement('div'); right.style.cssText = 'display:flex;align-items:center;gap:6px';
-      const size  = document.createElement('span'); size.className = 'storage-entry-size'; size.textContent = sizeLabel;
-      const del   = document.createElement('button'); del.className = 'storage-entry-del'; del.textContent = '🗑';
+      const left  = document.createElement('div'); left.className = 'storage-entry-head-left';
+      const keyEl = document.createElement('code'); keyEl.className = 'storage-entry-key'; keyEl.textContent = key;
+      const size  = document.createElement('span'); size.className = 'storage-entry-size'; size.textContent = fmtStorageSize(sizeBytes);
+      left.appendChild(keyEl); left.appendChild(size);
+      const del   = document.createElement('button'); del.className = 'storage-entry-del'; del.title = 'Supprimer cette entrée'; del.setAttribute('aria-label', 'Supprimer ' + key);
+      const delIcon = document.createElement('span'); delIcon.textContent = '🗑'; delIcon.style.cssText = 'pointer-events:none';
+      del.appendChild(delIcon);
       del.addEventListener('click', () => {
         try { localStorage.removeItem(key); } catch {}
         entry.remove();
         syncCacheIndicator(); syncHistoryToggleUI();
+        updateStorageSummary();
         if (!document.querySelectorAll('.storage-entry').length) {
-          const msg = document.createElement('div'); msg.className = 'storage-empty-msg'; msg.textContent = 'Aucune donnée stockée dans ce navigateur.';
+          const msg = document.createElement('div'); msg.className = 'storage-empty-msg';
+          const icon = document.createElement('div'); icon.className = 'storage-empty-icon'; icon.textContent = '📭';
+          const txt = document.createElement('div'); txt.textContent = 'Aucune donnée stockée dans ce navigateur.';
+          msg.appendChild(icon); msg.appendChild(txt);
           body.appendChild(msg);
         }
       });
-      right.appendChild(size); right.appendChild(del);
-      head.appendChild(keyEl); head.appendChild(right);
-      const val = document.createElement('div'); val.className = 'storage-entry-val'; val.textContent = display;
+      head.appendChild(left); head.appendChild(del);
+      const val = document.createElement('pre'); val.className = 'storage-entry-val'; val.textContent = display;
       entry.appendChild(head); entry.appendChild(val);
       body.appendChild(entry);
     });
   }
+  updateStorageSummary();
   document.getElementById('storageModal').classList.add('open');
 }
 function hideStoragePanel() {
