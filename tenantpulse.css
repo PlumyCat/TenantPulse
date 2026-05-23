@@ -126,6 +126,41 @@ nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-i
 .drop-menu .cache-legend-label{color:rgba(255,255,255,.78)}
 .drop-menu .cache-legend-label strong{color:#fff}
 .drop-menu .drop-info-row > span:first-child{filter:brightness(1.2)}
+/* ── Corrections mode clair : texte sombre sur fond blanc ── */
+[data-theme="light"] .drop-menu .drop-toggle-label,
+html:not([data-theme="dark"]) .drop-menu .drop-toggle-label{color:var(--text)}
+[data-theme="light"] .drop-menu .drop-toggle-icon,
+html:not([data-theme="dark"]) .drop-menu .drop-toggle-icon{color:var(--text)}
+[data-theme="light"] .drop-menu .cache-setting-label,
+html:not([data-theme="dark"]) .drop-menu .cache-setting-label{color:var(--text)}
+[data-theme="light"] .drop-menu .cache-setting-scale,
+html:not([data-theme="dark"]) .drop-menu .cache-setting-scale{color:var(--soft)}
+[data-theme="light"] .drop-menu .drop-info-body-inner,
+html:not([data-theme="dark"]) .drop-menu .drop-info-body-inner{color:var(--soft)}
+[data-theme="light"] .drop-menu .drop-info-body-inner strong,
+html:not([data-theme="dark"]) .drop-menu .drop-info-body-inner strong{color:var(--text)}
+[data-theme="light"] .drop-menu .drop-info-body-inner code,
+html:not([data-theme="dark"]) .drop-menu .drop-info-body-inner code{color:var(--text);background:var(--row);border-color:var(--border)}
+[data-theme="light"] .drop-menu .drop-info-row,
+html:not([data-theme="dark"]) .drop-menu .drop-info-row{color:var(--soft)}
+[data-theme="light"] .drop-menu .drop-info-row strong,
+html:not([data-theme="dark"]) .drop-menu .drop-info-row strong{color:var(--text)}
+[data-theme="light"] .drop-menu .drop-info-row code,
+html:not([data-theme="dark"]) .drop-menu .drop-info-row code{color:var(--text);background:var(--row);border-color:var(--border)}
+[data-theme="light"] .drop-menu .drop-section-btn,
+html:not([data-theme="dark"]) .drop-menu .drop-section-btn{color:var(--muted)}
+[data-theme="light"] .drop-menu .drop-section-btn:hover,
+html:not([data-theme="dark"]) .drop-menu .drop-section-btn:hover{color:var(--text);background:rgba(0,0,0,.03)}
+[data-theme="light"] .drop-menu .proxy-row-title,
+html:not([data-theme="dark"]) .drop-menu .proxy-row-title{color:var(--text)}
+[data-theme="light"] .drop-menu .proxy-row-chev,
+html:not([data-theme="dark"]) .drop-menu .proxy-row-chev{color:var(--muted)}
+[data-theme="light"] .drop-menu .cache-legend-label,
+html:not([data-theme="dark"]) .drop-menu .cache-legend-label{color:var(--soft)}
+[data-theme="light"] .drop-menu .cache-legend-label strong,
+html:not([data-theme="dark"]) .drop-menu .cache-legend-label strong{color:var(--text)}
+[data-theme="light"] .drop-menu .drop-info-row > span:first-child,
+html:not([data-theme="dark"]) .drop-menu .drop-info-row > span:first-child{filter:none}
 .nav-dropdown.open .drop-menu{display:block;animation:dropIn .18s ease}
 @keyframes dropIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .drop-section-btn{width:100%;display:flex;align-items:center;justify-content:space-between;padding:9px 14px 7px;font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);border:none;background:transparent;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);transition:background .15s,color .15s}
