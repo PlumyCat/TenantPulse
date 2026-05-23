@@ -44,20 +44,12 @@ nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-i
 .nav-right{display:flex;align-items:center;gap:6px;position:relative}
 /* ───── Nav buttons — glassmorphism translucide blanc (typo allégée) ───── */
 .nav-badge{
-  font-size:var(--text-xs);font-weight:600;color:#fff;letter-spacing:.03em;
-  background:linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.08) 100%);
-  backdrop-filter:blur(10px) saturate(160%);
-  -webkit-backdrop-filter:blur(10px) saturate(160%);
-  border:1px solid transparent;
-  padding:3px 10px;border-radius:20px;
-  box-shadow:0 0 0 1px rgba(255,255,255,.2), 0 1px 0 rgba(255,255,255,.12) inset, 0 2px 6px rgba(0,0,0,.1);
-  position:relative;display:inline-flex;align-items:center;gap:6px
-}
-.nav-badge::before{
-  content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;
-  background:linear-gradient(180deg, rgba(255,255,255,.25) 0%, rgba(255,255,255,.05) 50%, rgba(255,255,255,0) 100%);
-  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none
+  font-size:var(--text-xs);font-weight:500;color:rgba(255,255,255,.55);letter-spacing:.03em;
+  background:transparent;
+  border:1px solid rgba(255,255,255,.2);
+  padding:2px 8px;border-radius:20px;
+  display:inline-flex;align-items:center;gap:6px;
+  pointer-events:none;user-select:none
 }
 .favicon {width:22px;height:22px;object-fit:contain;border-radius:4px;display:none;}
 .nav-dropdown{position:relative}
@@ -928,25 +920,17 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 }
 .cache-indicator{
   display:inline-flex;align-items:center;gap:6px;
-  background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.06) 100%);
-  backdrop-filter:blur(10px) saturate(160%);
-  -webkit-backdrop-filter:blur(10px) saturate(160%);
-  border:1px solid transparent;
-  border-radius:20px;padding:3px 11px;
-  font-size:var(--text-xs);font-weight:600;color:#fff;letter-spacing:.02em;
+  background:transparent;
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:20px;padding:2px 10px;
+  font-size:var(--text-xs);font-weight:500;color:rgba(255,255,255,.55);letter-spacing:.02em;
   white-space:nowrap;
-  box-shadow:0 0 0 1px rgba(255,255,255,.18), 0 1px 0 rgba(255,255,255,.1) inset, 0 2px 6px rgba(0,0,0,.1);
-  transition:background .3s,box-shadow .3s,color .3s;position:relative
+  transition:color .3s,border-color .3s;
+  pointer-events:none;user-select:none
 }
-.cache-indicator::before{
-  content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;
-  background:linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.04) 50%, rgba(255,255,255,0) 100%);
-  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none
-}
-.cache-indicator.state-active{background:linear-gradient(180deg, rgba(34,197,94,.3) 0%, rgba(34,197,94,.12) 100%);color:#dcfce7;box-shadow:0 0 0 1px rgba(134,239,172,.55), 0 1px 0 rgba(255,255,255,.2) inset, 0 2px 8px rgba(34,197,94,.18)}
-.cache-indicator.state-inactive{background:linear-gradient(180deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.04) 100%);color:rgba(255,255,255,.6);box-shadow:0 0 0 1px rgba(255,255,255,.18), 0 1px 0 rgba(255,255,255,.12) inset, 0 1px 3px rgba(0,0,0,.1)}
-.cache-indicator.state-clearing{background:linear-gradient(180deg, rgba(239,68,68,.28) 0%, rgba(239,68,68,.1) 100%);color:#fee2e2;box-shadow:0 0 0 1px rgba(252,165,165,.55), 0 1px 0 rgba(255,255,255,.18) inset, 0 2px 8px rgba(239,68,68,.18)}
+.cache-indicator.state-active{color:rgba(134,239,172,.85);border-color:rgba(134,239,172,.35)}
+.cache-indicator.state-inactive{color:rgba(255,255,255,.4);border-color:rgba(255,255,255,.15)}
+.cache-indicator.state-clearing{color:rgba(252,165,165,.85);border-color:rgba(252,165,165,.35)}
 .cache-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;transition:background .3s}
 .cache-indicator.state-active   .cache-dot{background:#86efac;animation:cachePulse 2s ease-in-out infinite}
 .cache-indicator.state-inactive .cache-dot{background:rgba(255,255,255,.3);animation:none}
