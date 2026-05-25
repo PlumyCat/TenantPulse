@@ -175,6 +175,11 @@ html:not([data-theme="dark"]) .drop-menu .drop-info-row > span:first-child{filte
 [data-theme="light"] .drop-toggle:hover,html:not([data-theme="dark"]) .drop-toggle:hover{background:rgba(0,0,0,.03)}
 .drop-toggle-left{display:flex;align-items:center;gap:8px}
 .drop-toggle-icon{font-size:var(--text-lg);flex-shrink:0}
+.icon-adaptive{width:1em;height:1em;vertical-align:-0.125em;display:inline-block;flex-shrink:0}
+[data-theme="dark"] .icon-adaptive{filter:invert(1)}
+.icon-adaptive-inv{width:1em;height:1em;vertical-align:-0.125em;display:inline-block;flex-shrink:0;filter:invert(1)}
+[data-theme="dark"] .icon-adaptive-inv{filter:none}
+.icon-plain{width:1em;height:1em;vertical-align:-0.125em;display:inline-block;flex-shrink:0}
 .drop-toggle-label{font-size:var(--text-sm);font-weight:700;color:var(--text)}
 .drop-toggle-switch{width:32px;height:18px;background:var(--border);border-radius:9px;position:relative;transition:background .2s;flex-shrink:0}
 .drop-toggle-switch.on{background:var(--blue)}
