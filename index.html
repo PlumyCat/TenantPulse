@@ -115,7 +115,7 @@
         <div class="drop-section-body">
           <div class="drop-toggle" id="toggleDarkBtn">
             <div class="drop-toggle-left">
-              <span class="drop-toggle-icon">🎨</span>
+              <img src="assets/brightness.png" class="drop-toggle-icon icon-adaptive" alt="">
               <span class="drop-toggle-label" id="darkLabel">Mode sombre</span>
             </div>
             <div class="drop-toggle-switch" id="darkSwitch"></div>
@@ -129,7 +129,7 @@
         <div class="drop-section-body">
           <div class="drop-toggle" id="toggleHistoryBtn">
             <div class="drop-toggle-left">
-              <span class="drop-toggle-icon">🕐</span>
+              <img src="assets/history.png" class="drop-toggle-icon icon-adaptive" alt="">
               <span class="drop-toggle-label">Historique des Tenant ID</span>
             </div>
             <div class="drop-toggle-switch" id="historyOptSwitch"></div>
@@ -151,7 +151,7 @@
               <input type="range" min="0" max="13" step="1" value="7" id="retentionSlider" class="cache-slider" aria-label="Durée de conservation de l'historique">
               <div class="cache-setting-scale"><span>5 min</span><span>Illimité</span></div>
               <div class="cache-retention-warning" id="retentionWarning" hidden>
-                <span class="cache-warning-badge">⚠ Attention</span>
+                <span class="cache-warning-badge"><img src="assets/warning.png" class="icon-adaptive" alt=""> Attention</span>
                 <span class="cache-warning-info" id="retentionWarningInfo" tabindex="0" role="button" aria-label="Information sur le risque" title="Conserver l'historique indéfiniment n'est pas recommandé : en cas d'attaque sur votre navigateur (extension malveillante, XSS via une page tierce ouverte dans le même profil, vol du dossier de profil sur un poste compromis…), les Tenant ID de vos clients pourraient être extraits du localStorage et utilisés pour identifier votre portefeuille de clients M365.">i</span>
               </div>
             </div>
@@ -159,7 +159,7 @@
           <div class="drop-info-collapsible">
             <button class="drop-info-toggle" id="btnDropInfoToggle" type="button" aria-expanded="false" aria-controls="dropInfoBody">
               <span class="drop-info-toggle-left">
-                <span aria-hidden="true">ℹ️</span>
+                <span aria-hidden="true"><img src="assets/information.png" class="icon-adaptive" alt=""></span>
                 <span>Important</span>
               </span>
               <span class="coll-arrow" id="dropInfoArrow" aria-hidden="true">▾</span>
@@ -173,7 +173,7 @@
                   <li>à chaque <strong>nouvelle analyse</strong> sauvegardée dans le cache&nbsp;;</li>
                   <li>quand vous <strong>modifiez la durée</strong> de conservation ci-dessus.</li>
                 </ul>
-                ⚠️ Aucun nettoyage ne s'effectue tant que TenantPulse est fermé&nbsp;: une entrée arrivée à expiration pendant que l'onglet n'est pas ouvert sera supprimée à votre prochaine ouverture.<br><br>
+                <img src="assets/warning.png" class="icon-adaptive" alt=""> Aucun nettoyage ne s'effectue tant que TenantPulse est fermé&nbsp;: une entrée arrivée à expiration pendant que l'onglet n'est pas ouvert sera supprimée à votre prochaine ouverture.<br><br>
                 Si la durée est réglée sur <strong>«&nbsp;Illimité&nbsp;»</strong>, aucune purge n'est effectuée (seule la limite du nombre max s'applique).
               </div>
             </div>
@@ -199,11 +199,11 @@
           <span>APIs utilisées</span><span class="ds-arrow">▾</span>
         </button>
         <div class="drop-section-body">
-          <div class="proxy-row" data-proxy-key="dnsgoogle"><span class="proxy-row-icon">🌐</span><span class="proxy-row-title">dns.google</span><span class="proxy-row-chev">›</span></div>
-          <div class="proxy-row" data-proxy-key="rdap"><span class="proxy-row-icon">🌐</span><span class="proxy-row-title">rdap.org</span><span class="proxy-row-chev">›</span></div>
-          <div class="proxy-row" data-proxy-key="mslogin"><span class="proxy-row-icon">🔍</span><span class="proxy-row-title">login.microsoftonline.com</span><span class="proxy-row-chev">›</span></div>
-          <div class="proxy-row" data-proxy-key="googleaccounts"><span class="proxy-row-icon">🔵</span><span class="proxy-row-title">accounts.google.com</span><span class="proxy-row-chev">›</span></div>
-          <div class="drop-info-row"><span>✅</span><span>Requêtes directes vers APIs officielles Microsoft, Google DNS, Google Accounts et RDAP. Aucun proxy tiers. Aucune donnée stockée côté serveur.</span></div>
+          <div class="proxy-row" data-proxy-key="dnsgoogle"><span class="proxy-row-icon"><img src="assets/dns.png" class="icon-plain" alt=""></span><span class="proxy-row-title">dns.google</span><span class="proxy-row-chev">›</span></div>
+          <div class="proxy-row" data-proxy-key="rdap"><span class="proxy-row-icon"><img src="assets/dns.png" class="icon-plain" alt=""></span><span class="proxy-row-title">rdap.org</span><span class="proxy-row-chev">›</span></div>
+          <div class="proxy-row" data-proxy-key="mslogin"><span class="proxy-row-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="proxy-row-title">login.microsoftonline.com</span><span class="proxy-row-chev">›</span></div>
+          <div class="proxy-row" data-proxy-key="googleaccounts"><span class="proxy-row-icon"><img src="assets/google.png" class="icon-plain" alt=""></span><span class="proxy-row-title">accounts.google.com</span><span class="proxy-row-chev">›</span></div>
+          <div class="drop-info-row"><span><img src="assets/checked.png" class="icon-adaptive" alt=""></span><span>Requêtes directes vers APIs officielles Microsoft, Google DNS, Google Accounts et RDAP. Aucun proxy tiers. Aucune donnée stockée côté serveur.</span></div>
         </div>
 
         <!-- Stockage local -->
@@ -212,7 +212,7 @@
         </button>
         <div class="drop-section-body">
           <div class="proxy-row" id="btnShowStorage">
-            <span class="proxy-row-icon">💾</span>
+            <span class="proxy-row-icon"><img src="assets/save.png" class="icon-adaptive" alt=""></span>
             <span class="proxy-row-title">Inspecter les données stockées</span>
             <span class="proxy-row-chev">›</span>
           </div>
@@ -236,7 +236,7 @@
   <div class="confirm-modal storage-modal" id="storageModalInner">
     <div class="storage-modal-head">
       <div class="storage-modal-head-text">
-        <div class="storage-modal-title">💾 Données stockées localement</div>
+        <div class="storage-modal-title"><img src="assets/save.png" class="icon-adaptive" alt=""> Données stockées localement</div>
         <div class="storage-modal-sub" id="storageModalSummary">—</div>
       </div>
       <button class="storage-modal-close" id="btnStorageClose" aria-label="Fermer">✕</button>
@@ -277,20 +277,20 @@
         <div class="btn-hint">Rapide — ID MS + DNS de base</div>
         <div class="btn-hint">Complet — WHOIS · sécurité DNS</div>
       </div>
-      <button class="btn-export" id="exportBtn">📋 Copier le rapport</button>
+      <button class="btn-export" id="exportBtn"><img src="assets/copy.png" class="icon-adaptive" alt=""> Copier le rapport</button>
       <div class="prog-list" id="progList">
         <div class="p-step" id="step-ms"><span class="p-step-icon"><img src="assets/Microsoft.png" width="14" height="14" alt="Microsoft"></span><span class="p-step-label">Microsoft 365…</span><button class="p-step-cancel" data-step="ms">✕ Annuler</button><button class="p-step-retry" data-step="ms">↺ Relancer</button></div>
-        <div class="p-step" id="step-google"><span class="p-step-icon">🔵</span><span class="p-step-label">Google Workspace…</span><button class="p-step-cancel" data-step="google">✕ Annuler</button><button class="p-step-retry" data-step="google">↺ Relancer</button></div>
-        <div class="p-step" id="step-dns"><span class="p-step-icon">🌐</span><span class="p-step-label">DNS…</span><button class="p-step-cancel" data-step="dns">✕ Annuler</button><button class="p-step-retry" data-step="dns">↺ Relancer</button></div>
+        <div class="p-step" id="step-google"><span class="p-step-icon"><img src="assets/google.png" class="icon-plain" alt=""></span><span class="p-step-label">Google Workspace…</span><button class="p-step-cancel" data-step="google">✕ Annuler</button><button class="p-step-retry" data-step="google">↺ Relancer</button></div>
+        <div class="p-step" id="step-dns"><span class="p-step-icon"><img src="assets/dns.png" class="icon-plain" alt=""></span><span class="p-step-label">DNS…</span><button class="p-step-cancel" data-step="dns">✕ Annuler</button><button class="p-step-retry" data-step="dns">↺ Relancer</button></div>
         <div class="p-step" id="step-health"><span class="p-step-icon">🛡️</span><span class="p-step-label">Sécurité…</span><button class="p-step-cancel" data-step="health">✕ Annuler</button><button class="p-step-retry" data-step="health">↺ Relancer</button></div>
-        <div class="p-step" id="step-others"><span class="p-step-icon">🔍</span><span class="p-step-label">Autres services…</span><button class="p-step-cancel" data-step="others">✕ Annuler</button><button class="p-step-retry" data-step="others">↺ Relancer</button></div>
+        <div class="p-step" id="step-others"><span class="p-step-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="p-step-label">Autres services…</span><button class="p-step-cancel" data-step="others">✕ Annuler</button><button class="p-step-retry" data-step="others">↺ Relancer</button></div>
         <div class="p-step" id="step-host"><span class="p-step-icon">🏠</span><span class="p-step-label">Hébergeur…</span><button class="p-step-cancel" data-step="host">✕ Annuler</button><button class="p-step-retry" data-step="host">↺ Relancer</button></div>
       </div>
       <div class="err-box" id="errBox"></div>
 
       <div class="msa-check-block">
         <button class="collapsible-btn" id="btnHistoryToggle">
-          <span>🕐 Historique des Tenant ID</span>
+          <span><img src="assets/history.png" class="icon-adaptive" alt=""> Historique des Tenant ID</span>
           <span class="coll-arrow" id="historyArrow">▾</span>
         </button>
         <div class="collapsible-body" id="historyBody">
@@ -301,7 +301,7 @@
 
       <div class="privacy-block">
         <button class="collapsible-btn" id="btnPrivacyToggle">
-          <span>🔒 Confidentialité</span>
+          <span><img src="assets/padlock.png" class="icon-adaptive" alt=""> Confidentialité</span>
           <span class="coll-arrow" id="privacyArrow">▾</span>
         </button>
         <div class="collapsible-body" id="privacyBody">
@@ -310,10 +310,10 @@
             <div>
               <div class="privacy-section-lbl">APIs contactées lors d'une analyse</div>
               <div class="privacy-api-list">
-                <div class="privacy-api-item"><span class="privacy-api-item-icon">🌐</span><span class="privacy-api-item-name">dns.google</span><span class="privacy-api-item-tag">DNS</span></div>
-                <div class="privacy-api-item"><span class="privacy-api-item-icon">🔍</span><span class="privacy-api-item-name">login.microsoftonline.com</span><span class="privacy-api-item-tag">Microsoft</span></div>
-                <div class="privacy-api-item"><span class="privacy-api-item-icon">🔵</span><span class="privacy-api-item-name">accounts.google.com</span><span class="privacy-api-item-tag">Google</span></div>
-                <div class="privacy-api-item"><span class="privacy-api-item-icon">🌐</span><span class="privacy-api-item-name">rdap.org</span><span class="privacy-api-item-tag">WHOIS</span></div>
+                <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/dns.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">dns.google</span><span class="privacy-api-item-tag">DNS</span></div>
+                <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="privacy-api-item-name">login.microsoftonline.com</span><span class="privacy-api-item-tag">Microsoft</span></div>
+                <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/google.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">accounts.google.com</span><span class="privacy-api-item-tag">Google</span></div>
+                <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/dns.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">rdap.org</span><span class="privacy-api-item-tag">WHOIS</span></div>
               </div>
             </div>
             <div>
@@ -323,7 +323,7 @@
               </div>
             </div>
             <div class="privacy-storage-row">
-              <span class="privacy-storage-icon">💾</span>
+              <span class="privacy-storage-icon"><img src="assets/save.png" class="icon-adaptive" alt=""></span>
               <span>Aucun stockage par défaut. L'historique (optionnel) utilise uniquement le <strong>localStorage</strong> de votre navigateur — jamais transmis.</span>
             </div>
             <button class="privacy-cta" id="btnPrivacyCta">
@@ -337,11 +337,11 @@
 
   <main class="center" id="centerCol">
     <div class="col-header">
-      <span class="col-header-icon">📊</span>
+      <span class="col-header-icon"><img src="assets/metrics.png" class="icon-adaptive" alt=""></span>
       <span class="col-header-title">Résultats</span>
     </div>
     <div class="empty-state">
-      <div class="empty-state-icon">🔍</div>
+      <div class="empty-state-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></div>
       <div class="empty-state-title">Aucune analyse en cours</div>
       <div class="empty-state-sub">Saisissez un domaine ou un e-mail</div>
     </div>
