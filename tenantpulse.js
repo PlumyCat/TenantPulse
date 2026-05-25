@@ -700,7 +700,7 @@ function showStoragePanel() {
   try { for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); } catch {}
   if (!keys.length) {
     const msg = document.createElement('div'); msg.className = 'storage-empty-msg';
-    const icon = document.createElement('div'); icon.className = 'storage-empty-icon'; icon.textContent = '📭';
+    const icon = document.createElement('div'); icon.className = 'storage-empty-icon'; const emptyImg = document.createElement('img'); emptyImg.src='assets/save.png'; emptyImg.className='icon-adaptive'; emptyImg.alt=''; emptyImg.style.cssText='width:2em;height:2em;opacity:.4'; icon.appendChild(emptyImg);
     const txt = document.createElement('div'); txt.textContent = 'Aucune donnée stockée dans ce navigateur.';
     msg.appendChild(icon); msg.appendChild(txt);
     body.appendChild(msg);
@@ -717,8 +717,7 @@ function showStoragePanel() {
       const size  = document.createElement('span'); size.className = 'storage-entry-size'; size.textContent = fmtStorageSize(sizeBytes);
       left.appendChild(keyEl); left.appendChild(size);
       const del   = document.createElement('button'); del.className = 'storage-entry-del'; del.title = 'Supprimer cette entrée'; del.setAttribute('aria-label', 'Supprimer ' + key);
-      const delIcon = document.createElement('span'); delIcon.textContent = '🗑'; delIcon.style.cssText = 'pointer-events:none';
-      del.appendChild(delIcon);
+      del.textContent = '×';
       del.addEventListener('click', () => {
         try { localStorage.removeItem(key); } catch {}
         entry.remove();
@@ -726,7 +725,7 @@ function showStoragePanel() {
         updateStorageSummary();
         if (!document.querySelectorAll('.storage-entry').length) {
           const msg = document.createElement('div'); msg.className = 'storage-empty-msg';
-          const icon = document.createElement('div'); icon.className = 'storage-empty-icon'; icon.textContent = '📭';
+          const icon = document.createElement('div'); icon.className = 'storage-empty-icon'; const emptyImg = document.createElement('img'); emptyImg.src='assets/save.png'; emptyImg.className='icon-adaptive'; emptyImg.alt=''; emptyImg.style.cssText='width:2em;height:2em;opacity:.4'; icon.appendChild(emptyImg);
           const txt = document.createElement('div'); txt.textContent = 'Aucune donnée stockée dans ce navigateur.';
           msg.appendChild(icon); msg.appendChild(txt);
           body.appendChild(msg);
@@ -849,20 +848,20 @@ async function checkHealth(domain) {
   const checks = []; let score = 0;
   const mxA = await dnsQuery(domain, 'MX');
   if (mxA.length > 0) { score += 15; checks.push({ t:'ok',    icon:'assets/checked.png', title:'MX Records présents', desc: mxA.map(a => a.data).join(' | ') }); }
-  else                              checks.push({ t:'error', icon:'❌', title:'MX Records manquants',  desc: 'Aucun enregistrement MX.' });
+  else                              checks.push({ t:'error', icon:'assets/warning.png', title:'MX Records manquants',  desc: 'Aucun enregistrement MX.' });
 
   const txtA = await dnsQuery(domain, 'TXT'), allTxt = txtA.map(a => a.data).filter(Boolean), spf = allTxt.find(t => t.includes('v=spf1'));
   if (spf) { score += 15; checks.push({ t: spf.includes('-all') ? 'ok' : 'warn', icon: spf.includes('-all') ? 'assets/checked.png' : 'assets/warning.png', title: spf.includes('-all') ? 'SPF strict (-all)' : 'SPF (softfail ~all)', desc: spf }); }
-  else     checks.push({ t:'error', icon:'❌', title:'SPF manquant', desc:'Risque de spoofing.' });
+  else     checks.push({ t:'error', icon:'assets/warning.png', title:'SPF manquant', desc:'Risque de spoofing.' });
 
   const dmarcA = await dnsQuery(`_dmarc.${domain}`, 'TXT'), dmarc = dmarcA.map(a => a.data).find(d => d.includes('v=DMARC1'));
   let dmarcIsQuarantine = false;
   if (dmarc) {
     const p = (dmarc.match(/p=([^;]+)/i) || [])[1]?.trim().toLowerCase();
     if (p === 'reject')     { score += 20; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=reject', desc: dmarc }); }
-    else if (p === 'quarantine') { score += 20; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=quarantine ⭐', desc: dmarc + ' — Niveau équivalent à reject. ⭐ indique que p=reject serait préférable.' }); }
+    else if (p === 'quarantine') { score += 20; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=quarantine (*)', desc: dmarc + ' — Niveau équivalent à reject. (*) p=reject serait préférable.' }); }
     else                    { score += 5;  checks.push({ t:'warn', icon:'assets/warning.png', title:'DMARC p=none',   desc: dmarc }); }
-  } else checks.push({ t:'error', icon:'❌', title:'DMARC manquant', desc: `Aucun _dmarc.${domain}` });
+  } else checks.push({ t:'error', icon:'assets/warning.png', title:'DMARC manquant', desc: `Aucun _dmarc.${domain}` });
 
   const dkimSelectors = ['selector1','selector2','default','google','microsoft','k1','mail','dkim','smtp','email','mailjet','sendgrid','mandrill','amazonses','postmark','sparkpost','mxroute','zoho','protonmail','brevo','s1','s2','sig1'];
   const dkimResults   = {};
@@ -880,7 +879,7 @@ async function checkHealth(domain) {
     else if (hasSel1)          dkimDesc += ' — (!) selector1 actif, selector2 absent';
     else if (hasSel2)          dkimDesc += ' — (!) selector2 actif, selector1 absent';
     checks.push({ t:'ok', icon:'assets/checked.png', title:`DKIM actif (${selNames})`, desc: dkimDesc, dkimResults, hasSel1, hasSel2 });
-  } else checks.push({ t:'error', icon:'❌', title:'DKIM non détecté', desc:'Aucun DKIM sur les sélecteurs testés.', dkimResults, hasSel1:false, hasSel2:false });
+  } else checks.push({ t:'error', icon:'assets/warning.png', title:'DKIM non détecté', desc:'Aucun DKIM sur les sélecteurs testés.', dkimResults, hasSel1:false, hasSel2:false });
 
   const cnA = await dnsQuery(`www.${domain}`, 'CNAME'), aA = await dnsQuery(`www.${domain}`, 'A');
   if      (cnA.length > 0) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'CNAME www',          desc: cnA.map(a => a.data).join(', ') }); }
@@ -896,7 +895,7 @@ async function checkHealth(domain) {
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'MTA-STS non configuré',  desc: 'Recommandé pour les domaines pro.' });
 
   const bimiA = await dnsQuery(`default._bimi.${domain}`, 'TXT'), bimiRec = bimiA.map(a => a.data).find(d => d.includes('v=BIMI1'));
-  if (bimiRec) { score += 5; checks.push({ t:'ok',   icon:'🏷️', title:'BIMI configuré',          desc: bimiRec }); }
+  if (bimiRec) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'BIMI configuré',          desc: bimiRec }); }
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'BIMI absent',              desc: 'Nécessite DMARC p=quarantine ou reject.' });
 
   return { score: Math.min(score, 100), checks, dkimResults, hasSel1, hasSel2, dmarcIsQuarantine };
@@ -1139,14 +1138,14 @@ function buildScoreRing(score, dmarcIsQuarantine) {
   const fll = document.createElementNS(NS, 'circle'); fll.setAttribute('class','fll'); fll.setAttribute('cx','27'); fll.setAttribute('cy','27'); fll.setAttribute('r', String(r)); fll.setAttribute('stroke', color); fll.setAttribute('stroke-dasharray', String(circ)); fll.setAttribute('stroke-dashoffset', String(offset));
   svg.appendChild(trk); svg.appendChild(fll);
   const lbl_el = document.createElement('div'); lbl_el.className = 'lbl'; lbl_el.textContent = score + '%';
-  if (dmarcIsQuarantine) { const star = document.createElement('span'); star.style.fontSize = '8px'; star.textContent = '⭐'; lbl_el.appendChild(star); }
+  if (dmarcIsQuarantine) { const star = document.createElement('span'); star.style.fontSize = '8px'; star.textContent = '*'; lbl_el.appendChild(star); }
   ring.appendChild(svg); ring.appendChild(lbl_el);
 
   const info = document.createElement('div'); info.className = 'score-info';
   const title = document.createElement('div'); title.className = 'score-title'; title.style.color = lblClr; title.textContent = 'Sécurité : ' + lbl;
   const desc  = document.createElement('div'); desc.className  = 'score-desc';  desc.textContent  = 'MX · SPF · DMARC · DKIM · DNSSEC · MTA-STS · BIMI';
   info.appendChild(title); info.appendChild(desc);
-  if (dmarcIsQuarantine) { const star = document.createElement('div'); star.style.cssText = 'font-size:9.5px;font-weight:500;color:#b45309;margin-top:3px'; star.textContent = '⭐ DMARC p=quarantine — score plein, p=reject recommandé'; info.appendChild(star); }
+  if (dmarcIsQuarantine) { const star = document.createElement('div'); star.style.cssText = 'font-size:9.5px;font-weight:500;color:#b45309;margin-top:3px'; star.textContent = '* DMARC p=quarantine — score plein, p=reject recommandé'; info.appendChild(star); }
 
   el.appendChild(ring); el.appendChild(info);
   return el;
@@ -1165,7 +1164,7 @@ function buildDkimBlock(b, dkimResults, hasSel1, hasSel2) {
     const selLbl = document.createElement('span'); selLbl.style.cssText = 'font-size:10.5px;font-weight:500;color:var(--text)';
     selLbl.textContent = sel + '._domainkey';
     if (isPri) { const tag = document.createElement('span'); tag.style.cssText = 'font-size:8px;color:#0078d4;font-weight:500;margin-left:4px'; tag.textContent = '[MS365]'; selLbl.appendChild(tag); }
-    const badge = document.createElement('span'); badge.className = 'dkim-sel-badge' + (present ? '' : ' absent'); if (present) { const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; badge.appendChild(ck); badge.appendChild(document.createTextNode(' Présent')); } else { badge.textContent = '❌ Absent'; }
+    const badge = document.createElement('span'); badge.className = 'dkim-sel-badge' + (present ? '' : ' absent'); if (present) { const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; badge.appendChild(ck); badge.appendChild(document.createTextNode(' Présent')); } else { const ab = document.createElement('img'); ab.src='assets/warning.png'; ab.className='icon-adaptive'; ab.alt=''; badge.appendChild(ab); badge.appendChild(document.createTextNode(' Absent')); }
     head.appendChild(selLbl); head.appendChild(badge);
     div.appendChild(head);
     if (present && shortV) { const dv = document.createElement('div'); dv.className = 'dkim-val'; dv.textContent = shortV; div.appendChild(dv); }
@@ -1322,7 +1321,7 @@ function exportReport() {
       if (t.includes('SPF (softfail'))                    return 'SPF: OK (softfail \u2014 ~all)';
       if (t.includes('SPF manquant'))                     return 'SPF: MANQUANT';
       if (t.includes('DMARC p=reject'))                   return 'DMARC: OK (p=reject)';
-      if (t.includes('DMARC p=quarantine'))               return 'DMARC: OK (p=quarantine \u2b50)';
+      if (t.includes('DMARC p=quarantine'))               return 'DMARC: OK (p=quarantine *)';
       if (t.includes('DMARC p=none'))                     return 'DMARC: KO (p=none)';
       if (t.includes('DMARC manquant'))                   return 'DMARC: MANQUANT';
       if (t.includes('DKIM actif')) {
@@ -1443,12 +1442,17 @@ function exportReport() {
 
   const text = lines.join('\n');
   const btn  = document.getElementById('exportBtn');
+  function setBtnContent(src, cls, label) {
+    btn.replaceChildren();
+    const img = document.createElement('img'); img.src = src; img.className = cls; img.alt = '';
+    btn.appendChild(img); btn.appendChild(document.createTextNode(' ' + label));
+  }
   navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = '\u2705 Rapport copi\u00e9 !';
-    setTimeout(() => { btn.textContent = '\ud83d\udccb Copier le rapport'; }, 2000);
+    setBtnContent('assets/checked.png', 'icon-adaptive', 'Rapport copi\u00e9 !');
+    setTimeout(() => setBtnContent('assets/copy.png', 'icon-adaptive', 'Copier le rapport'), 2000);
   }).catch(() => {
-    btn.textContent = '\u26a0 Copiez manuellement';
-    setTimeout(() => { btn.textContent = '\ud83d\udccb Copier le rapport'; }, 3000);
+    setBtnContent('assets/warning.png', 'icon-adaptive', 'Copiez manuellement');
+    setTimeout(() => setBtnContent('assets/copy.png', 'icon-adaptive', 'Copier le rapport'), 3000);
   });
 }
 // ── Common panel builders ──
@@ -1487,7 +1491,7 @@ function buildHostPanel(host, domain) {
     if (host.updated)       addRow(b, 'Dernière mise à jour',  formatDate(host.updated));
     if (host.status?.length)addRow(b, 'Statut WHOIS',          host.status.join(', '));
     const lnk = document.createElement('a'); lnk.className = 'ext-link'; lnk.href = `https://www.whois.com/whois/${encodeURIComponent(domain)}`; lnk.target = '_blank'; lnk.rel = 'noopener noreferrer';
-    const lnkIcon = document.createTextNode('🔗 WHOIS complet — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
+    const lnkIcon = document.createTextNode('→ WHOIS complet — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
     lnk.appendChild(lnkIcon); lnk.appendChild(lnkStrong); b.appendChild(lnk);
   };
 }
@@ -1507,7 +1511,7 @@ function buildHealthPanel(health, domain) {
     b.appendChild(hcl);
     buildDkimBlock(b, health.dkimResults, health.hasSel1, health.hasSel2);
     const lnk = document.createElement('a'); lnk.className = 'ext-link'; lnk.href = `https://mxtoolbox.com/SuperTool.aspx?action=mx:${encodeURIComponent(domain)}`; lnk.target = '_blank'; lnk.rel = 'noopener';
-    const lnkIcon = document.createTextNode('🔗 Analyse complète sur MXToolbox — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
+    const lnkIcon = document.createTextNode('→ Analyse complète sur MXToolbox — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
     lnk.appendChild(lnkIcon); lnk.appendChild(lnkStrong); b.appendChild(lnk);
   };
 }
@@ -1516,8 +1520,8 @@ function msRows(ms) {
   return [ms.namespaceType && ['Namespace Type', ms.namespaceType], ms.federationType && ['Fédération', ms.federationType], ms.cloudInstance && ['Cloud Instance', ms.cloudInstance], ms.issuer && ['Issuer', ms.issuer], ms.tokenEndpoint && ['Token Endpoint', ms.tokenEndpoint], ms.authorizationEndpoint && ['Authorization Endpoint', ms.authorizationEndpoint], ms.userInfoEndpoint && ['UserInfo Endpoint', ms.userInfoEndpoint]].filter(Boolean);
 }
 function healthScoreLbl(health) {
-  const star = health.dmarcIsQuarantine ? ' ⭐' : '';
-  return health.score >= 80 ? `${health.score}%${star} 🟢` : health.score >= 50 ? `${health.score}%${star} 🟡` : `${health.score}%${star} 🔴`;
+  const star = health.dmarcIsQuarantine ? ' *' : '';
+  return `${health.score}%${star}`;
 }
 function healthSubLbl(health) {
   const errC = health.checks.filter(c => c.t === 'error').length, warnC = health.checks.filter(c => c.t === 'warn').length;
@@ -1553,7 +1557,6 @@ async function checkFast() {
     document.getElementById('progList').style.display = 'none';
     const confidence = computeConfidence(currentState.ms);
     lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: null, otherServices: null, host: null, tenantConfidence: confidence, fullDone: false };
-    exportBtn.classList.add('visible');
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));
     if (currentState.dns?.detectedProviders?.length) {
@@ -1639,10 +1642,10 @@ async function runFullFromState(raw, domain, ctaBtn) {
 
     if (currentState.host) {
       const logo = hostLogo(currentState.host.hostName);
-      center.insertBefore(makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', '🏠 Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) }), ctaBtn);
+      center.insertBefore(makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', 'Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) }), ctaBtn);
     }
     if (currentState.health) {
-      center.insertBefore(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', '🛡️ Santé du domaine', buildHealthPanel(currentState.health, domain)) }), ctaBtn);
+      center.insertBefore(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) }), ctaBtn);
     }
     ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.replaceChildren(); const doneImg = document.createElement('img'); doneImg.src='assets/checked.png'; doneImg.className='icon-adaptive'; doneImg.alt=''; ctaBtn.appendChild(doneImg); ctaBtn.appendChild(document.createTextNode(' Analyse complète effectuée')); ctaBtn.onclick = null;
   } catch (err) {
@@ -1705,11 +1708,11 @@ async function checkFull() {
     if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     if (currentState.host) {
       const logo = hostLogo(currentState.host.hostName);
-      center.appendChild(makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', '🏠 Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) }));
+      center.appendChild(makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', 'Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) }));
     }
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
     if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
-    center.appendChild(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', '🛡️ Santé du domaine', buildHealthPanel(currentState.health, domain)) }));
+    center.appendChild(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) }));
   } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFullLoading(false); }
 }
