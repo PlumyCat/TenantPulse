@@ -323,7 +323,7 @@ function renderHistory() {
 
     const timeEl = document.createElement('span'); timeEl.className = 'history-item-time'; timeEl.textContent = relativeTime(item.at);
 
-    const copyBtn = document.createElement('button'); copyBtn.className = 'history-item-copy'; copyBtn.textContent = '📋';
+    const copyBtn = document.createElement('button'); copyBtn.className = 'history-item-copy'; const copyImg = document.createElement('img'); copyImg.src = 'assets/copy.png'; copyImg.className = 'icon-adaptive'; copyImg.alt = ''; copyBtn.appendChild(copyImg);
     copyBtn.addEventListener('click', e => { e.stopPropagation(); copyHistoryGuid(item.tenantId, copyBtn); });
 
     row.appendChild(iconSpan); row.appendChild(textWrap); row.appendChild(timeEl); row.appendChild(copyBtn);
@@ -336,7 +336,7 @@ function loadFromHistory(domain) {
   checkFast();
 }
 function copyHistoryGuid(guid, btn) {
-  navigator.clipboard.writeText(guid).then(() => { btn.textContent = '✅'; setTimeout(() => { btn.textContent = '📋'; }, 1500); });
+  navigator.clipboard.writeText(guid).then(() => { btn.replaceChildren(); const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; btn.appendChild(ck); setTimeout(() => { btn.replaceChildren(); const img = document.createElement('img'); img.src = 'assets/copy.png'; img.className = 'icon-adaptive'; img.alt = ''; btn.appendChild(img); }, 1500); });
 }
 
 // ── Central event binding ──
@@ -526,6 +526,7 @@ let openCardId = null;
 let lastReport = null;
 let currentState = { domain:null, ms:null, dns:null, goog:null, health:null, others:null, host:null, fullDone:false };
 
+function panelTitle(src, cls, text) { const img = document.createElement('img'); img.src=src; img.className=cls; img.alt=''; return [img, document.createTextNode(' '+text)]; }
 function openPanel(id, title, buildFn) {
   const panel   = document.getElementById('detailPanel');
   const body    = document.getElementById('panelBody');
@@ -535,7 +536,7 @@ function openPanel(id, title, buildFn) {
   openCardId = id;
   const card = document.getElementById('card-' + id);
   if (card) card.classList.add(card.dataset.selClass || 'selected');
-  titleEl.textContent = title;
+  if (typeof title === 'string') { titleEl.textContent = title; } else { titleEl.replaceChildren(...title); }
   body.replaceChildren(); // FIX 2a : remplacé body.innerHTML = ''
   buildFn(body);
   panel.classList.add('open');
@@ -847,20 +848,20 @@ async function checkDNS(domain) {
 async function checkHealth(domain) {
   const checks = []; let score = 0;
   const mxA = await dnsQuery(domain, 'MX');
-  if (mxA.length > 0) { score += 15; checks.push({ t:'ok',    icon:'✅', title:'MX Records présents', desc: mxA.map(a => a.data).join(' | ') }); }
+  if (mxA.length > 0) { score += 15; checks.push({ t:'ok',    icon:'assets/checked.png', title:'MX Records présents', desc: mxA.map(a => a.data).join(' | ') }); }
   else                              checks.push({ t:'error', icon:'❌', title:'MX Records manquants',  desc: 'Aucun enregistrement MX.' });
 
   const txtA = await dnsQuery(domain, 'TXT'), allTxt = txtA.map(a => a.data).filter(Boolean), spf = allTxt.find(t => t.includes('v=spf1'));
-  if (spf) { score += 15; checks.push({ t: spf.includes('-all') ? 'ok' : 'warn', icon: spf.includes('-all') ? '✅' : '⚠️', title: spf.includes('-all') ? 'SPF strict (-all)' : 'SPF (softfail ~all)', desc: spf }); }
+  if (spf) { score += 15; checks.push({ t: spf.includes('-all') ? 'ok' : 'warn', icon: spf.includes('-all') ? 'assets/checked.png' : 'assets/warning.png', title: spf.includes('-all') ? 'SPF strict (-all)' : 'SPF (softfail ~all)', desc: spf }); }
   else     checks.push({ t:'error', icon:'❌', title:'SPF manquant', desc:'Risque de spoofing.' });
 
   const dmarcA = await dnsQuery(`_dmarc.${domain}`, 'TXT'), dmarc = dmarcA.map(a => a.data).find(d => d.includes('v=DMARC1'));
   let dmarcIsQuarantine = false;
   if (dmarc) {
     const p = (dmarc.match(/p=([^;]+)/i) || [])[1]?.trim().toLowerCase();
-    if (p === 'reject')     { score += 20; checks.push({ t:'ok',   icon:'✅', title:'DMARC p=reject', desc: dmarc }); }
-    else if (p === 'quarantine') { score += 20; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'✅', title:'DMARC p=quarantine ⭐', desc: dmarc + ' — Niveau équivalent à reject. ⭐ indique que p=reject serait préférable.' }); }
-    else                    { score += 5;  checks.push({ t:'warn', icon:'⚠️', title:'DMARC p=none',   desc: dmarc }); }
+    if (p === 'reject')     { score += 20; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=reject', desc: dmarc }); }
+    else if (p === 'quarantine') { score += 20; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=quarantine ⭐', desc: dmarc + ' — Niveau équivalent à reject. ⭐ indique que p=reject serait préférable.' }); }
+    else                    { score += 5;  checks.push({ t:'warn', icon:'assets/warning.png', title:'DMARC p=none',   desc: dmarc }); }
   } else checks.push({ t:'error', icon:'❌', title:'DMARC manquant', desc: `Aucun _dmarc.${domain}` });
 
   const dkimSelectors = ['selector1','selector2','default','google','microsoft','k1','mail','dkim','smtp','email','mailjet','sendgrid','mandrill','amazonses','postmark','sparkpost','mxroute','zoho','protonmail','brevo','s1','s2','sig1'];
@@ -875,28 +876,28 @@ async function checkHealth(domain) {
     score += 25;
     const selNames = foundSelectors.map(([k]) => k).join(', ');
     let dkimDesc = `Sélecteurs actifs : ${selNames}`;
-    if (hasSel1 && hasSel2)   dkimDesc += ' — ✅ Rotation Microsoft 365 (selector1 + selector2 actifs)';
-    else if (hasSel1)          dkimDesc += ' — ⚠️ selector1 actif, selector2 absent';
-    else if (hasSel2)          dkimDesc += ' — ⚠️ selector2 actif, selector1 absent';
-    checks.push({ t:'ok', icon:'✅', title:`DKIM actif (${selNames})`, desc: dkimDesc, dkimResults, hasSel1, hasSel2 });
+    if (hasSel1 && hasSel2)   dkimDesc += ' — (OK) Rotation Microsoft 365 (selector1 + selector2 actifs)';
+    else if (hasSel1)          dkimDesc += ' — (!) selector1 actif, selector2 absent';
+    else if (hasSel2)          dkimDesc += ' — (!) selector2 actif, selector1 absent';
+    checks.push({ t:'ok', icon:'assets/checked.png', title:`DKIM actif (${selNames})`, desc: dkimDesc, dkimResults, hasSel1, hasSel2 });
   } else checks.push({ t:'error', icon:'❌', title:'DKIM non détecté', desc:'Aucun DKIM sur les sélecteurs testés.', dkimResults, hasSel1:false, hasSel2:false });
 
   const cnA = await dnsQuery(`www.${domain}`, 'CNAME'), aA = await dnsQuery(`www.${domain}`, 'A');
-  if      (cnA.length > 0) { score += 5; checks.push({ t:'ok',   icon:'✅', title:'CNAME www',          desc: cnA.map(a => a.data).join(', ') }); }
-  else if (aA.length  > 0) { score += 4; checks.push({ t:'info', icon:'ℹ️', title:'www via A record',   desc: aA.map(a  => a.data).join(', ') }); }
-  else                              checks.push({ t:'warn', icon:'⚠️', title:'www non résolu',           desc: `Aucun CNAME ni A pour www.${domain}.` });
+  if      (cnA.length > 0) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'CNAME www',          desc: cnA.map(a => a.data).join(', ') }); }
+  else if (aA.length  > 0) { score += 4; checks.push({ t:'info', icon:'assets/information.png', title:'www via A record',   desc: aA.map(a  => a.data).join(', ') }); }
+  else                              checks.push({ t:'warn', icon:'assets/warning.png', title:'www non résolu',           desc: `Aucun CNAME ni A pour www.${domain}.` });
 
   const dsA = await dnsQuery(domain, 'DS'), dkA = await dnsQuery(domain, 'DNSKEY');
-  if (dsA.length > 0 || dkA.length > 0) { score += 10; checks.push({ t:'ok',   icon:'✅', title:'DNSSEC activé',          desc: `${dsA.length} DS, ${dkA.length} DNSKEY.` }); }
-  else                                               checks.push({ t:'warn', icon:'⚠️', title:'DNSSEC non activé',         desc: 'Vulnérable au DNS spoofing.' });
+  if (dsA.length > 0 || dkA.length > 0) { score += 10; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DNSSEC activé',          desc: `${dsA.length} DS, ${dkA.length} DNSKEY.` }); }
+  else                                               checks.push({ t:'warn', icon:'assets/warning.png', title:'DNSSEC non activé',         desc: 'Vulnérable au DNS spoofing.' });
 
   const mtaSts = await dnsQuery(`_mta-sts.${domain}`, 'TXT'), mtaRec = mtaSts.map(a => a.data).find(d => d.includes('v=STSv1'));
-  if (mtaRec) { score += 5; checks.push({ t:'ok',   icon:'✅', title:'MTA-STS activé',         desc: mtaRec }); }
-  else                  checks.push({ t:'info', icon:'ℹ️', title:'MTA-STS non configuré',  desc: 'Recommandé pour les domaines pro.' });
+  if (mtaRec) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'MTA-STS activé',         desc: mtaRec }); }
+  else                  checks.push({ t:'info', icon:'assets/information.png', title:'MTA-STS non configuré',  desc: 'Recommandé pour les domaines pro.' });
 
   const bimiA = await dnsQuery(`default._bimi.${domain}`, 'TXT'), bimiRec = bimiA.map(a => a.data).find(d => d.includes('v=BIMI1'));
   if (bimiRec) { score += 5; checks.push({ t:'ok',   icon:'🏷️', title:'BIMI configuré',          desc: bimiRec }); }
-  else                  checks.push({ t:'info', icon:'ℹ️', title:'BIMI absent',              desc: 'Nécessite DMARC p=quarantine ou reject.' });
+  else                  checks.push({ t:'info', icon:'assets/information.png', title:'BIMI absent',              desc: 'Nécessite DMARC p=quarantine ou reject.' });
 
   return { score: Math.min(score, 100), checks, dkimResults, hasSel1, hasSel2, dmarcIsQuarantine };
 }
@@ -1164,7 +1165,7 @@ function buildDkimBlock(b, dkimResults, hasSel1, hasSel2) {
     const selLbl = document.createElement('span'); selLbl.style.cssText = 'font-size:10.5px;font-weight:500;color:var(--text)';
     selLbl.textContent = sel + '._domainkey';
     if (isPri) { const tag = document.createElement('span'); tag.style.cssText = 'font-size:8px;color:#0078d4;font-weight:500;margin-left:4px'; tag.textContent = '[MS365]'; selLbl.appendChild(tag); }
-    const badge = document.createElement('span'); badge.className = 'dkim-sel-badge' + (present ? '' : ' absent'); badge.textContent = present ? '✅ Présent' : '❌ Absent';
+    const badge = document.createElement('span'); badge.className = 'dkim-sel-badge' + (present ? '' : ' absent'); if (present) { const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; badge.appendChild(ck); badge.appendChild(document.createTextNode(' Présent')); } else { badge.textContent = '❌ Absent'; }
     head.appendChild(selLbl); head.appendChild(badge);
     div.appendChild(head);
     if (present && shortV) { const dv = document.createElement('div'); dv.className = 'dkim-val'; dv.textContent = shortV; div.appendChild(dv); }
@@ -1217,7 +1218,7 @@ function renderHero(ms, domain, confidence) {
     const sp = document.createElement('span'); sp.textContent = ms.tenantId; guid.appendChild(sp);
     hero.appendChild(guid); hero.appendChild(mkDomain());
     const alert = document.createElement('div'); alert.className = 'dup-alert warn';
-    const ico = document.createElement('div'); ico.className = 'dup-icon'; ico.textContent = '⚠️';
+    const ico = document.createElement('div'); ico.className = 'dup-icon'; const warnImg = document.createElement('img'); warnImg.src='assets/warning.png'; warnImg.className='icon-adaptive'; warnImg.alt=''; ico.appendChild(warnImg);
     const body = document.createElement('div'); body.className = 'dup-body';
     const t = document.createElement('div'); t.className = 'dup-title'; t.textContent = 'Tenant ID invalide';
     const desc = document.createElement('div'); desc.className = 'dup-desc'; desc.textContent = 'Le GUID ne correspond pas à un tenant 365 actif.';
@@ -1496,7 +1497,7 @@ function buildHealthPanel(health, domain) {
     const hcl = document.createElement('div'); hcl.className = 'hc-list';
     health.checks.forEach(c => {
       const it = document.createElement('div'); it.className = 'hc-item ' + c.t;
-      const ico = document.createElement('div'); ico.className = 'hc-icon'; ico.textContent = c.icon;
+      const ico = document.createElement('div'); ico.className = 'hc-icon'; const icoImg = document.createElement('img'); icoImg.src = c.icon; icoImg.className = 'icon-adaptive'; icoImg.alt = ''; ico.appendChild(icoImg);
       const body = document.createElement('div'); body.className = 'hc-body';
       const ttl = document.createElement('div'); ttl.className = 'hc-title'; ttl.textContent = c.title;
       const dsc = document.createElement('div'); dsc.className = 'hc-desc';  dsc.textContent = c.desc;
@@ -1520,7 +1521,7 @@ function healthScoreLbl(health) {
 }
 function healthSubLbl(health) {
   const errC = health.checks.filter(c => c.t === 'error').length, warnC = health.checks.filter(c => c.t === 'warn').length;
-  const dkim = health.hasSel1 && health.hasSel2 ? ' · DKIM✅✅' : health.hasSel1 || health.hasSel2 ? ' · DKIM✅⚠️' : ' · DKIM❌';
+  const dkim = health.hasSel1 && health.hasSel2 ? ' · DKIM ✓✓' : health.hasSel1 || health.hasSel2 ? ' · DKIM ✓!' : ' · DKIM ✗';
   return `SPF · DMARC · DKIM · DNSSEC · MTA-STS${errC > 0 ? ' — ' + errC + ' erreur(s)' : ''}${warnC > 0 ? ', ' + warnC + ' avert.' : ''}${dkim}`;
 }
 
@@ -1566,9 +1567,9 @@ async function checkFast() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
-    if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', '🔵 Google Workspace', buildGooglePanel(currentState.goog)) }));
+    if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
-    if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', '🌐 Enregistrements DNS', buildDnsPanel(currentState.dns)) }));
+    if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/dns.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
     const ctaBtn = document.createElement('button'); ctaBtn.className = 'btn-trigger-full'; ctaBtn.id = 'btnTriggerFull';
     (() => {
       ctaBtn.textContent = '';
@@ -1581,7 +1582,7 @@ async function checkFast() {
     })();
     ctaBtn.onclick = () => runFullFromState(raw, domain, ctaBtn);
     center.appendChild(ctaBtn);
-  } catch (err) { document.getElementById('progList').style.display = 'none'; showError('⚠ Erreur : ' + err.message); }
+  } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFastLoading(false); }
 }
 
@@ -1643,7 +1644,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     if (currentState.health) {
       center.insertBefore(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', '🛡️ Santé du domaine', buildHealthPanel(currentState.health, domain)) }), ctaBtn);
     }
-    ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.textContent = '✅ Analyse complète effectuée'; ctaBtn.onclick = null;
+    ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.replaceChildren(); const doneImg = document.createElement('img'); doneImg.src='assets/checked.png'; doneImg.className='icon-adaptive'; doneImg.alt=''; ctaBtn.appendChild(doneImg); ctaBtn.appendChild(document.createTextNode(' Analyse complète effectuée')); ctaBtn.onclick = null;
   } catch (err) {
     ctaBtn.classList.remove('running');
     ctaBtn.textContent = '';
@@ -1653,7 +1654,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     const hint2 = document.createElement('span'); hint2.style.cssText='font-size:10px;opacity:.65;margin-left:4px'; hint2.textContent='WHOIS · sécurité DNS';
     ctaBtn.appendChild(lbl2); ctaBtn.appendChild(hint2);
     document.getElementById('progList').style.display = 'none';
-    showError('⚠ Erreur analyse complète : ' + err.message);
+    showError('Erreur analyse complète : ' + err.message);
   } finally { unlockButtons(); }
 }
 
@@ -1701,14 +1702,14 @@ async function checkFull() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
-    if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', '🔵 Google Workspace', buildGooglePanel(currentState.goog)) }));
+    if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     if (currentState.host) {
       const logo = hostLogo(currentState.host.hostName);
       center.appendChild(makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', '🏠 Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) }));
     }
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
-    if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', '🌐 Enregistrements DNS', buildDnsPanel(currentState.dns)) }));
+    if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/dns.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
     center.appendChild(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', '🛡️ Santé du domaine', buildHealthPanel(currentState.health, domain)) }));
-  } catch (err) { document.getElementById('progList').style.display = 'none'; showError('⚠ Erreur : ' + err.message); }
+  } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFullLoading(false); }
 }
