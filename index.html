@@ -59,7 +59,7 @@
     <div class="confirm-modal-title">Désactiver l'historique</div>
     <div class="confirm-modal-desc">Des entrées sont présentes dans le cache local. Souhaitez-vous les supprimer ?</div>
     <div class="confirm-modal-actions">
-      <button class="confirm-btn-delete" id="btnDisableDelete">🗑 Désactiver et supprimer les données</button>
+      <button class="confirm-btn-delete" id="btnDisableDelete">Désactiver et supprimer les données</button>
       <button class="confirm-btn-keep"   id="btnDisableKeep">Désactiver sans supprimer</button>
       <button class="confirm-btn-cancel" id="btnDisableCancel">Annuler</button>
     </div>
@@ -244,7 +244,7 @@
     <div id="storageInspectorBody" class="storage-modal-body"></div>
     <div class="storage-modal-footer">
       <button class="storage-btn-secondary" id="btnStorageCloseFooter">Fermer</button>
-      <button class="storage-btn-danger" id="btnClearAllStorage"><span aria-hidden="true">🗑</span> Tout vider</button>
+      <button class="storage-btn-danger" id="btnClearAllStorage">Tout vider</button>
     </div>
   </div>
 </div>
@@ -282,9 +282,9 @@
         <div class="p-step" id="step-ms"><span class="p-step-icon"><img src="assets/Microsoft.png" width="14" height="14" alt="Microsoft"></span><span class="p-step-label">Microsoft 365…</span><button class="p-step-cancel" data-step="ms">✕ Annuler</button><button class="p-step-retry" data-step="ms">↺ Relancer</button></div>
         <div class="p-step" id="step-google"><span class="p-step-icon"><img src="assets/google.png" class="icon-plain" alt=""></span><span class="p-step-label">Google Workspace…</span><button class="p-step-cancel" data-step="google">✕ Annuler</button><button class="p-step-retry" data-step="google">↺ Relancer</button></div>
         <div class="p-step" id="step-dns"><span class="p-step-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="p-step-label">DNS…</span><button class="p-step-cancel" data-step="dns">✕ Annuler</button><button class="p-step-retry" data-step="dns">↺ Relancer</button></div>
-        <div class="p-step" id="step-health"><span class="p-step-icon">🛡️</span><span class="p-step-label">Sécurité…</span><button class="p-step-cancel" data-step="health">✕ Annuler</button><button class="p-step-retry" data-step="health">↺ Relancer</button></div>
+        <div class="p-step" id="step-health"><span class="p-step-icon"><img src="assets/Santé.png" class="icon-plain" alt=""></span><span class="p-step-label">Sécurité…</span><button class="p-step-cancel" data-step="health">✕ Annuler</button><button class="p-step-retry" data-step="health">↺ Relancer</button></div>
         <div class="p-step" id="step-others"><span class="p-step-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="p-step-label">Autres services…</span><button class="p-step-cancel" data-step="others">✕ Annuler</button><button class="p-step-retry" data-step="others">↺ Relancer</button></div>
-        <div class="p-step" id="step-host"><span class="p-step-icon">🏠</span><span class="p-step-label">Hébergeur…</span><button class="p-step-cancel" data-step="host">✕ Annuler</button><button class="p-step-retry" data-step="host">↺ Relancer</button></div>
+        <div class="p-step" id="step-host"><span class="p-step-icon"></span><span class="p-step-label">Hébergeur…</span><button class="p-step-cancel" data-step="host">✕ Annuler</button><button class="p-step-retry" data-step="host">↺ Relancer</button></div>
       </div>
       <div class="err-box" id="errBox"></div>
 
@@ -295,7 +295,7 @@
         </button>
         <div class="collapsible-body" id="historyBody">
           <div id="historyList"><div class="history-empty">Aucune analyse effectuée</div></div>
-          <button class="btn-clear-history" id="btnClearHistory">🗑 Effacer l'historique</button>
+          <button class="btn-clear-history" id="btnClearHistory">Effacer l'historique</button>
         </div>
       </div>
 
@@ -319,7 +319,7 @@
             <div>
               <div class="privacy-section-lbl">Ressources chargées lors d'une analyse</div>
               <div class="privacy-api-list">
-                <div class="privacy-api-item"><span class="privacy-api-item-icon">🖼️</span><span class="privacy-api-item-name">google.com/s2/favicons</span><span class="privacy-api-item-tag">Icônes</span></div>
+                <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/information.png" class="icon-adaptive" alt=""></span><span class="privacy-api-item-name">google.com/s2/favicons</span><span class="privacy-api-item-tag">Icônes</span></div>
               </div>
             </div>
             <div class="privacy-storage-row">
@@ -327,7 +327,7 @@
               <span>Aucun stockage par défaut. L'historique (optionnel) utilise uniquement le <strong>localStorage</strong> de votre navigateur — jamais transmis.</span>
             </div>
             <button class="privacy-cta" id="btnPrivacyCta">
-              ⚙️ Détail de chaque connexion dans Paramètres & Confidentialité
+              <img src="assets/option.png" class="icon-adaptive" alt=""> Détail de chaque connexion dans Paramètres & Confidentialité
             </button>
           </div>
         </div>
