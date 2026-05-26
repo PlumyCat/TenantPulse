@@ -47,6 +47,7 @@
   object-src 'none';
   base-uri 'self';
   form-action 'none';
+  frame-src 'self';
 ">
 <title>TenantPulse — v0.8</title>
 <link rel="icon" type="image/png" href="assets/TP.png" id="favicon">
@@ -72,14 +73,101 @@
     <div class="profiles-modal-head">
       <div class="profiles-modal-title">
         <img src="assets/user.png" width="13" height="13" alt="">
-        Raccourcis
+        Profils
       </div>
       <button class="profiles-modal-close" id="btnProfilesClose">✕</button>
     </div>
-    <div id="profilesToggleList"></div>
+    <!-- Tab bar -->
+    <div class="profiles-tab-bar">
+      <button class="profiles-tab active" id="profilesTabTP" type="button">
+        <img src="assets/TP.png" width="13" height="13" alt="">
+        TenantPulse
+      </button>
+      <button class="profiles-tab" id="profilesTabML" type="button">
+        <img src="assets/ML.png" width="13" height="13" alt="">
+        En-têtes email
+      </button>
+    </div>
+    <!-- Pane TenantPulse -->
+    <div class="profiles-pane" id="profilesPaneTP">
+      <!-- Section Données (déplacée depuis Paramètres & Confidentialité) -->
+      <button class="drop-section-btn" data-drop-section>
+        <span>Données</span><span class="ds-arrow">▾</span>
+      </button>
+      <div class="drop-section-body">
+        <div class="drop-toggle" id="toggleHistoryBtn">
+          <div class="drop-toggle-left">
+            <img src="assets/history.png" class="drop-toggle-icon icon-adaptive" alt="">
+            <span class="drop-toggle-label">Historique des Tenant ID</span>
+          </div>
+          <div class="drop-toggle-switch" id="historyOptSwitch"></div>
+        </div>
+        <div class="cache-settings" id="cacheSettings">
+          <div class="cache-setting-row">
+            <div class="cache-setting-head">
+              <span class="cache-setting-label">Nombre max de tenants</span>
+              <span class="cache-setting-value" id="maxTenantsValue">20</span>
+            </div>
+            <input type="range" min="0" max="40" step="1" value="20" id="maxTenantsSlider" class="cache-slider" aria-label="Nombre maximum de tenants conservés">
+            <div class="cache-setting-scale"><span>0</span><span>40</span></div>
+          </div>
+          <div class="cache-setting-row">
+            <div class="cache-setting-head">
+              <span class="cache-setting-label">Durée de conservation</span>
+              <span class="cache-setting-value" id="retentionValue">24 h</span>
+            </div>
+            <input type="range" min="0" max="13" step="1" value="7" id="retentionSlider" class="cache-slider" aria-label="Durée de conservation de l'historique">
+            <div class="cache-setting-scale"><span>5 min</span><span>Illimité</span></div>
+            <div class="cache-retention-warning" id="retentionWarning" hidden>
+              <span class="cache-warning-badge"><img src="assets/warning.png" class="icon-adaptive" alt=""> Attention</span>
+              <span class="cache-warning-info" id="retentionWarningInfo" tabindex="0" role="button" aria-label="Information sur le risque" title="Conserver l'historique indéfiniment n'est pas recommandé : en cas d'attaque sur votre navigateur (extension malveillante, XSS via une page tierce ouverte dans le même profil, vol du dossier de profil sur un poste compromis…), les Tenant ID de vos clients pourraient être extraits du localStorage et utilisés pour identifier votre portefeuille de clients M365.">i</span>
+            </div>
+          </div>
+        </div>
+        <div class="drop-info-collapsible">
+          <button class="drop-info-toggle" id="btnDropInfoToggle" type="button" aria-expanded="false" aria-controls="dropInfoBody">
+            <span class="drop-info-toggle-left">
+              <span aria-hidden="true"><img src="assets/information.png" class="icon-adaptive" alt=""></span>
+              <span>Important</span>
+            </span>
+            <span class="coll-arrow" id="dropInfoArrow" aria-hidden="true">▾</span>
+          </button>
+          <div class="drop-info-body" id="dropInfoBody">
+            <div class="drop-info-body-inner">
+              L'historique est stocké <strong>localement</strong> dans le <code>localStorage</code> de votre navigateur. <strong>Aucune donnée n'est transmise à un serveur.</strong><br><br>
+              <strong>Nettoyage automatique&nbsp;:</strong> les entrées dont l'âge dépasse la durée de conservation sont supprimées dans ces&nbsp;3 cas&nbsp;:
+              <ul class="drop-info-list">
+                <li>à l'<strong>ouverture</strong> de TenantPulse&nbsp;;</li>
+                <li>à chaque <strong>nouvelle analyse</strong> sauvegardée dans le cache&nbsp;;</li>
+                <li>quand vous <strong>modifiez la durée</strong> de conservation ci-dessus.</li>
+              </ul>
+              <img src="assets/warning.png" class="icon-adaptive" alt=""> Aucun nettoyage ne s'effectue tant que TenantPulse est fermé&nbsp;: une entrée arrivée à expiration pendant que l'onglet n'est pas ouvert sera supprimée à votre prochaine ouverture.<br><br>
+              Si la durée est réglée sur <strong>«&nbsp;Illimité&nbsp;»</strong>, aucune purge n'est effectuée (seule la limite du nombre max s'applique).
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Section Raccourcis (collapsible) -->
+      <button class="drop-section-btn" data-drop-section>
+        <span>Raccourcis</span><span class="ds-arrow">▾</span>
+      </button>
+      <div class="drop-section-body">
+        <div id="profilesToggleList"></div>
+      </div>
+    </div>
+    <!-- Pane Mhaelle -->
+    <div class="profiles-pane profiles-pane-hidden" id="profilesPaneML">
+      <div id="mhaelleBlockList"></div>
+    </div>
+    <!-- Footer dynamique -->
     <div class="profiles-modal-footer">
-      <button class="profiles-footer-btn" id="btnProfilesSelectAll">Tout activer</button>
-      <button class="profiles-footer-btn" id="btnProfilesNone">Tout désactiver</button>
+      <div id="profilesFooterTP">
+        <button class="profiles-footer-btn" id="btnProfilesSelectAll">Tout activer</button>
+        <button class="profiles-footer-btn" id="btnProfilesNone">Tout désactiver</button>
+      </div>
+      <div id="profilesFooterML" class="profiles-footer-hidden">
+        <button class="profiles-footer-btn" id="btnMlBlocksReset">Réinitialiser</button>
+      </div>
       <button class="profiles-save-btn" id="btnProfilesSave">Enregistrer</button>
     </div>
   </div>
@@ -89,10 +177,23 @@
 <div class="topbar">Analyse instantanée &nbsp;|&nbsp; Décisions immédiates</div>
 
 <nav>
-  <a class="nav-logo" href="#">
-    <img src="assets/TP.png" class="nav-logo-icon" alt="TenantPulse">
-    TenantPulse
-  </a>
+  <div class="nav-left">
+    <div class="nav-brand">
+      <img src="assets/TP.png" class="nav-brand-icon" alt="TenantPulse">
+      TenantPulse
+    </div>
+    <div class="app-tabs" id="appTabs" role="tablist">
+      <button class="app-tab active" data-app-tab="tp" role="tab" aria-selected="true">
+        <img src="assets/TP.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">Diagnostic M365</span>
+      </button>
+      <button class="app-tab" data-app-tab="ml" role="tab" aria-selected="false">
+        <img src="assets/ML.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">En-têtes email</span>
+        <span class="app-tab-badge">dev</span>
+      </button>
+    </div>
+  </div>
   <div class="nav-right">
     <div class="cache-indicator state-inactive" id="cacheIndicator">
       <span class="cache-dot"></span>
@@ -119,64 +220,6 @@
               <span class="drop-toggle-label" id="darkLabel">Mode sombre</span>
             </div>
             <div class="drop-toggle-switch" id="darkSwitch"></div>
-          </div>
-        </div>
-
-        <!-- Données -->
-        <button class="drop-section-btn" data-drop-section>
-          <span>Données</span><span class="ds-arrow">▾</span>
-        </button>
-        <div class="drop-section-body">
-          <div class="drop-toggle" id="toggleHistoryBtn">
-            <div class="drop-toggle-left">
-              <img src="assets/history.png" class="drop-toggle-icon icon-adaptive" alt="">
-              <span class="drop-toggle-label">Historique des Tenant ID</span>
-            </div>
-            <div class="drop-toggle-switch" id="historyOptSwitch"></div>
-          </div>
-          <div class="cache-settings" id="cacheSettings">
-            <div class="cache-setting-row">
-              <div class="cache-setting-head">
-                <span class="cache-setting-label">Nombre max de tenants</span>
-                <span class="cache-setting-value" id="maxTenantsValue">20</span>
-              </div>
-              <input type="range" min="0" max="40" step="1" value="20" id="maxTenantsSlider" class="cache-slider" aria-label="Nombre maximum de tenants conservés">
-              <div class="cache-setting-scale"><span>0</span><span>40</span></div>
-            </div>
-            <div class="cache-setting-row">
-              <div class="cache-setting-head">
-                <span class="cache-setting-label">Durée de conservation</span>
-                <span class="cache-setting-value" id="retentionValue">24 h</span>
-              </div>
-              <input type="range" min="0" max="13" step="1" value="7" id="retentionSlider" class="cache-slider" aria-label="Durée de conservation de l'historique">
-              <div class="cache-setting-scale"><span>5 min</span><span>Illimité</span></div>
-              <div class="cache-retention-warning" id="retentionWarning" hidden>
-                <span class="cache-warning-badge"><img src="assets/warning.png" class="icon-adaptive" alt=""> Attention</span>
-                <span class="cache-warning-info" id="retentionWarningInfo" tabindex="0" role="button" aria-label="Information sur le risque" title="Conserver l'historique indéfiniment n'est pas recommandé : en cas d'attaque sur votre navigateur (extension malveillante, XSS via une page tierce ouverte dans le même profil, vol du dossier de profil sur un poste compromis…), les Tenant ID de vos clients pourraient être extraits du localStorage et utilisés pour identifier votre portefeuille de clients M365.">i</span>
-              </div>
-            </div>
-          </div>
-          <div class="drop-info-collapsible">
-            <button class="drop-info-toggle" id="btnDropInfoToggle" type="button" aria-expanded="false" aria-controls="dropInfoBody">
-              <span class="drop-info-toggle-left">
-                <span aria-hidden="true"><img src="assets/information.png" class="icon-adaptive" alt=""></span>
-                <span>Important</span>
-              </span>
-              <span class="coll-arrow" id="dropInfoArrow" aria-hidden="true">▾</span>
-            </button>
-            <div class="drop-info-body" id="dropInfoBody">
-              <div class="drop-info-body-inner">
-                L'historique est stocké <strong>localement</strong> dans le <code>localStorage</code> de votre navigateur. <strong>Aucune donnée n'est transmise à un serveur.</strong><br><br>
-                <strong>Nettoyage automatique&nbsp;:</strong> les entrées dont l'âge dépasse la durée de conservation sont supprimées dans ces&nbsp;3 cas&nbsp;:
-                <ul class="drop-info-list">
-                  <li>à l'<strong>ouverture</strong> de TenantPulse&nbsp;;</li>
-                  <li>à chaque <strong>nouvelle analyse</strong> sauvegardée dans le cache&nbsp;;</li>
-                  <li>quand vous <strong>modifiez la durée</strong> de conservation ci-dessus.</li>
-                </ul>
-                <img src="assets/warning.png" class="icon-adaptive" alt=""> Aucun nettoyage ne s'effectue tant que TenantPulse est fermé&nbsp;: une entrée arrivée à expiration pendant que l'onglet n'est pas ouvert sera supprimée à votre prochaine ouverture.<br><br>
-                Si la durée est réglée sur <strong>«&nbsp;Illimité&nbsp;»</strong>, aucune purge n'est effectuée (seule la limite du nombre max s'applique).
-              </div>
-            </div>
           </div>
         </div>
 
@@ -355,6 +398,8 @@
     <div class="panel-body" id="panelBody"></div>
   </aside>
 </div>
+
+<iframe id="mhaelleFrame" class="mhaelle-frame" title="Mhaelle — Analyseur Header Email" loading="lazy"></iframe>
 
 <footer><div class="powered">Prototype <span> Interne</span> RUNMW N1</div></footer>
 
