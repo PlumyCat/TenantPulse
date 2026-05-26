@@ -23,12 +23,46 @@ const REDIRECT_BUTTONS = [
   { key:'exchange',      label:'Exchange',          sub:'Messagerie & calendriers',      icon:'assets/MicrosoftExchange.png',     href: (id, dom) => `https://admin.exchange.microsoft.com/?delegatedOrg=${encodeURIComponent(dom || '')}` },
   { key:'intune',        label:'Intune',            sub:'Gestion des appareils',         icon:'assets/MicrosoftIntune.png',       href: id => `https://intune.microsoft.com/${encodeURIComponent(id)}` },
   { key:'teams',         label:'Teams',             sub:'Collaboration & réunions',      icon:'assets/MicrosoftTeams.png',        href: (id, dom) => `https://admin.teams.microsoft.com/?delegatedOrg=${encodeURIComponent(dom || '')}` },
-  { key:'sharepoint',    label:'SharePoint',        sub:'Sites & documents',             icon:'assets/MicrosoftSharepoint.png',   href: (id, dom) => `https://admin.microsoft.com/?delegatedOrg=${encodeURIComponent(dom || '')}#/sharepoint` },
+  { key:'sharepoint',    label:'SharePoint',        sub:'Sites & documents',             icon:'assets/MicrosoftSharepoint.png',   href: (id, dom) => `https://admin.microsoft.com/sharepoint?delegatedOrg=${encodeURIComponent(dom || '')}` },
   { key:'azure',         label:'Azure',             sub:'Ressources cloud',              icon:'assets/MicrosoftAzure.png',        href: id => `https://portal.azure.com/${encodeURIComponent(id)}` },
   { key:'defender',      label:'Defender',          sub:'Sécurité & menaces',            icon:'assets/MicrosoftDefender.png',     href: id => `https://security.microsoft.com/?tid=${encodeURIComponent(id)}` },
 ];
 
 const PROFILE_KEY = 'tenantpulse_profile_v1';
+const MHAELLE_PROFILE_KEY = 'mhaelle_profile_v1';
+
+/* Blocs Mhaelle configurables (label + colonne par défaut) */
+const ML_BLOCKS = [
+  { key: 'message', label: 'Message',          col: 'left'  },
+  { key: 'smtp',    label: 'Chaîne SMTP',       col: 'left'  },
+  { key: 'urls',    label: 'URLs détectées',    col: 'left'  },
+  { key: 'reports', label: 'Rapports texte',    col: 'left'  },
+  { key: 'auth',    label: 'Authentification',  col: 'right' },
+  { key: 'ms',      label: 'Microsoft / EOP',   col: 'right' },
+  { key: 'signals', label: 'Signaux détectés',  col: 'right' },
+];
+
+function loadMhaelleProfile() {
+  try {
+    const raw = localStorage.getItem(MHAELLE_PROFILE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (Array.isArray(p.left) && Array.isArray(p.right)) {
+        if (!Array.isArray(p.defaultOpen)) p.defaultOpen = [];
+        return p;
+      }
+    }
+  } catch {}
+  return {
+    left:        ['message', 'smtp', 'urls', 'reports'],
+    right:       ['auth', 'ms', 'signals'],
+    hidden:      [],
+    defaultOpen: []
+  };
+}
+function saveMhaelleProfile(profile) {
+  try { localStorage.setItem(MHAELLE_PROFILE_KEY, JSON.stringify(profile)); } catch {}
+}
 
 function loadProfile() {
   let profile = null;
@@ -46,6 +80,16 @@ function loadProfile() {
 }
 function saveProfile(profile) {
   try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {}
+}
+/* Retourne REDIRECT_BUTTONS dans l'ordre sauvegardé (partnerCenter toujours premier) */
+function orderedRedirectButtons(profile) {
+  const saved = profile.order;
+  if (!saved || !saved.length) return REDIRECT_BUTTONS;
+  const rest = saved
+    .map(k => REDIRECT_BUTTONS.find(b => b.key === k))
+    .filter(Boolean);
+  const pc = REDIRECT_BUTTONS.find(b => b.key === 'partnerCenter');
+  return pc ? [pc, ...rest] : rest;
 }
 function isButtonEnabled(key) {
   return loadProfile()[key] !== false;
@@ -339,8 +383,34 @@ function copyHistoryGuid(guid, btn) {
   navigator.clipboard.writeText(guid).then(() => { btn.replaceChildren(); const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; btn.appendChild(ck); setTimeout(() => { btn.replaceChildren(); const img = document.createElement('img'); img.src = 'assets/copy.png'; img.className = 'icon-adaptive'; img.alt = ''; btn.appendChild(img); }, 1500); });
 }
 
+// ── Onglets TenantPulse / Mhaelle (vue type navigateur) ──
+// L'iframe Mhaelle est lazy-loaded au premier clic puis reste montée,
+// ce qui préserve l'état de l'analyse des deux côtés au switch.
+function switchAppTab(target) {
+  const tabs = document.querySelectorAll('.app-tab');
+  tabs.forEach(t => {
+    const active = t.dataset.appTab === target;
+    t.classList.toggle('active', active);
+    t.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  const frame = document.getElementById('mhaelleFrame');
+  if (target === 'ml') {
+    // Lazy-load au premier accès
+    if (!frame.src) frame.src = 'ML/mhaelle.html?embedded=1';
+    document.body.classList.add('view-ml');
+  } else {
+    document.body.classList.remove('view-ml');
+  }
+}
+
 // ── Central event binding ──
 function bindEvents() {
+  // ── Onglets TenantPulse / Mhaelle (architecture type navigateur) ──
+  // L'iframe Mhaelle reste montée → l'état est préservé des deux côtés
+  document.querySelectorAll('.app-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchAppTab(tab.dataset.appTab));
+  });
+
   document.getElementById('mainDropBtn').addEventListener('click', toggleDropdown);
   document.getElementById('btnDisableDelete').addEventListener('click', confirmDisableAndDelete);
   document.getElementById('btnDisableKeep').addEventListener('click', confirmDisableKeep);
@@ -395,6 +465,12 @@ function bindEvents() {
   });
   document.getElementById('btnProfilesNone').addEventListener('click', () => {
     document.querySelectorAll('.profile-item-switch').forEach(sw => sw.classList.remove('on'));
+  });
+  document.getElementById('profilesTabTP').addEventListener('click', () => switchProfilesTab('tp'));
+  document.getElementById('profilesTabML').addEventListener('click', () => switchProfilesTab('ml'));
+  document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
+    saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
+    renderMhaelleProfilePane();
   });
   const dropInfoBtn = document.getElementById('btnDropInfoToggle');
   if (dropInfoBtn) {
@@ -459,51 +535,256 @@ function syncCacheSettingsAvailability() {
 }
 
 // ── Profiles modal ──
+let _profilesActiveTab = 'tp';
+
 function openProfilesModal() {
-  const profile = loadProfile();
-  const list = document.getElementById('profilesToggleList');
-  list.replaceChildren();
-  const grid = document.createElement('div'); grid.className = 'profiles-grid';
-  REDIRECT_BUTTONS.forEach(btn => {
-    const locked = btn.key === 'partnerCenter';
-    const item = document.createElement('div'); item.className = 'profile-item' + (locked ? ' locked' : '');
-    const left = document.createElement('div'); left.className = 'profile-item-left';
-    const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'profile-item-icon';
-    const name = document.createElement('span'); name.className = 'profile-item-name'; name.textContent = btn.label;
-    left.appendChild(icon); left.appendChild(name);
-    if (locked) {
-      const badge = document.createElement('span'); badge.className = 'profile-item-badge'; badge.textContent = 'Recommandé';
-      const info = document.createElement('span'); info.className = 'profile-item-info'; info.textContent = 'i';
-      info.setAttribute('aria-label', 'Information');
-      info.setAttribute('tabindex', '0');
-      info.title = 'Le Partner Center permet de s’assurer que le tenant est bien présent dans votre base de données clients.';
-      left.appendChild(badge); left.appendChild(info);
-    }
-    const sw = document.createElement('div');
-    sw.className = 'drop-toggle-switch profile-item-switch' + (profile[btn.key] !== false ? ' on' : '') + (locked ? ' locked' : '');
-    sw.dataset.key = btn.key;
-    sw.style.flexShrink = '0';
-    if (!locked) {
-      item.addEventListener('click', () => sw.classList.toggle('on'));
-    }
-    item.appendChild(left); item.appendChild(sw);
-    grid.appendChild(item);
-  });
-  list.appendChild(grid);
+  renderTpProfilePane();
+  renderMhaelleProfilePane();
+  switchProfilesTab(_profilesActiveTab);
   document.getElementById('profilesModal').classList.add('open');
 }
 function closeProfilesModal() {
   document.getElementById('profilesModal').classList.remove('open');
 }
+function switchProfilesTab(tab) {
+  _profilesActiveTab = tab;
+  document.getElementById('profilesPaneTP').classList.toggle('profiles-pane-hidden', tab !== 'tp');
+  document.getElementById('profilesPaneML').classList.toggle('profiles-pane-hidden', tab !== 'ml');
+  document.getElementById('profilesFooterTP').classList.toggle('profiles-footer-hidden', tab !== 'tp');
+  document.getElementById('profilesFooterML').classList.toggle('profiles-footer-hidden', tab !== 'ml');
+  document.getElementById('profilesTabTP').classList.toggle('active', tab === 'tp');
+  document.getElementById('profilesTabML').classList.toggle('active', tab === 'ml');
+}
+
+/* ── Onglet TenantPulse : toggles + drag-to-reorder ── */
+function renderTpProfilePane() {
+  const profile = loadProfile();
+  const list = document.getElementById('profilesToggleList');
+  list.replaceChildren();
+
+  /* Partner Center — verrouillé, en tête de la section Raccourcis */
+  const pc = REDIRECT_BUTTONS.find(b => b.key === 'partnerCenter');
+  if (pc) {
+    const lockedWrap = document.createElement('div'); lockedWrap.className = 'profiles-grid profiles-grid-locked';
+    lockedWrap.appendChild(makeTpProfileItem(pc, profile, true));
+    list.appendChild(lockedWrap);
+  }
+
+  /* Grille glissable (les 8 autres raccourcis) */
+  const sortable = document.createElement('div'); sortable.className = 'profiles-grid';
+  sortable.id = 'tpSortableGrid';
+  const order = profile.order || REDIRECT_BUTTONS.filter(b => b.key !== 'partnerCenter').map(b => b.key);
+  order.forEach(key => {
+    const btn = REDIRECT_BUTTONS.find(b => b.key === key);
+    if (btn) sortable.appendChild(makeTpProfileItem(btn, profile, false));
+  });
+  list.appendChild(sortable);
+  setupTpDragReorder(sortable);
+}
+
+function makeTpProfileItem(btn, profile, locked) {
+  const item = document.createElement('div');
+  item.className = 'profile-item' + (locked ? ' locked' : '');
+  item.dataset.key = btn.key;
+  if (!locked) item.draggable = true;
+
+  if (!locked) {
+    const handle = document.createElement('span');
+    handle.className = 'profile-drag-handle'; handle.textContent = '⠿';
+    handle.setAttribute('aria-hidden', 'true');
+    item.appendChild(handle);
+  }
+  const left = document.createElement('div'); left.className = 'profile-item-left';
+  const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'profile-item-icon';
+  const name = document.createElement('span'); name.className = 'profile-item-name'; name.textContent = btn.label;
+  left.appendChild(icon); left.appendChild(name);
+  if (locked) {
+    const badge = document.createElement('span'); badge.className = 'profile-item-badge'; badge.textContent = 'Recommandé';
+    const info = document.createElement('span'); info.className = 'profile-item-info'; info.textContent = 'i';
+    info.setAttribute('aria-label', 'Information'); info.setAttribute('tabindex', '0');
+    info.title = "Le Partner Center permet de s'assurer que le tenant est bien présent dans votre base de données clients.";
+    left.appendChild(badge); left.appendChild(info);
+  }
+  const sw = document.createElement('div');
+  sw.className = 'drop-toggle-switch profile-item-switch' + (profile[btn.key] !== false ? ' on' : '') + (locked ? ' locked' : '');
+  sw.dataset.key = btn.key; sw.style.flexShrink = '0';
+  if (!locked) {
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-checked', profile[btn.key] !== false ? 'true' : 'false');
+    sw.addEventListener('click', e => {
+      e.stopPropagation();
+      const on = sw.classList.toggle('on');
+      sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+  }
+  item.appendChild(left); item.appendChild(sw);
+  return item;
+}
+
+function setupTpDragReorder(grid) {
+  let dragging = null;
+  grid.addEventListener('dragstart', e => {
+    dragging = e.target.closest('.profile-item[draggable]');
+    if (dragging) { dragging.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; }
+  });
+  grid.addEventListener('dragend', () => {
+    if (dragging) dragging.classList.remove('dragging');
+    dragging = null;
+    grid.querySelectorAll('.profile-item').forEach(i => i.classList.remove('drag-over'));
+  });
+  grid.addEventListener('dragover', e => {
+    e.preventDefault();
+    const target = e.target.closest('.profile-item[draggable]');
+    if (target && target !== dragging) {
+      grid.querySelectorAll('.profile-item').forEach(i => i.classList.remove('drag-over'));
+      target.classList.add('drag-over');
+      const rect = target.getBoundingClientRect();
+      if (e.clientY < rect.top + rect.height / 2) grid.insertBefore(dragging, target);
+      else grid.insertBefore(dragging, target.nextSibling);
+    }
+  });
+}
+
+/* ── Onglet Mhaelle : toggles + drag-to-reorder ── */
+function renderMhaelleProfilePane() {
+  const mlProfile = loadMhaelleProfile();
+  const hidden      = new Set(mlProfile.hidden || []);
+  const defaultOpen = new Set(mlProfile.defaultOpen || []);
+  const leftOrder   = mlProfile.left  || ['message', 'smtp', 'urls', 'reports'];
+  const rightOrder  = mlProfile.right || ['auth', 'ms', 'signals'];
+
+  const container = document.getElementById('mhaelleBlockList');
+  container.replaceChildren();
+
+  const cols = document.createElement('div'); cols.className = 'ml-block-cols';
+  cols.appendChild(makeMlBlockSection('Colonne gauche', leftOrder, hidden, defaultOpen));
+  cols.appendChild(makeMlBlockSection('Colonne droite', rightOrder, hidden, defaultOpen));
+  container.appendChild(cols);
+  /* Drag partagé entre les deux colonnes (cross-column) */
+  setupMlCrossColDrag(cols);
+}
+
+function makeMlBlockSection(title, order, hidden, defaultOpen) {
+  const section = document.createElement('div'); section.className = 'ml-block-section';
+  const heading = document.createElement('div'); heading.className = 'ml-block-section-title';
+  heading.textContent = title;
+  section.appendChild(heading);
+
+  const list = document.createElement('div');
+  list.className = 'ml-block-list';
+  list.dataset.col = title === 'Colonne gauche' ? 'left' : 'right';
+
+  order.forEach(key => {
+    const block = ML_BLOCKS.find(b => b.key === key);
+    if (!block) return;
+    const item = document.createElement('div');
+    item.className = 'ml-block-item'; item.dataset.key = key; item.draggable = true;
+
+    const handle = document.createElement('span');
+    handle.className = 'ml-block-handle'; handle.textContent = '⠿';
+    handle.setAttribute('aria-hidden', 'true');
+
+    const name = document.createElement('span');
+    name.className = 'ml-block-name'; name.textContent = block.label;
+
+    /* Case "Ouvert par défaut" */
+    const openChk = document.createElement('div');
+    openChk.className = 'ml-block-default-open' + (defaultOpen.has(key) ? ' checked' : '');
+    openChk.dataset.key = key;
+    openChk.title = 'Ouvrir ce bloc par défaut après chaque analyse';
+    openChk.setAttribute('role', 'checkbox');
+    openChk.setAttribute('aria-checked', defaultOpen.has(key) ? 'true' : 'false');
+    const checkMark = document.createElement('span');
+    checkMark.className = 'ml-block-check';
+    checkMark.textContent = '✓';
+    openChk.appendChild(checkMark);
+    openChk.addEventListener('click', e => {
+      e.stopPropagation();
+      const on = openChk.classList.toggle('checked');
+      openChk.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+
+    /* Switch visibilité — cliquable directement, pas via le row entier */
+    const sw = document.createElement('div');
+    sw.className = 'drop-toggle-switch ml-block-switch' + (hidden.has(key) ? '' : ' on');
+    sw.dataset.key = key;
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-checked', hidden.has(key) ? 'false' : 'true');
+    sw.addEventListener('click', e => {
+      e.stopPropagation();
+      const on = sw.classList.toggle('on');
+      sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+
+    item.appendChild(handle); item.appendChild(name); item.appendChild(openChk); item.appendChild(sw);
+    list.appendChild(item);
+  });
+  section.appendChild(list);
+  return section;
+}
+
+/* Drag partagé entre les deux listes — permet de déplacer un bloc d'une colonne à l'autre. */
+function setupMlCrossColDrag(cols) {
+  let dragging = null;
+  const lists = cols.querySelectorAll('.ml-block-list');
+
+  const clearHints = () => {
+    cols.querySelectorAll('.ml-block-item').forEach(i => i.classList.remove('drag-over'));
+    cols.querySelectorAll('.ml-block-list').forEach(l => l.classList.remove('drag-target-empty'));
+  };
+
+  lists.forEach(list => {
+    list.addEventListener('dragstart', e => {
+      dragging = e.target.closest('.ml-block-item');
+      if (dragging) { dragging.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; }
+    });
+    list.addEventListener('dragend', () => {
+      if (dragging) dragging.classList.remove('dragging');
+      dragging = null;
+      clearHints();
+    });
+    list.addEventListener('dragover', e => {
+      if (!dragging) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const target = e.target.closest('.ml-block-item');
+      clearHints();
+      if (target && target !== dragging) {
+        target.classList.add('drag-over');
+        const rect = target.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) list.insertBefore(dragging, target);
+        else list.insertBefore(dragging, target.nextSibling);
+      } else if (!target) {
+        /* Survol d'une zone vide de la liste → on dépose à la fin */
+        list.classList.add('drag-target-empty');
+        if (dragging.parentElement !== list) list.appendChild(dragging);
+      }
+    });
+  });
+}
+
+/* ── Sauvegarde commune ── */
 function saveProfilesModal() {
+  if (_profilesActiveTab === 'ml') {
+    saveMhaelleProfileFromModal();
+  } else {
+    saveTpProfileFromModal();
+  }
+}
+
+function saveTpProfileFromModal() {
   const profile = {};
   document.querySelectorAll('.profile-item-switch').forEach(sw => {
     profile[sw.dataset.key] = sw.classList.contains('on');
   });
   profile.partnerCenter = true;
+  /* Ordre des boutons glissables */
+  const sortable = document.getElementById('tpSortableGrid');
+  if (sortable) {
+    profile.order = [...sortable.querySelectorAll('.profile-item[draggable]')].map(i => i.dataset.key);
+  }
   saveProfile(profile);
   closeProfilesModal();
-  // Re-render hero instantanément si une analyse est affichée
   if (currentState.ms && currentState.domain) {
     const center = document.getElementById('centerCol');
     const oldHero = center.querySelector('.tenant-hero');
@@ -514,11 +795,48 @@ function saveProfilesModal() {
   }
 }
 
+function saveMhaelleProfileFromModal() {
+  const leftList  = document.querySelector('.ml-block-list[data-col="left"]');
+  const rightList = document.querySelector('.ml-block-list[data-col="right"]');
+  const left  = leftList  ? [...leftList.querySelectorAll('.ml-block-item')].map(i => i.dataset.key)  : [];
+  const right = rightList ? [...rightList.querySelectorAll('.ml-block-item')].map(i => i.dataset.key) : [];
+  const hidden = [];
+  document.querySelectorAll('.ml-block-switch:not(.on)').forEach(sw => hidden.push(sw.dataset.key));
+  const defaultOpen = [];
+  document.querySelectorAll('.ml-block-default-open.checked').forEach(el => defaultOpen.push(el.dataset.key));
+  const profile = { left, right, hidden, defaultOpen };
+  saveMhaelleProfile(profile);
+  /* Envoyer au iframe */
+  const frame = document.getElementById('mhaelleFrame');
+  if (frame && frame.contentWindow) {
+    try { frame.contentWindow.postMessage({ type: 'ml-profile', profile }, '*'); } catch {}
+  }
+  closeProfilesModal();
+}
+
 window.addEventListener('load', () => {
   bindEvents();
   syncHistoryToggleUI();
   renderHistory();
   syncCacheIndicator();
+
+  // ── Synchronisation thème clair/sombre → iframe Mhaelle ──
+  // Utilise postMessage (fonctionne même avec le protocole file://)
+  const mhaelleFrame = document.getElementById('mhaelleFrame');
+  function postThemeToMhaelle() {
+    if (!mhaelleFrame || !mhaelleFrame.contentWindow) return;
+    try {
+      mhaelleFrame.contentWindow.postMessage(
+        { type: 'tp-theme', theme: document.documentElement.getAttribute('data-theme') || 'light' },
+        '*'
+      );
+    } catch(e) {}
+  }
+  // Envoie le thème dès que l'iframe est chargée (1er accès ou rechargement)
+  mhaelleFrame.addEventListener('load', postThemeToMhaelle);
+  // Suit tous les changements ultérieurs de data-theme sur le document parent
+  new MutationObserver(postThemeToMhaelle)
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 });
 
 // ── Panel ──
@@ -1247,7 +1565,7 @@ function renderHero(ms, domain, confidence) {
     hero.appendChild(mkDomain());
     if (ms.tenantId && ms.tenantValid) {
       const profile = loadProfile();
-      const enabled = REDIRECT_BUTTONS.filter(b => profile[b.key] !== false);
+      const enabled = orderedRedirectButtons(profile).filter(b => profile[b.key] !== false);
       if (enabled.length > 0) {
         const actions = document.createElement('div'); actions.className = 'hero-actions';
         enabled.forEach(btn => {
@@ -1265,7 +1583,7 @@ function renderHero(ms, domain, confidence) {
             const ribbon = document.createElement('span'); ribbon.className = 'hero-partner-btn-ribbon';
             const rLabel = document.createElement('span'); rLabel.className = 'hero-partner-btn-ribbon-label'; rLabel.textContent = 'Recommandé';
             const rInfo = document.createElement('span'); rInfo.className = 'hero-partner-btn-ribbon-info'; rInfo.textContent = 'i';
-            rInfo.title = 'Le Partner Center permet de s’assurer que le tenant est bien présent dans votre base de données clients.';
+            rInfo.title = "Le Partner Center permet de s'assurer que le tenant est bien présent dans votre base de données clients.";
             rInfo.setAttribute('aria-label', 'Information');
             rInfo.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
             ribbon.appendChild(rLabel); ribbon.appendChild(rInfo);
