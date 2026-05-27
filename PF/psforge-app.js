@@ -262,9 +262,8 @@
     return tag;
   }
 
-  /* Surveille la frappe et convertit <mot> en tag interactif */
-  function autoConvertParams() {
-    const div = document.getElementById('pfCmdBuilt');
+  /* Surveille la frappe et convertit <mot> en tag interactif (div quelconque) */
+  function autoConvertParams(div) {
     if (!div) return;
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount) return;
@@ -303,13 +302,13 @@
     sel.addRange(newRange);
   }
 
-  /* Insère un tag <paramKey> à la position du curseur dans le build */
-  function insertParamAtCursor(paramKey) {
-    const div = document.getElementById('pfCmdBuilt');
+  /* Insère un tag <paramKey> à la position du curseur dans un éditeur donné */
+  function insertParamInEditor(editorId, paramKey) {
+    const div = document.getElementById(editorId);
     if (!div) return;
 
     const hint = div.querySelector('.pf-cmd-hint');
-    if (hint) { div.replaceChildren(); selectedTemplate = null; }
+    if (hint) { div.replaceChildren(); if (editorId === 'pfCmdBuilt') selectedTemplate = null; }
 
     div.focus();
 
@@ -326,7 +325,7 @@
 
     const tag = makeParamTag('<' + paramKey + '>', paramKey);
 
-    /* Auto-injection via chip si exactement une bulle existe */
+    /* Auto-injection si exactement une bulle existe */
     const bubbleTexts = document.querySelectorAll('#bubbles-' + paramKey + ' .pf-bubble-text');
     if (bubbleTexts.length === 1) {
       tag.textContent = bubbleTexts[0].textContent;
@@ -341,6 +340,8 @@
     sel.removeAllRanges();
     sel.addRange(newRange);
   }
+
+  function insertParamAtCursor(paramKey) { insertParamInEditor('pfCmdBuilt', paramKey); }
 
   function renderBuiltCommand() {
     const div = document.getElementById('pfCmdBuilt');
@@ -424,6 +425,238 @@
   }
 
   /* ════════════════════════════════════════════════════════════
+     SCRIPT BUILDER — vue éditeur pleine hauteur
+     ════════════════════════════════════════════════════════════ */
+
+  let scriptViewActive  = false;
+  let savedScriptRange  = null;   /* curseur sauvegardé quand le script editor perd le focus */
+
+  function renderScriptChips() {
+    const bar = document.getElementById('pfScriptChipsBar');
+    if (!bar) return;
+    bar.replaceChildren();
+    const lbl = document.createElement('span');
+    lbl.className = 'pf-chips-label';
+    lbl.textContent = 'Insérer :';
+    bar.appendChild(lbl);
+    loadBlocksConfig().forEach(function (cfg) {
+      const chip = document.createElement('button');
+      chip.className = 'pf-param-chip';
+      chip.type = 'button';
+      chip.title = 'Insérer <' + cfg.id + '>';
+      chip.textContent = '<' + cfg.id + '>';
+      chip.addEventListener('click', function () { insertParamInEditor('pfScriptEditor', cfg.id); });
+      bar.appendChild(chip);
+    });
+  }
+
+  function getScriptText() {
+    const div = document.getElementById('pfScriptEditor');
+    return div ? div.textContent : '';
+  }
+
+  /* ── Dropdown recherche (Script Builder) ── */
+
+  function hideScriptSearchDropdown() {
+    const dd = document.getElementById('pfScriptSearchDropdown');
+    if (dd) dd.hidden = true;
+  }
+
+  function renderScriptSearchDropdown(filter) {
+    const dd = document.getElementById('pfScriptSearchDropdown');
+    if (!dd) return;
+
+    const q = (filter || '').toLowerCase().trim();
+    if (!q) { hideScriptSearchDropdown(); return; }
+
+    /* Collecte des correspondances dans PF_COMMANDS + sauvegardées */
+    const matches = [];
+
+    loadSaved().forEach(function (entry) {
+      if (entry.name.toLowerCase().indexOf(q) !== -1 ||
+          entry.cmd.toLowerCase().indexOf(q)  !== -1) {
+        matches.push({ label: entry.name || entry.cmd, cmd: entry.cmd });
+      }
+    });
+
+    PF_COMMANDS.forEach(function (entry) {
+      if (entry.cmd.toLowerCase().indexOf(q) !== -1 ||
+          entry.g.toLowerCase().indexOf(q)   !== -1 ||
+          entry.s.toLowerCase().indexOf(q)   !== -1) {
+        matches.push({ label: entry.cmd, cmd: entry.cmd });
+      }
+    });
+
+    dd.replaceChildren();
+
+    if (matches.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'pf-ssd-empty';
+      empty.textContent = 'Aucune commande trouvée.';
+      dd.appendChild(empty);
+      dd.hidden = false;
+      return;
+    }
+
+    matches.slice(0, 25).forEach(function (item) {
+      const row = document.createElement('div');
+      row.className = 'pf-ssd-row';
+
+      /* Texte de la commande avec paramètres colorés */
+      const cmdEl = document.createElement('span');
+      cmdEl.className = 'pf-ssd-cmd';
+      item.label.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+        if (/^<[a-zA-Z]+>$/.test(part)) {
+          const sp = document.createElement('span');
+          sp.className = 'pf-cmd-param';
+          sp.textContent = part;
+          cmdEl.appendChild(sp);
+        } else if (part) {
+          cmdEl.appendChild(document.createTextNode(part));
+        }
+      });
+
+      /* Boutons d'action */
+      const actions = document.createElement('div');
+      actions.className = 'pf-ssd-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'pf-ssd-copy';
+      copyBtn.type = 'button';
+      copyBtn.title = 'Copier la commande';
+      copyBtn.textContent = 'Copier';
+      copyBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        copyText(item.cmd, null);
+        copyBtn.textContent = 'Copié !';
+        setTimeout(function () { copyBtn.textContent = 'Copier'; }, 1000);
+      });
+
+      const injectBtn = document.createElement('button');
+      injectBtn.className = 'pf-ssd-inject';
+      injectBtn.type = 'button';
+      injectBtn.title = 'Injecter dans le script';
+      const injectImg = document.createElement('img');
+      injectImg.src = '../assets/go.png';
+      injectImg.className = 'icon-adaptive';
+      injectImg.alt = '→';
+      injectBtn.appendChild(injectImg);
+      injectBtn.addEventListener('click', function () {
+        insertCommandTextIntoScript(item.cmd);
+      });
+
+      actions.appendChild(copyBtn);
+      actions.appendChild(injectBtn);
+      row.appendChild(cmdEl);
+      row.appendChild(actions);
+      dd.appendChild(row);
+    });
+
+    dd.hidden = false;
+  }
+
+  /* Insère un texte de commande (avec tags param) au curseur dans le script editor.
+     On utilise savedScriptRange pour retrouver la position exacte du curseur
+     même après que l'utilisateur a cliqué sur le bouton d'injection (ce qui fait
+     perdre le focus à l'éditeur). */
+  function insertCommandTextIntoScript(cmdText) {
+    const div = document.getElementById('pfScriptEditor');
+    if (!div) return;
+
+    const sel = window.getSelection();
+    let range;
+
+    /* Restaurer la position sauvegardée (blur de l'éditeur → avant le clic) */
+    if (savedScriptRange && div.contains(savedScriptRange.commonAncestorContainer)) {
+      range = savedScriptRange.cloneRange();
+      savedScriptRange = null;
+    }
+
+    div.focus();
+
+    if (range) {
+      /* Réactiver la sélection sauvegardée après focus() */
+      sel.removeAllRanges();
+      sel.addRange(range);
+      range = sel.getRangeAt(0);
+    } else if (sel && sel.rangeCount > 0 && div.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      range = sel.getRangeAt(0);
+    } else {
+      range = document.createRange();
+      range.selectNodeContents(div);
+      range.collapse(false);
+    }
+
+    range.deleteContents();
+
+    /* Détecter si le curseur est dans une ligne vide créée par Entrée.
+       Chrome enveloppe chaque nouvelle ligne dans <div><br></div>.
+       Après insertion le <br> fantôme reste et ajoute un saut visuel en trop. */
+    const insertContainer = range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? range.startContainer
+      : range.startContainer.parentElement;
+    const isEmptyLinePlaceholder =
+      insertContainer &&
+      insertContainer !== div &&
+      insertContainer.childNodes.length === 1 &&
+      insertContainer.firstChild.nodeName === 'BR';
+
+    /* DocumentFragment pour une insertion atomique (évite les décalages de range) */
+    const frag = document.createDocumentFragment();
+
+    cmdText.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+      const m = part.match(/^<([a-zA-Z]+)>$/);
+      if (m) { frag.appendChild(makeParamTag(part, m[1].toLowerCase())); }
+      else if (part) { frag.appendChild(document.createTextNode(part)); }
+    });
+
+    const lastChild = frag.lastChild; /* sauvegarder avant que insertNode consomme le fragment */
+    range.insertNode(frag);
+
+    /* Supprimer le <br> placeholder maintenant que la ligne n'est plus vide */
+    if (isEmptyLinePlaceholder && insertContainer.lastChild.nodeName === 'BR') {
+      insertContainer.removeChild(insertContainer.lastChild);
+    }
+
+    if (lastChild) {
+      const newRange = document.createRange();
+      newRange.setStartAfter(lastChild);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+
+    hideScriptSearchDropdown();
+  }
+
+  function showScriptView() {
+    document.getElementById('pfCmdView').hidden    = true;
+    document.getElementById('pfScriptView').hidden = false;
+    document.getElementById('pfSearchBar').classList.add('pf-search-bar--script');
+    document.getElementById('pfScriptToggle').classList.add('active');
+    scriptViewActive = true;
+    renderScriptChips();
+    /* Si la barre de recherche contient déjà du texte, afficher le dropdown */
+    const searchInput = document.getElementById('pfCmdSearch');
+    if (searchInput && searchInput.value.trim()) {
+      renderScriptSearchDropdown(searchInput.value);
+    }
+    document.getElementById('pfScriptEditor')?.focus();
+  }
+
+  function hideScriptView() {
+    document.getElementById('pfScriptView').hidden = true;
+    document.getElementById('pfCmdView').hidden    = false;
+    document.getElementById('pfSearchBar').classList.remove('pf-search-bar--script');
+    document.getElementById('pfScriptToggle').classList.remove('active');
+    scriptViewActive = false;
+    hideScriptSearchDropdown();
+    /* Re-rendre la liste avec l'éventuelle valeur de recherche */
+    const searchInput = document.getElementById('pfCmdSearch');
+    renderCommandList(searchInput ? searchInput.value : '');
+  }
+
+  /* ════════════════════════════════════════════════════════════
      COMMAND LIST — blocs dépliables colonne droite
      ════════════════════════════════════════════════════════════ */
 
@@ -500,7 +733,12 @@
   function makeSavedBlock(savedList) {
     const labelEl = document.createElement('span');
     labelEl.className = 'pf-cg-label';
-    labelEl.appendChild(document.createTextNode('💾 Mes commandes '));
+    const saveIcon = document.createElement('img');
+    saveIcon.src = '../assets/save.png';
+    saveIcon.className = 'icon-adaptive pf-cg-label-icon';
+    saveIcon.alt = '';
+    labelEl.appendChild(saveIcon);
+    labelEl.appendChild(document.createTextNode(' Mes commandes '));
     const cnt = document.createElement('span');
     cnt.className = 'pf-cg-count';
     cnt.textContent = savedList.length;
@@ -757,6 +995,7 @@
       list.appendChild(createBlockDom(cfg));
     });
     renderParamChips();
+    if (scriptViewActive) renderScriptChips();
   }
 
   function addBlock(label) {
@@ -774,15 +1013,26 @@
     let i = 2;
     while (config.some(function (c) { return c.id === id; })) { id = baseId + '-' + (i++); }
 
-    config.push({ id: id, label: trimmed, hint: '', placeholder: trimmed, custom: true });
+    const newCfg = { id: id, label: trimmed, hint: '', placeholder: trimmed, custom: true };
+    config.push(newCfg);
     saveBlocksConfig(config);
-    renderSidebar();
+
+    /* Ajout ciblé : on insère uniquement le nouveau bloc sans reconstruire toute la liste
+       (évite de perdre les valeurs saisies dans les autres inputs) */
+    const list = document.getElementById('pfBlocksList');
+    if (list) list.appendChild(createBlockDom(newCfg));
+    renderParamChips();
+    if (scriptViewActive) renderScriptChips();
   }
 
   function deleteBlock(blockId) {
     const config = loadBlocksConfig().filter(function (c) { return c.id !== blockId; });
     saveBlocksConfig(config);
-    renderSidebar();
+    /* Suppression ciblée : retire uniquement ce bloc du DOM */
+    const blockEl = document.getElementById('block-' + blockId);
+    if (blockEl) blockEl.remove();
+    renderParamChips();
+    if (scriptViewActive) renderScriptChips();
   }
 
   function resetBlocksConfig() {
@@ -945,6 +1195,13 @@
   function toggleCollapse(blockId) {
     const block = document.getElementById('block-' + blockId);
     if (!block) return;
+    const willOpen = block.classList.contains('collapsed');
+    /* Accordéon : si on va ouvrir ce bloc, refermer tous les autres */
+    if (willOpen) {
+      document.querySelectorAll('#pfBlocksList .pf-block').forEach(function (b) {
+        if (b !== block) b.classList.add('collapsed');
+      });
+    }
     block.classList.toggle('collapsed');
   }
 
@@ -953,7 +1210,7 @@
      ════════════════════════════════════════════════════════════ */
 
   function showSaveModal() {
-    const cmd = getBuiltText();
+    const cmd = scriptViewActive ? getScriptText() : getBuiltText();
     if (!cmd) return;
     const modal   = document.getElementById('pfSaveModal');
     const preview = document.getElementById('pfModalCmdPreview');
@@ -973,7 +1230,7 @@
   }
 
   function confirmSaveModal() {
-    const cmd = getBuiltText();
+    const cmd = scriptViewActive ? getScriptText() : getBuiltText();
     if (!cmd) { hideSaveModal(); return; }
     const name  = (document.getElementById('pfModalName')?.value || '').trim() || cmd.substring(0, 40);
     const isFav = document.getElementById('pfModalFav')?.checked;
@@ -988,10 +1245,40 @@
   }
 
   document.addEventListener('click', function (e) {
+    /* Ferme le dropdown si on clique en dehors de lui et de la barre de recherche */
+    if (scriptViewActive &&
+        !e.target.closest('#pfScriptSearchDropdown') &&
+        !e.target.closest('#pfCmdSearch')) {
+      hideScriptSearchDropdown();
+    }
+
+    /* Script Builder — bascule */
+    if (e.target.closest('#pfScriptToggle')) {
+      scriptViewActive ? hideScriptView() : showScriptView();
+      return;
+    }
+    if (e.target.closest('#pfScriptBack'))  { hideScriptView(); return; }
+
+    /* Script Builder — actions */
+    if (e.target.closest('#pfScriptClear')) {
+      const ed = document.getElementById('pfScriptEditor');
+      if (ed) ed.replaceChildren();
+      return;
+    }
+    if (e.target.closest('#pfScriptCopy')) {
+      const text = getScriptText();
+      if (!text) return;
+      copyText(text, null);
+      const btn = document.getElementById('pfScriptCopy');
+      if (btn) { const o = btn.textContent; btn.textContent = 'Copié !'; setTimeout(function () { btn.textContent = o; }, 1000); }
+      return;
+    }
+    if (e.target.closest('#pfScriptSave')) { showSaveModal(); return; }
+
+    /* Modale sauvegarde */
     if (e.target.closest('#pfCmdSave'))    { showSaveModal();    return; }
     if (e.target.closest('#pfModalSave'))  { confirmSaveModal(); return; }
     if (e.target.closest('#pfModalClose') || e.target.closest('#pfModalCancel')) { hideSaveModal(); return; }
-    /* Clic sur l'overlay hors de la modale */
     if (e.target.id === 'pfSaveModal')     { hideSaveModal();    return; }
 
     if (e.target.closest('#pfCmdCopy')) {
@@ -1050,8 +1337,34 @@
   });
 
   document.addEventListener('input', function (e) {
-    if (e.target.id === 'pfCmdSearch') { renderCommandList(e.target.value); return; }
-    if (e.target.id === 'pfCmdBuilt')  { autoConvertParams(); }
+    if (e.target.id === 'pfCmdSearch') {
+      if (scriptViewActive) { renderScriptSearchDropdown(e.target.value); }
+      else                  { renderCommandList(e.target.value); }
+      return;
+    }
+    if (e.target.id === 'pfCmdBuilt')    { autoConvertParams(e.target); return; }
+    if (e.target.id === 'pfScriptEditor'){ autoConvertParams(e.target); }
+  });
+
+  /* Sauvegarde la position du curseur dès que le script editor perd le focus
+     (le clic sur le bouton "injecter" déplace le focus avant que l'action s'exécute) */
+  document.addEventListener('focusout', function (e) {
+    if (e.target.id !== 'pfScriptEditor') return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const r   = sel.getRangeAt(0);
+    const div = document.getElementById('pfScriptEditor');
+    if (div && div.contains(r.commonAncestorContainer)) {
+      savedScriptRange = r.cloneRange();
+    }
+  });
+
+  /* Ré-affiche le dropdown si l'utilisateur refocuse la barre de recherche en mode script */
+  document.addEventListener('focusin', function (e) {
+    if (e.target.id === 'pfCmdSearch' && scriptViewActive) {
+      const val = e.target.value.trim();
+      if (val) renderScriptSearchDropdown(val);
+    }
   });
 
   /* ════════════════════════════════════════════════════════════
