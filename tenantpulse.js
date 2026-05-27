@@ -383,8 +383,8 @@ function copyHistoryGuid(guid, btn) {
   navigator.clipboard.writeText(guid).then(() => { btn.replaceChildren(); const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; btn.appendChild(ck); setTimeout(() => { btn.replaceChildren(); const img = document.createElement('img'); img.src = 'assets/copy.png'; img.className = 'icon-adaptive'; img.alt = ''; btn.appendChild(img); }, 1500); });
 }
 
-// ── Onglets TenantPulse / Mhaelle (vue type navigateur) ──
-// L'iframe Mhaelle est lazy-loaded au premier clic puis reste montée,
+// ── Onglets TenantPulse / Mhaelle / PsForge (vue type navigateur) ──
+// Les iframes sont lazy-loaded au premier clic puis restent montées,
 // ce qui préserve l'état de l'analyse des deux côtés au switch.
 function switchAppTab(target) {
   const tabs = document.querySelectorAll('.app-tab');
@@ -393,13 +393,19 @@ function switchAppTab(target) {
     t.classList.toggle('active', active);
     t.setAttribute('aria-selected', active ? 'true' : 'false');
   });
-  const frame = document.getElementById('mhaelleFrame');
+  const mlFrame = document.getElementById('mhaelleFrame');
+  const pfFrame = document.getElementById('psforgeFrame');
   if (target === 'ml') {
-    // Lazy-load au premier accès
-    if (!frame.src) frame.src = 'ML/mhaelle.html?embedded=1';
+    if (!mlFrame.src) mlFrame.src = 'ML/mhaelle.html?embedded=1';
     document.body.classList.add('view-ml');
+    document.body.classList.remove('view-pf');
+  } else if (target === 'pf') {
+    if (!pfFrame.src) pfFrame.src = 'PF/psforge.html?embedded=1';
+    document.body.classList.add('view-pf');
+    document.body.classList.remove('view-ml');
   } else {
     document.body.classList.remove('view-ml');
+    document.body.classList.remove('view-pf');
   }
 }
 
@@ -820,22 +826,21 @@ window.addEventListener('load', () => {
   renderHistory();
   syncCacheIndicator();
 
-  // ── Synchronisation thème clair/sombre → iframe Mhaelle ──
+  // ── Synchronisation thème clair/sombre → iframes Mhaelle & PsForge ──
   // Utilise postMessage (fonctionne même avec le protocole file://)
   const mhaelleFrame = document.getElementById('mhaelleFrame');
-  function postThemeToMhaelle() {
-    if (!mhaelleFrame || !mhaelleFrame.contentWindow) return;
-    try {
-      mhaelleFrame.contentWindow.postMessage(
-        { type: 'tp-theme', theme: document.documentElement.getAttribute('data-theme') || 'light' },
-        '*'
-      );
-    } catch(e) {}
+  const psforgeFrame = document.getElementById('psforgeFrame');
+  function postThemeToFrames() {
+    const msg = { type: 'tp-theme', theme: document.documentElement.getAttribute('data-theme') || 'light' };
+    [mhaelleFrame, psforgeFrame].forEach(f => {
+      if (f && f.contentWindow) try { f.contentWindow.postMessage(msg, '*'); } catch(e) {}
+    });
   }
-  // Envoie le thème dès que l'iframe est chargée (1er accès ou rechargement)
-  mhaelleFrame.addEventListener('load', postThemeToMhaelle);
+  // Envoie le thème dès que chaque iframe est chargée (1er accès ou rechargement)
+  mhaelleFrame.addEventListener('load', postThemeToFrames);
+  psforgeFrame.addEventListener('load', postThemeToFrames);
   // Suit tous les changements ultérieurs de data-theme sur le document parent
-  new MutationObserver(postThemeToMhaelle)
+  new MutationObserver(postThemeToFrames)
     .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 });
 
@@ -1901,7 +1906,7 @@ async function checkFast() {
       const hint = document.createElement('span'); hint.style.cssText='font-size:10px;opacity:.65;margin-left:4px'; hint.textContent='WHOIS · sécurité DNS';
       ctaBtn.appendChild(lbl); ctaBtn.appendChild(spinner); ctaBtn.appendChild(hint);
     })();
-    ctaBtn.onclick = () => runFullFromState(raw, domain, ctaBtn);
+    ctaBtn.addEventListener('click', () => runFullFromState(raw, domain, ctaBtn), { once: true });
     center.appendChild(ctaBtn);
   } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFastLoading(false); }
@@ -1952,7 +1957,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
       pr.appendChild(p);
     });
     const tg = document.createElement('button'); tg.type='button'; tg.className='pills-toggle'; tg.textContent='Afficher tout';
-    tg.onclick = () => { const c = pr.classList.toggle('collapsed'); tg.textContent = c ? 'Afficher tout' : 'Réduire'; };
+    tg.addEventListener('click', () => { const c = pr.classList.toggle('collapsed'); tg.textContent = c ? 'Afficher tout' : 'Réduire'; });
     pl.appendChild(tg);
     newPb.appendChild(pl); newPb.appendChild(pr);
     const oldPills = center.querySelector('.pills-block');
@@ -1965,7 +1970,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     if (currentState.health) {
       center.insertBefore(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) }), ctaBtn);
     }
-    ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.replaceChildren(); const doneImg = document.createElement('img'); doneImg.src='assets/checked.png'; doneImg.className='icon-adaptive'; doneImg.alt=''; ctaBtn.appendChild(doneImg); ctaBtn.appendChild(document.createTextNode(' Analyse complète effectuée')); ctaBtn.onclick = null;
+    ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.replaceChildren(); const doneImg = document.createElement('img'); doneImg.src='assets/checked.png'; doneImg.className='icon-adaptive'; doneImg.alt=''; ctaBtn.appendChild(doneImg); ctaBtn.appendChild(document.createTextNode(' Analyse complète effectuée'));
   } catch (err) {
     ctaBtn.classList.remove('running');
     ctaBtn.textContent = '';
@@ -2015,7 +2020,7 @@ async function checkFull() {
       pr.appendChild(p);
     });
     const tg = document.createElement('button'); tg.type='button'; tg.className='pills-toggle'; tg.textContent='Afficher tout';
-    tg.onclick = () => { const c = pr.classList.toggle('collapsed'); tg.textContent = c ? 'Afficher tout' : 'Réduire'; };
+    tg.addEventListener('click', () => { const c = pr.classList.toggle('collapsed'); tg.textContent = c ? 'Afficher tout' : 'Réduire'; });
     pl.appendChild(tg);
     pb.appendChild(pl); pb.appendChild(pr); center.appendChild(pb);
 
