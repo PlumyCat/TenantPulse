@@ -474,6 +474,8 @@ function bindEvents() {
   });
   document.getElementById('profilesTabTP').addEventListener('click', () => switchProfilesTab('tp'));
   document.getElementById('profilesTabML').addEventListener('click', () => switchProfilesTab('ml'));
+  document.getElementById('profilesTabPF').addEventListener('click', () => switchProfilesTab('pf'));
+  document.getElementById('btnPFClearAll').addEventListener('click', clearAllPsForgeData);
   document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
     saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
     renderMhaelleProfilePane();
@@ -544,8 +546,17 @@ function syncCacheSettingsAvailability() {
 let _profilesActiveTab = 'tp';
 
 function openProfilesModal() {
+  /* Auto-sélection de l'onglet selon l'outil visible en arrière-plan */
+  if (document.body.classList.contains('view-pf')) {
+    _profilesActiveTab = 'pf';
+  } else if (document.body.classList.contains('view-ml')) {
+    _profilesActiveTab = 'ml';
+  } else {
+    _profilesActiveTab = 'tp';
+  }
   renderTpProfilePane();
   renderMhaelleProfilePane();
+  renderPsForgeProfilePane();
   switchProfilesTab(_profilesActiveTab);
   document.getElementById('profilesModal').classList.add('open');
 }
@@ -556,10 +567,15 @@ function switchProfilesTab(tab) {
   _profilesActiveTab = tab;
   document.getElementById('profilesPaneTP').classList.toggle('profiles-pane-hidden', tab !== 'tp');
   document.getElementById('profilesPaneML').classList.toggle('profiles-pane-hidden', tab !== 'ml');
+  document.getElementById('profilesPanePF').classList.toggle('profiles-pane-hidden', tab !== 'pf');
   document.getElementById('profilesFooterTP').classList.toggle('profiles-footer-hidden', tab !== 'tp');
   document.getElementById('profilesFooterML').classList.toggle('profiles-footer-hidden', tab !== 'ml');
+  document.getElementById('profilesFooterPF').classList.toggle('profiles-footer-hidden', tab !== 'pf');
+  /* Masquer "Enregistrer" sur l'onglet PsForge — les actions sont immédiates */
+  document.getElementById('btnProfilesSave').classList.toggle('profiles-save-btn-hidden', tab === 'pf');
   document.getElementById('profilesTabTP').classList.toggle('active', tab === 'tp');
   document.getElementById('profilesTabML').classList.toggle('active', tab === 'ml');
+  document.getElementById('profilesTabPF').classList.toggle('active', tab === 'pf');
 }
 
 /* ── Onglet TenantPulse : toggles + drag-to-reorder ── */
@@ -668,6 +684,7 @@ function renderMhaelleProfilePane() {
   container.appendChild(cols);
   /* Drag partagé entre les deux colonnes (cross-column) */
   setupMlCrossColDrag(cols);
+
 }
 
 function makeMlBlockSection(title, order, hidden, defaultOpen) {
@@ -771,11 +788,131 @@ function setupMlCrossColDrag(cols) {
 
 /* ── Sauvegarde commune ── */
 function saveProfilesModal() {
+  if (_profilesActiveTab === 'pf') return; /* PsForge : actions immédiates, rien à sauvegarder */
   if (_profilesActiveTab === 'ml') {
     saveMhaelleProfileFromModal();
   } else {
     saveTpProfileFromModal();
   }
+}
+
+/* ── Onglet PsForge : gestion des données localStorage ── */
+const PF_LS_KEYS = {
+  saved:     'psforge_saved_v1',
+  favorites: 'psforge_favorites_v1',
+  blocks:    'psforge_blocks_v1'
+};
+
+function loadPFKey(key) {
+  try { return JSON.parse(localStorage.getItem(PF_LS_KEYS[key]) || 'null'); } catch { return null; }
+}
+
+function renderPsForgeProfilePane() {
+  const pane = document.getElementById('psforgeDataPane');
+  if (!pane) return;
+  pane.replaceChildren();
+
+  const saved     = loadPFKey('saved');
+  const savedCnt  = Array.isArray(saved)     ? saved.length     : 0;
+  const favs      = loadPFKey('favorites');
+  const favsCnt   = Array.isArray(favs)      ? favs.length      : 0;
+  const blocks    = loadPFKey('blocks');
+  const blocksCnt = Array.isArray(blocks)    ? blocks.length    : 12;
+  const hasCustomBlocks = blocks !== null;
+
+  const sections = [
+    {
+      label:    'Commandes sauvegardées',
+      iconSrc:  'assets/save.png',
+      count:    savedCnt,
+      desc:     savedCnt === 0 ? 'Aucune commande sauvegardée.' : savedCnt + ' commande(s) en mémoire.',
+      btnLabel: 'Effacer les commandes',
+      danger:   savedCnt > 0,
+      action:   function () {
+        try { localStorage.removeItem(PF_LS_KEYS.saved); } catch {}
+        renderPsForgeProfilePane();
+      }
+    },
+    {
+      label:    'Favoris',
+      iconSrc:  'assets/history.png',
+      count:    favsCnt,
+      desc:     favsCnt === 0 ? 'Aucun favori enregistré.' : favsCnt + ' favori(s) enregistré(s).',
+      btnLabel: 'Effacer les favoris',
+      danger:   favsCnt > 0,
+      action:   function () {
+        try { localStorage.removeItem(PF_LS_KEYS.favorites); } catch {}
+        renderPsForgeProfilePane();
+      }
+    },
+    {
+      label:    'Blocs de saisie',
+      iconSrc:  'assets/option.png',
+      count:    blocksCnt,
+      desc:     hasCustomBlocks ? 'Configuration personnalisée active.' : 'Configuration par défaut (12 blocs).',
+      btnLabel: 'Réinitialiser les blocs',
+      danger:   false,
+      action:   function () {
+        try { localStorage.removeItem(PF_LS_KEYS.blocks); } catch {}
+        renderPsForgeProfilePane();
+      }
+    }
+  ];
+
+  sections.forEach(function (sec) {
+    /* En-tête de section (collapsible — fermé par défaut) */
+    const hd = document.createElement('button');
+    hd.className = 'drop-section-btn';
+    hd.setAttribute('data-drop-section', '');
+    const hdLbl = document.createElement('span'); hdLbl.textContent = sec.label;
+    const hdArr = document.createElement('span'); hdArr.className = 'ds-arrow'; hdArr.textContent = '▾';
+    hd.appendChild(hdLbl); hd.appendChild(hdArr);
+    hd.addEventListener('click', function () {
+      hd.classList.toggle('open');
+      body.classList.toggle('open');
+    });
+    pane.appendChild(hd);
+
+    /* Corps */
+    const body = document.createElement('div');
+    body.className = 'drop-section-body';
+
+    /* Ligne stats */
+    const statsRow = document.createElement('div');
+    statsRow.className = 'pf-prof-stats-row';
+
+    const iconEl = document.createElement('img');
+    iconEl.src = sec.iconSrc; iconEl.className = 'icon-adaptive pf-prof-icon'; iconEl.alt = '';
+
+    const descEl = document.createElement('span');
+    descEl.className = 'pf-prof-desc'; descEl.textContent = sec.desc;
+
+    const badge = document.createElement('span');
+    badge.className = 'pf-prof-count' + (sec.count > 0 ? ' has-data' : '');
+    badge.textContent = sec.count;
+
+    statsRow.appendChild(iconEl);
+    statsRow.appendChild(descEl);
+    statsRow.appendChild(badge);
+    body.appendChild(statsRow);
+
+    /* Bouton d'action */
+    const actionBtn = document.createElement('button');
+    actionBtn.type = 'button';
+    actionBtn.className = 'pf-prof-action-btn' + (sec.danger ? ' pf-prof-action-danger' : '');
+    actionBtn.textContent = sec.btnLabel;
+    actionBtn.addEventListener('click', sec.action);
+    body.appendChild(actionBtn);
+
+    pane.appendChild(body);
+  });
+}
+
+function clearAllPsForgeData() {
+  Object.values(PF_LS_KEYS).forEach(function (k) {
+    try { localStorage.removeItem(k); } catch {}
+  });
+  renderPsForgeProfilePane();
 }
 
 function saveTpProfileFromModal() {
@@ -1038,7 +1175,14 @@ function showStoragePanel() {
       const left  = document.createElement('div'); left.className = 'storage-entry-head-left';
       const keyEl = document.createElement('code'); keyEl.className = 'storage-entry-key'; keyEl.textContent = key;
       const size  = document.createElement('span'); size.className = 'storage-entry-size'; size.textContent = fmtStorageSize(sizeBytes);
+      const arrow = document.createElement('span'); arrow.className = 'storage-entry-arrow'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '▾';
       left.appendChild(keyEl); left.appendChild(size);
+      /* Clic sur le header (hors ×) → ouvrir/fermer */
+      head.addEventListener('click', e => {
+        if (e.target.closest('.storage-entry-del')) return;
+        const isOpen = entry.classList.toggle('open');
+        arrow.style.transform = isOpen ? 'rotate(180deg)' : '';
+      });
       const del   = document.createElement('button'); del.className = 'storage-entry-del'; del.title = 'Supprimer cette entrée'; del.setAttribute('aria-label', 'Supprimer ' + key);
       del.textContent = '×';
       del.addEventListener('click', () => {
@@ -1054,7 +1198,7 @@ function showStoragePanel() {
           body.appendChild(msg);
         }
       });
-      head.appendChild(left); head.appendChild(del);
+      head.appendChild(left); head.appendChild(arrow); head.appendChild(del);
       const val = document.createElement('pre'); val.className = 'storage-entry-val'; val.textContent = display;
       entry.appendChild(head); entry.appendChild(val);
       body.appendChild(entry);
