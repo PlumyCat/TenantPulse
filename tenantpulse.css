@@ -88,6 +88,18 @@ body.view-ml footer{display:none}
 @media(max-width:768px){
   .mhaelle-frame{min-height:calc(100vh - 90px)}
 }
+/* iframe PsForge — onglet Commandes (lazy-loaded, état préservé) */
+.psforge-frame{
+  display:none;flex:1 1 0;width:100%;border:none;background:var(--bg);
+  min-height:calc(100vh - 100px);
+}
+body.view-pf .app{display:none}
+body.view-pf .mhaelle-frame{display:none}
+body.view-pf .psforge-frame{display:block}
+body.view-pf footer{display:none}
+@media(max-width:768px){
+  .psforge-frame{min-height:calc(100vh - 90px)}
+}
 .nav-right{display:flex;align-items:center;gap:6px;position:relative}
 /* ───── Nav buttons — glassmorphism translucide blanc (typo allégée) ───── */
 .nav-badge{
