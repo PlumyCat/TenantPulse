@@ -87,21 +87,18 @@
         <img src="assets/ML.png" width="13" height="13" alt="">
         En-têtes email
       </button>
+      <button class="profiles-tab" id="profilesTabPF" type="button">
+        <img src="assets/PSB.png" width="13" height="13" alt="">
+        PsForge
+      </button>
     </div>
     <!-- Pane TenantPulse -->
     <div class="profiles-pane" id="profilesPaneTP">
-      <!-- Section Données (déplacée depuis Paramètres & Confidentialité) -->
+      <!-- Section Rétention de l'historique -->
       <button class="drop-section-btn" data-drop-section>
-        <span>Gestion d'historique</span><span class="ds-arrow">▾</span>
+        <span>Rétention de l'historique</span><span class="ds-arrow">▾</span>
       </button>
       <div class="drop-section-body">
-        <div class="drop-toggle" id="toggleHistoryBtn">
-          <div class="drop-toggle-left">
-            <img src="assets/history.png" class="drop-toggle-icon icon-adaptive" alt="">
-            <span class="drop-toggle-label">Historique des Tenant ID</span>
-          </div>
-          <div class="drop-toggle-switch" id="historyOptSwitch"></div>
-        </div>
         <div class="cache-settings" id="cacheSettings">
           <div class="cache-setting-row">
             <div class="cache-setting-head">
@@ -141,13 +138,13 @@
                 <li>à chaque <strong>nouvelle analyse</strong> sauvegardée dans le cache&nbsp;;</li>
                 <li>quand vous <strong>modifiez la durée</strong> de conservation ci-dessus.</li>
               </ul>
-              <img src="assets/warning.png" class="icon-adaptive" alt=""> Aucun nettoyage ne s'effectue tant que TenantPulse est fermé&nbsp;: une entrée arrivée à expiration pendant que l'onglet n'est pas ouvert sera supprimée à votre prochaine ouverture.<br><br>
+              <img src="assets/warning.png" class="icon-adaptive" alt=""> Aucun nettoyage ne s'effectue tant que TenantPulse est fermé.<br><br>
               Si la durée est réglée sur <strong>«&nbsp;Illimité&nbsp;»</strong>, aucune purge n'est effectuée (seule la limite du nombre max s'applique).
             </div>
           </div>
         </div>
       </div>
-      <!-- Section Raccourcis (collapsible) -->
+      <!-- Section Raccourcis -->
       <button class="drop-section-btn" data-drop-section>
         <span>Raccourcis</span><span class="ds-arrow">▾</span>
       </button>
@@ -157,7 +154,16 @@
     </div>
     <!-- Pane Mhaelle -->
     <div class="profiles-pane profiles-pane-hidden" id="profilesPaneML">
-      <div id="mhaelleBlockList"></div>
+      <button class="drop-section-btn" data-drop-section>
+        <span>Raccourcis</span><span class="ds-arrow">▾</span>
+      </button>
+      <div class="drop-section-body">
+        <div id="mhaelleBlockList"></div>
+      </div>
+    </div>
+    <!-- Pane PsForge -->
+    <div class="profiles-pane profiles-pane-hidden" id="profilesPanePF">
+      <div id="psforgeDataPane"></div>
     </div>
     <!-- Footer dynamique -->
     <div class="profiles-modal-footer">
@@ -167,6 +173,9 @@
       </div>
       <div id="profilesFooterML" class="profiles-footer-hidden">
         <button class="profiles-footer-btn" id="btnMlBlocksReset">Réinitialiser</button>
+      </div>
+      <div id="profilesFooterPF" class="profiles-footer-hidden">
+        <button class="profiles-footer-btn profiles-footer-btn-danger" id="btnPFClearAll">Tout effacer</button>
       </div>
       <button class="profiles-save-btn" id="btnProfilesSave">Enregistrer</button>
     </div>
@@ -204,7 +213,7 @@
       <span class="cache-dot"></span>
       <span id="cacheIndicatorLabel">Cache inactif</span>
     </div>
-    <div class="nav-badge">v0.8.5</div>
+    <div class="nav-badge">v0.8.1</div>
     <button class="nav-drop-btn" id="btnOpenProfiles">
       <img src="assets/user.png" width="14" height="14" alt=""> Profils <span class="drop-arrow">▾</span>
     </button>
@@ -225,6 +234,20 @@
               <span class="drop-toggle-label" id="darkLabel">Mode sombre</span>
             </div>
             <div class="drop-toggle-switch" id="darkSwitch"></div>
+          </div>
+        </div>
+
+        <!-- Gestion d'historique — toggle uniquement -->
+        <button class="drop-section-btn" data-drop-section>
+          <span>Gestion d'historique</span><span class="ds-arrow">▾</span>
+        </button>
+        <div class="drop-section-body">
+          <div class="drop-toggle" id="toggleHistoryBtn">
+            <div class="drop-toggle-left">
+              <img src="assets/history.png" class="drop-toggle-icon icon-adaptive" alt="">
+              <span class="drop-toggle-label">Historique des Tenant ID</span>
+            </div>
+            <div class="drop-toggle-switch" id="historyOptSwitch"></div>
           </div>
         </div>
 
