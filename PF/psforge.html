@@ -56,6 +56,7 @@
     <div class="sb-head">
       <h1>Commandes <span>PowerShell IT MW</span></h1>
       <p>Renseignez les champs ci-dessous pour composer vos commandes.</p>
+      <p class="sb-privacy-note">Les commandes sauvegardées, favoris et configuration des blocs sont conservés localement dans votre navigateur — aucune donnée transmise à un serveur.</p>
     </div>
 
     <div class="pf-sidebar-actions">
@@ -96,7 +97,7 @@
       <div class="pf-cmd-list" id="pfCmdList"></div>
       <div class="pf-cmd-output">
         <div class="pf-cmd-output-header">
-          <button class="pf-btn-save" type="button" id="pfCmdSave">💾 Sauvegarder</button>
+          <button class="pf-btn-save" type="button" id="pfCmdSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
           <button class="pf-btn-validate" type="button" id="pfCmdCopy">Copier</button>
         </div>
         <div class="pf-param-chips-bar" id="pfParamChipsBar"></div>
@@ -111,7 +112,7 @@
         <span class="pf-script-title">Script Builder</span>
         <span class="pf-script-spacer"></span>
         <button class="pf-script-clear-btn" type="button" id="pfScriptClear">Effacer</button>
-        <button class="pf-btn-save" type="button" id="pfScriptSave">💾 Sauvegarder</button>
+        <button class="pf-btn-save" type="button" id="pfScriptSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
         <button class="pf-btn-validate" type="button" id="pfScriptCopy">Copier</button>
       </div>
       <div class="pf-param-chips-bar" id="pfScriptChipsBar"></div>
@@ -124,7 +125,7 @@
   <div class="pf-modal-overlay" id="pfSaveModal" hidden>
     <div class="pf-modal">
       <div class="pf-modal-header">
-        <span class="pf-modal-title">💾 Sauvegarder la commande</span>
+        <span class="pf-modal-title"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder la commande</span>
         <button class="pf-modal-close" type="button" id="pfModalClose">✕</button>
       </div>
       <div class="pf-modal-body">
