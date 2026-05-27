@@ -746,6 +746,18 @@ html.embedded nav { display: none; }
   white-space: nowrap;
 }
 .pf-btn-save:hover { color: var(--text); border-color: var(--blue, #4b3fbe); background: rgba(75,63,190,.07); }
+/* Icône save.png dans les boutons sauvegarder — PNG sombre adapté */
+.pf-btn-save-icon {
+  width: 12px; height: 12px;
+  vertical-align: middle; margin-right: 2px; margin-bottom: 1px;
+  flex-shrink: 0;
+  filter: brightness(0) invert(26%) sepia(68%) saturate(676%) hue-rotate(226deg) brightness(.93) contrast(.93);
+}
+.pf-btn-save:hover .pf-btn-save-icon { filter: brightness(0) invert(20%) sepia(80%) saturate(700%) hue-rotate(226deg); }
+/* Dans la modal (fond clair/sombre, pas de fond coloré) */
+.pf-modal-title .pf-btn-save-icon { filter: brightness(0) invert(26%) sepia(68%) saturate(676%) hue-rotate(226deg) brightness(.93) contrast(.93); }
+[data-theme="dark"] .pf-btn-save-icon,
+[data-theme="dark"] .pf-modal-title .pf-btn-save-icon { filter: brightness(0) invert(75%) sepia(25%) saturate(500%) hue-rotate(226deg); }
 
 .pf-save-form {
   display: flex;
