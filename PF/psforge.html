@@ -76,25 +76,48 @@
   </aside>
 
   <main class="center" id="centerMain">
-    <div class="pf-cmd-search-bar">
-      <div class="pf-brand-header">
-        <img src="../assets/PSB.png" class="pf-brand-icon" alt="PsForge">
-        <span class="pf-brand-name">PsForge</span>
-        <span class="pf-brand-badge">&lt;/Alpha&gt;</span>
+
+    <!-- Barre supérieure commune aux deux vues -->
+    <div class="pf-cmd-search-bar" id="pfSearchBar">
+      <div class="pf-search-top">
+        <div class="pf-brand-header">
+          <img src="../assets/PSB.png" class="pf-brand-icon" alt="PsForge">
+          <span class="pf-brand-name">PsForge</span>
+          <span class="pf-brand-badge">&lt;/Alpha&gt;</span>
+        </div>
+        <button class="pf-script-toggle" type="button" id="pfScriptToggle"><img src="../assets/tool.png" class="pf-script-toggle-icon" alt=""> Script Builder</button>
       </div>
       <input class="pf-cmd-search" id="pfCmdSearch" type="search" placeholder="Rechercher une commande…" autocomplete="off" spellcheck="false">
+      <div class="pf-script-search-dropdown" id="pfScriptSearchDropdown" hidden></div>
     </div>
 
-    <div class="pf-cmd-list" id="pfCmdList"></div>
-
-    <div class="pf-cmd-output">
-      <div class="pf-cmd-output-header">
-        <button class="pf-btn-save" type="button" id="pfCmdSave">💾 Sauvegarder</button>
-        <button class="pf-btn-validate" type="button" id="pfCmdCopy">Copier</button>
+    <!-- Vue normale — liste de commandes + zone de build -->
+    <div id="pfCmdView">
+      <div class="pf-cmd-list" id="pfCmdList"></div>
+      <div class="pf-cmd-output">
+        <div class="pf-cmd-output-header">
+          <button class="pf-btn-save" type="button" id="pfCmdSave">💾 Sauvegarder</button>
+          <button class="pf-btn-validate" type="button" id="pfCmdCopy">Copier</button>
+        </div>
+        <div class="pf-param-chips-bar" id="pfParamChipsBar"></div>
+        <div class="pf-cmd-built" id="pfCmdBuilt" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"><span class="pf-cmd-hint">← Sélectionnez une commande dans la liste</span></div>
       </div>
-      <div class="pf-param-chips-bar" id="pfParamChipsBar"></div>
-      <div class="pf-cmd-built" id="pfCmdBuilt" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"><span class="pf-cmd-hint">← Sélectionnez une commande dans la liste</span></div>
     </div>
+
+    <!-- Vue Script Builder -->
+    <div class="pf-script-view" id="pfScriptView" hidden>
+      <div class="pf-script-toolbar">
+        <button class="pf-script-back" type="button" id="pfScriptBack">← Retour</button>
+        <span class="pf-script-title">Script Builder</span>
+        <span class="pf-script-spacer"></span>
+        <button class="pf-script-clear-btn" type="button" id="pfScriptClear">Effacer</button>
+        <button class="pf-btn-save" type="button" id="pfScriptSave">💾 Sauvegarder</button>
+        <button class="pf-btn-validate" type="button" id="pfScriptCopy">Copier</button>
+      </div>
+      <div class="pf-param-chips-bar" id="pfScriptChipsBar"></div>
+      <div class="pf-script-editor" id="pfScriptEditor" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+    </div>
+
   </main>
 
   <!-- ── Modal sauvegarde ── -->
