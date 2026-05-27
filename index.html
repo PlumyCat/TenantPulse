@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!--
   CSP : 'unsafe-inline' supprimé — le JS est externalisé dans tenantpulse.js.
-  script-src 'self' est actif : seuls les scripts chargés depuis la même origine sont autorisés. "https://rdap..." non intéroger à supprimer
+  script-src 'self' est actif : seuls les scripts chargés depuis la même origine sont autorisés.
 -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
@@ -190,6 +190,11 @@
       <button class="app-tab" data-app-tab="ml" role="tab" aria-selected="false">
         <img src="assets/ML.png" class="app-tab-icon" alt="">
         <span class="app-tab-label">En-têtes email</span>
+        <span class="app-tab-badge">dev</span>
+      </button>
+      <button class="app-tab" data-app-tab="pf" role="tab" aria-selected="false">
+        <img src="assets/metrics.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">Commandes</span>
         <span class="app-tab-badge">dev</span>
       </button>
     </div>
@@ -400,6 +405,7 @@
 </div>
 
 <iframe id="mhaelleFrame" class="mhaelle-frame" title="Mhaelle — Analyseur Header Email" loading="lazy"></iframe>
+<iframe id="psforgeFrame" class="psforge-frame" title="PsForge — Commandes PowerShell IT MW" loading="lazy"></iframe>
 
 <footer><div class="powered">Prototype <span> Interne</span> RUNMW N1</div></footer>
 
