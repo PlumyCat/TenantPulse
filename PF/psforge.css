@@ -492,12 +492,18 @@ html.embedded nav { display: none; }
   gap: 6px;
 }
 
-/* Grille 2 colonnes pour les blocs à l'intérieur d'une section */
+/* 2 colonnes indépendantes — chacune s'étire selon son propre contenu */
 .pf-sec-groups {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 6px;
-  align-items: start;
+  align-items: flex-start;
+}
+.pf-sec-groups-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* ── Label de section ── */
@@ -518,6 +524,8 @@ html.embedded nav { display: none; }
   overflow: hidden;
   background: var(--surface);
   align-self: start;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Blocs pleine largeur (favoris, mes commandes) */
