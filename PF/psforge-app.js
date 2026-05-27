@@ -112,18 +112,18 @@
 
   /* ── Config par défaut des blocs sidebar ── */
   const DEFAULT_BLOCKS = [
-    { id: 'upn',      label: 'UPN — Utilisateur',          hint: 'ex. john.doe@contoso.com',                           placeholder: 'john.doe@contoso.com'                  },
-    { id: 'groupid',  label: 'GroupId',                     hint: 'GUID du groupe Entra ID',                            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'  },
-    { id: 'objectid', label: 'ObjectId / UserId',            hint: "GUID de l'objet ou utilisateur Entra ID",            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'  },
-    { id: 'skuid',    label: 'SkuId — Licence',              hint: 'GUID de la licence (Get-MgSubscribedSku)',           placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'  },
-    { id: 'id',       label: 'Id — Générique',               hint: 'Id retourné par une commande précédente',            placeholder: 'id retourné'                           },
-    { id: 'nom',      label: 'Nom — Service / Processus',    hint: 'ex. Spooler · W32Time · Teams',                     placeholder: 'Spooler'                               },
-    { id: 'host',     label: 'Host — Hôte / IP',             hint: 'ex. google.com · 192.168.1.1 · smtp.office365.com', placeholder: 'google.com'                            },
-    { id: 'domaine',  label: 'Domaine DNS',                   hint: 'ex. contoso.com · be-cloud.fr',                     placeholder: 'contoso.com'                           },
-    { id: 'port',     label: 'Port TCP/UDP',                  hint: 'ex. 443 (HTTPS) · 25 (SMTP) · 3389 (RDP)',         placeholder: '443',           inputmode: 'numeric'   },
-    { id: 'ip',       label: 'Adresse IP',                    hint: 'ex. 192.168.1.100 · 10.0.0.1',                     placeholder: '192.168.1.100'                         },
-    { id: 'date',     label: 'Date',                          hint: 'Format MM/DD/YYYY requis par Get-MessageTrace',     placeholder: '05/27/2026'                            },
-    { id: 'chemin',   label: 'Chemin',                        hint: 'ex. C:\\Temp\\rapport.html · \\\\serveur\\partage', placeholder: 'C:\\Temp\\'                            },
+    { id: 'upn',      label: 'UPN',        hint: 'ex. john.doe@contoso.com',                           placeholder: 'john.doe@contoso.com'                 },
+    { id: 'groupid',  label: 'Groupe ID',  hint: 'GUID du groupe Entra ID',                            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+    { id: 'objectid', label: 'Object ID',  hint: "GUID de l'objet ou utilisateur Entra ID",            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+    { id: 'skuid',    label: 'SKU ID',     hint: 'GUID de la licence (Get-MgSubscribedSku)',            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
+    { id: 'id',       label: 'ID',         hint: 'Id retourné par une commande précédente',             placeholder: 'id retourné'                          },
+    { id: 'nom',      label: 'Nom',        hint: 'ex. Spooler · W32Time · Teams',                      placeholder: 'Spooler'                              },
+    { id: 'host',     label: 'Hôte / IP',  hint: 'ex. google.com · 192.168.1.1 · smtp.office365.com',  placeholder: 'google.com'                           },
+    { id: 'domaine',  label: 'Domaine',    hint: 'ex. contoso.com · be-cloud.fr',                      placeholder: 'contoso.com'                          },
+    { id: 'port',     label: 'Port',       hint: 'ex. 443 · 25 · 587 · 3389',                          placeholder: '443',          inputmode: 'numeric'   },
+    { id: 'ip',       label: 'IP',         hint: 'ex. 192.168.1.100 · 10.0.0.1',                       placeholder: '192.168.1.100'                        },
+    { id: 'date',     label: 'Date',       hint: 'Format MM/DD/YYYY (Get-MessageTrace)',                placeholder: '05/27/2026'                           },
+    { id: 'chemin',   label: 'Chemin',     hint: 'ex. C:\\Temp\\rapport.html · \\\\serveur\\partage',  placeholder: 'C:\\Temp\\'                           },
   ];
 
   function loadBlocksConfig() {
@@ -374,6 +374,23 @@
     });
   }
 
+  /* Charge un texte de commande dans le builder en convertissant <param> en tags */
+  function loadCommandText(cmdText) {
+    const div = document.getElementById('pfCmdBuilt');
+    if (!div) return;
+    activeParamTag = null;
+    selectedTemplate = null;
+    div.replaceChildren();
+    cmdText.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+      const m = part.match(/^<([a-zA-Z]+)>$/);
+      if (m) {
+        div.appendChild(makeParamTag(part, m[1].toLowerCase()));
+      } else if (part) {
+        div.appendChild(document.createTextNode(part));
+      }
+    });
+  }
+
   function getBuiltText() {
     const div = document.getElementById('pfCmdBuilt');
     if (!div) return '';
@@ -502,13 +519,7 @@
         btn.addEventListener('click', function () {
           document.querySelectorAll('.pf-cmd-item-wrap.selected').forEach(function (el) { el.classList.remove('selected'); });
           wrap.classList.add('selected');
-          const div = document.getElementById('pfCmdBuilt');
-          if (div) {
-            activeParamTag = null;
-            div.replaceChildren();
-            div.appendChild(document.createTextNode(entry.cmd));
-          }
-          selectedTemplate = null;
+          loadCommandText(entry.cmd);
         });
 
         const del = document.createElement('button');
@@ -599,15 +610,24 @@
       const grid = document.createElement('div');
       grid.className = 'pf-sec-groups';
 
-      Object.keys(sectionMap[sName]).forEach(function (gName) {
+      const gcol1 = document.createElement('div');
+      gcol1.className = 'pf-sec-groups-col';
+      const gcol2 = document.createElement('div');
+      gcol2.className = 'pf-sec-groups-col';
+
+      Object.keys(sectionMap[sName]).forEach(function (gName, i) {
         const lEl = document.createElement('span');
         lEl.className = 'pf-cg-label';
         lEl.textContent = gName;
         const cmds = sectionMap[sName][gName];
-        grid.appendChild(makeCgBlock(lEl, function (body) {
+        const block = makeCgBlock(lEl, function (body) {
           cmds.forEach(function (cmd) { body.appendChild(buildCmdItemDom(cmd)); });
-        }, '', true));
+        }, '', true);
+        (i % 2 === 0 ? gcol1 : gcol2).appendChild(block);
       });
+
+      grid.appendChild(gcol1);
+      grid.appendChild(gcol2);
 
       col.appendChild(grid);
       sectionsRow.appendChild(col);
