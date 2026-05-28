@@ -86,7 +86,10 @@
           <span class="pf-brand-name">PsForge</span>
           <span class="pf-brand-badge">&lt;/Alpha&gt;</span>
         </div>
-        <button class="pf-script-toggle" type="button" id="pfScriptToggle"><img src="../assets/tool.png" class="pf-script-toggle-icon" alt=""> Script Builder</button>
+        <div class="pf-search-top-btns">
+          <button class="pf-manager-toggle" type="button" id="pfManagerToggle"><img src="../assets/option.png" class="pf-manager-toggle-icon" alt=""> Gérer</button>
+          <button class="pf-script-toggle" type="button" id="pfScriptToggle"><img src="../assets/tool.png" class="pf-script-toggle-icon" alt=""> Script Builder</button>
+        </div>
       </div>
       <input class="pf-cmd-search" id="pfCmdSearch" type="search" placeholder="Rechercher une commande…" autocomplete="off" spellcheck="false">
       <div class="pf-script-search-dropdown" id="pfScriptSearchDropdown" hidden></div>
@@ -99,6 +102,10 @@
         <div class="pf-cmd-output-header">
           <button class="pf-btn-save" type="button" id="pfCmdSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
           <button class="pf-btn-validate" type="button" id="pfCmdCopy">Copier</button>
+        </div>
+        <div class="pf-desc-bar" id="pfDescBar" hidden>
+          <button class="pf-desc-toggle" type="button" id="pfDescToggle"><img src="../assets/information.png" class="icon-adaptive pf-desc-icon" alt=""> Description</button>
+          <div class="pf-desc-content" id="pfDescContent" hidden></div>
         </div>
         <div class="pf-param-chips-bar" id="pfParamChipsBar"></div>
         <div class="pf-cmd-built" id="pfCmdBuilt" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"><span class="pf-cmd-hint">← Sélectionnez une commande dans la liste</span></div>
@@ -115,8 +122,72 @@
         <button class="pf-btn-save" type="button" id="pfScriptSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
         <button class="pf-btn-validate" type="button" id="pfScriptCopy">Copier</button>
       </div>
+      <div class="pf-desc-bar" id="pfScriptDescBar" hidden>
+        <button class="pf-desc-toggle" type="button" id="pfScriptDescToggle"><img src="../assets/information.png" class="icon-adaptive pf-desc-icon" alt=""> Description</button>
+        <div class="pf-desc-content" id="pfScriptDescContent" hidden></div>
+      </div>
       <div class="pf-param-chips-bar" id="pfScriptChipsBar"></div>
       <div class="pf-script-editor" id="pfScriptEditor" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+    </div>
+
+    <!-- ── Vue Gestionnaire de commandes ── -->
+    <div class="pf-manager-view" id="pfManagerView" hidden>
+
+    <div class="pf-manager-toolbar">
+      <button class="pf-script-back" type="button" id="pfManagerBack">← Retour</button>
+      <span class="pf-manager-title">Gestionnaire de commandes</span>
+      <span class="pf-script-spacer"></span>
+      <button class="pf-btn-validate" type="button" id="pfManagerAdd">+ Nouvelle commande</button>
+    </div>
+    <div class="pf-manager-search-bar">
+      <input class="pf-cmd-search pf-manager-search" id="pfManagerSearch" type="search" placeholder="Filtrer les commandes…" autocomplete="off" spellcheck="false">
+    </div>
+
+    <!-- Formulaire création / édition -->
+    <div class="pf-manager-form" id="pfManagerForm" hidden>
+      <div class="pf-manager-form-inner">
+        <div class="pf-manager-builtin-ctx" id="pfMgrBuiltinCtx" hidden>
+          <span class="pf-manager-builtin-label">Commande originale</span>
+          <code class="pf-manager-builtin-orig" id="pfMgrBuiltinOrig"></code>
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfMgrTitle">Titre d'affichage <span class="pf-manager-optional">(optionnel — affiche la commande si vide)</span></label>
+          <input class="pf-modal-input" id="pfMgrTitle" type="text" placeholder="Ex. Réinitialiser le mot de passe…" autocomplete="off" spellcheck="false" maxlength="80">
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfMgrCmd">Commande <span class="pf-manager-required">*</span></label>
+          <input class="pf-modal-input pf-manager-cmd-input" id="pfMgrCmd" type="text" placeholder="Get-MgUser -UserId &lt;upn&gt;…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfMgrDesc">Description <span class="pf-manager-optional">(visible via le bouton Description dans la vue principale)</span></label>
+          <textarea class="pf-modal-input pf-manager-textarea" id="pfMgrDesc" rows="3" placeholder="Décrivez l'usage, les prérequis, ou le contexte de cette commande…" spellcheck="false"></textarea>
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label">Catégorie</label>
+          <div class="pf-manager-cats">
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="mine" checked><span>Mes commandes</span></label>
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="windows"><span>Système Windows</span></label>
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="microsoft365"><span>Microsoft 365</span></label>
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="favorites"><span>★ Favoris</span></label>
+          </div>
+        </div>
+        <div class="pf-manager-field pf-manager-subcat-field" id="pfMgrSubcatField" hidden>
+          <label class="pf-modal-label">Groupe / Sous-catégorie <span class="pf-manager-required">*</span></label>
+          <div class="pf-manager-subcats" id="pfMgrSubcats"></div>
+          <div class="pf-manager-newgroup-row" id="pfMgrNewGroupRow" hidden>
+            <input class="pf-modal-input" id="pfMgrNewGroupInput" type="text" placeholder="Nom du nouveau groupe…" maxlength="40" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="pf-manager-form-actions">
+          <button class="pf-modal-btn-cancel" type="button" id="pfMgrCancel">Annuler</button>
+          <button class="pf-btn-validate" type="button" id="pfMgrSave">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Liste des commandes personnalisées -->
+    <div class="pf-manager-list" id="pfManagerList"></div>
+
     </div>
 
   </main>
