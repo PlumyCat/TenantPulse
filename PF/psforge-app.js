@@ -213,6 +213,13 @@
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(saved)); } catch {}
     renderCommandList(document.getElementById('pfCmdSearch')?.value || '');
   }
+  function renameSaved(ts, newName) {
+    const saved = loadSaved().map(function (e) {
+      return e.ts === ts ? Object.assign({}, e, { name: newName }) : e;
+    });
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(saved)); } catch {}
+    renderCommandList(document.getElementById('pfCmdSearch')?.value || '');
+  }
 
   /* ── Commandes personnalisées ── */
   function loadCustomCmds() {
@@ -310,9 +317,12 @@
       if (!bar) return;
       if (desc) {
         bar.hidden = false;
+        /* Garde le texte synchronisé même si le panneau est déjà ouvert
+           (sinon la description reste celle de la commande précédente). */
+        if (content && !content.hidden) content.textContent = desc;
       } else {
         bar.hidden = true;
-        if (content) content.hidden = true;
+        if (content) { content.hidden = true; content.textContent = ''; }
       }
     });
   }
@@ -461,6 +471,8 @@
     newRange.collapse(true);
     sel.removeAllRanges();
     sel.addRange(newRange);
+
+    highlightEditor(div);
   }
 
   function insertParamAtCursor(paramKey) { insertParamInEditor('pfCmdBuilt', paramKey); }
@@ -495,6 +507,8 @@
         activeParamTag = null;
       }
     });
+
+    highlightEditor(div);
   }
 
   /* Charge un texte dans le builder.
@@ -811,7 +825,7 @@
     const q          = managerFilter;
     const all        = loadCustomCmds();
     const overrides  = loadOverrides();
-    const hasContent = { custom: false, builtin: false };
+    const hasContent = { custom: false, builtin: false, extra: false };
 
     /* ── Section : commandes personnalisées ── */
     const groupOrder  = ['mine', 'windows', 'microsoft365', 'favorites'];
@@ -843,6 +857,31 @@
       });
       list.appendChild(section);
     });
+
+    /* ── Section : commandes enregistrées (modale Sauvegarder) ── */
+    const savedAll = loadSaved().filter(function (e) {
+      return !q || (e.name || '').toLowerCase().indexOf(q) !== -1 ||
+                   e.cmd.toLowerCase().indexOf(q) !== -1;
+    });
+    if (savedAll.length) {
+      hasContent.extra = true;
+      list.appendChild(buildManagerCollapsible(
+        'Commandes enregistrées', savedAll.length, q,
+        function (body) { savedAll.forEach(function (e) { body.appendChild(buildManagerSavedRow(e)); }); }
+      ));
+    }
+
+    /* ── Section : favoris épinglés (commandes étoilées) ── */
+    const favList = [...loadFavorites()].filter(function (cmd) {
+      return !q || cmd.toLowerCase().indexOf(q) !== -1;
+    });
+    if (favList.length) {
+      hasContent.extra = true;
+      list.appendChild(buildManagerCollapsible(
+        '★ Favoris épinglés', favList.length, q,
+        function (body) { favList.forEach(function (cmd) { body.appendChild(buildManagerFavRow(cmd)); }); }
+      ));
+    }
 
     /* ── Section : commandes intégrées ── */
     const sectionMap   = {};
@@ -1049,13 +1088,149 @@
     }
 
     /* Message vide si rien du tout */
-    if (!hasContent.custom && !hasContent.builtin) {
+    if (!hasContent.custom && !hasContent.builtin && !hasContent.extra) {
       const empty = document.createElement('div');
       empty.className   = 'pf-manager-empty';
       empty.textContent = q ? 'Aucune commande ne correspond à "' + filter + '".'
                             : 'Aucune commande personnalisée. Cliquez sur "+ Nouvelle commande" pour commencer.';
       list.appendChild(empty);
     }
+  }
+
+  /* Section repliable générique du gestionnaire (en-tête + compteur + corps) */
+  function buildManagerCollapsible(title, count, expanded, fillBody) {
+    const sec = document.createElement('div');
+    sec.className = 'pf-manager-builtin-section' + (expanded ? '' : ' collapsed');
+
+    const hd = document.createElement('div');
+    hd.className = 'pf-manager-builtin-heading';
+    hd.addEventListener('click', function () { sec.classList.toggle('collapsed'); });
+
+    const t = document.createElement('span');
+    t.textContent = title;
+    const cb = document.createElement('span');
+    cb.className = 'pf-manager-builtin-count';
+    cb.textContent = count;
+    const ar = document.createElement('span');
+    ar.className = 'pf-manager-builtin-arrow';
+    ar.textContent = '▾';
+    hd.appendChild(t); hd.appendChild(cb); hd.appendChild(ar);
+
+    const body = document.createElement('div');
+    body.className = 'pf-manager-builtin-body';
+    fillBody(body);
+
+    sec.appendChild(hd); sec.appendChild(body);
+    return sec;
+  }
+
+  /* Ligne — commande enregistrée (renommer + supprimer) */
+  function buildManagerSavedRow(entry) {
+    const row = document.createElement('div');
+    row.className = 'pf-manager-item';
+
+    const info = document.createElement('div');
+    info.className = 'pf-manager-item-info';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'pf-manager-item-title';
+    titleEl.textContent = entry.name || entry.cmd;
+    info.appendChild(titleEl);
+
+    if (entry.name) {
+      const cmdEl = document.createElement('div');
+      cmdEl.className = 'pf-manager-item-cmd';
+      const oneLine = entry.cmd.split('\n')[0] + (entry.cmd.indexOf('\n') !== -1 ? ' …' : '');
+      oneLine.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+        if (/^<[a-zA-Z]+>$/.test(part)) {
+          const sp = document.createElement('span'); sp.className = 'pf-cmd-param'; sp.textContent = part; cmdEl.appendChild(sp);
+        } else if (part) { cmdEl.appendChild(document.createTextNode(part)); }
+      });
+      info.appendChild(cmdEl);
+    }
+
+    const editRow = document.createElement('div');
+    editRow.className = 'pf-manager-group-edit-row';
+    editRow.hidden = true;
+    const inp = document.createElement('input');
+    inp.className = 'pf-manager-group-input'; inp.type = 'text';
+    inp.value = entry.name || ''; inp.maxLength = 60; inp.placeholder = 'Nom…';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'pf-manager-group-save'; okBtn.type = 'button'; okBtn.textContent = 'OK';
+    editRow.appendChild(inp); editRow.appendChild(okBtn);
+    info.appendChild(editRow);
+
+    const actions = document.createElement('div');
+    actions.className = 'pf-manager-item-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'pf-manager-item-edit'; editBtn.type = 'button';
+    editBtn.title = 'Renommer'; editBtn.textContent = '✏';
+    editBtn.addEventListener('click', function () {
+      editRow.hidden = !editRow.hidden;
+      if (!editRow.hidden) { inp.focus(); inp.select(); }
+    });
+    function doRename() {
+      const v = inp.value.trim();
+      if (!v) return;
+      renameSaved(entry.ts, v);
+      renderManagerList(managerFilter);
+    }
+    okBtn.addEventListener('click', doRename);
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doRename(); } });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'pf-saved-del'; delBtn.type = 'button';
+    delBtn.title = 'Supprimer'; delBtn.textContent = '✕';
+    delBtn.addEventListener('click', function () {
+      deleteSaved(entry.ts);
+      renderManagerList(managerFilter);
+    });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+    row.appendChild(info);
+    row.appendChild(actions);
+    return row;
+  }
+
+  /* Ligne — favori épinglé (retirer des favoris) */
+  function buildManagerFavRow(cmdStr) {
+    const row = document.createElement('div');
+    row.className = 'pf-manager-item';
+
+    const info = document.createElement('div');
+    info.className = 'pf-manager-item-info';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'pf-manager-item-title';
+
+    const ov = getOverride(cmdStr);
+    if (ov && ov.title) {
+      titleEl.textContent = ov.title;
+    } else {
+      const disp = ov ? ov.cmd : cmdStr;
+      disp.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+        if (/^<[a-zA-Z]+>$/.test(part)) {
+          const sp = document.createElement('span'); sp.className = 'pf-cmd-param'; sp.textContent = part; titleEl.appendChild(sp);
+        } else if (part) { titleEl.appendChild(document.createTextNode(part)); }
+      });
+    }
+    info.appendChild(titleEl);
+
+    const actions = document.createElement('div');
+    actions.className = 'pf-manager-item-actions';
+    const unfav = document.createElement('button');
+    unfav.className = 'pf-saved-del'; unfav.type = 'button';
+    unfav.title = 'Retirer des favoris'; unfav.textContent = '✕';
+    unfav.addEventListener('click', function () {
+      toggleFavorite(cmdStr);
+      renderManagerList(managerFilter);
+    });
+    actions.appendChild(unfav);
+
+    row.appendChild(info);
+    row.appendChild(actions);
+    return row;
   }
 
   function buildManagerCustomRow(entry) {
@@ -1182,6 +1357,497 @@
     return row;
   }
 
+  /* ════════════════════════════════════════════════════════════
+     IMPORT / EXPORT DE COMMANDES (paquets .json)
+     ----------------------------------------------------------------
+     Un paquet regroupe (au choix de l'expert) : commandes
+     personnalisées, modifications de commandes intégrées, groupes
+     créés/renommés, commandes enregistrées et favoris.
+     Format : { format:'psforge-package', version:1, exportedAt, data }
+     ════════════════════════════════════════════════════════════ */
+
+  let ioExportLookup = {};
+  let ioImportLookup = {};
+
+  /* ── Garde-fous de sécurité (paquets = données non fiables) ── */
+  const IO_MAX_BYTES   = 1024 * 1024;   /* fichier / code importé : 1 Mo max */
+  const IO_MAX_ITEMS   = 500;           /* nb max d'éléments par type */
+  const IO_MAX_TITLE   = 200;
+  const IO_MAX_GROUP   = 80;
+  const IO_MAX_DESC    = 4000;
+  const IO_MAX_CMD     = 20000;         /* une commande / script */
+  const IO_FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+  function ioSafeStr(v, max) {
+    const s = (v == null) ? '' : String(v);
+    return s.length > max ? s.slice(0, max) : s;
+  }
+  function ioForbidden(k) { return IO_FORBIDDEN_KEYS.indexOf(k) !== -1; }
+  function ioSafeCategory(c) { return ['mine', 'windows', 'microsoft365', 'favorites'].indexOf(c) !== -1 ? c : 'mine'; }
+  function ioSafeSection(s)  { return (s === 'windows' || s === 'microsoft365') ? s : null; }
+  function ioSafeGroup(v) {
+    if (v == null) return null;
+    const s = ioSafeStr(v, IO_MAX_GROUP);
+    return (s && !ioForbidden(s)) ? s : null;
+  }
+
+  /* Motifs PowerShell à risque (exécution distante, obfuscation, destruction…) */
+  const IO_RISKY = [
+    /Invoke-Expression/i, /(^|[\s;(|])iex([\s;)|]|$)/i,
+    /Invoke-WebRequest|Invoke-RestMethod|(^|[\s;(|])(iwr|irm|curl|wget)([\s;)|]|$)/i,
+    /DownloadString|DownloadFile|Net\.WebClient/i, /FromBase64String/i,
+    /-Enc(odedCommand)?\b/i, /-nop\b|-noprofile|-w(indowstyle)?\s+hidden/i,
+    /Remove-Item[^\n]*-(Recurse|Force)/i, /Format-Volume|Clear-Disk/i,
+    /Set-ExecutionPolicy/i, /Add-MpPreference|Set-MpPreference|DisableRealtimeMonitoring/i,
+    /New-Object\s+Net\.Sockets/i, /\bbitsadmin\b|\bcertutil\b|\bmshta\b|\bregsvr32\b/i,
+    /\breg\s+(add|delete)\b/i, /Start-Process/i,
+  ];
+  function ioIsRisky(text) { const t = String(text || ''); return IO_RISKY.some(function (re) { return re.test(t); }); }
+
+  /* Motifs d'informations sensibles (à ne pas partager par mégarde) */
+  const IO_SECRET = [
+    /pass(word|wd)?\s*[:=]/i, /-Password\b/i, /ConvertTo-SecureString/i,
+    /client[_-]?secret|ClientSecret/i, /api[_-]?key/i, /\bsecret\s*[:=]/i,
+    /\btoken\s*[:=]|-Token\b/i, /Authorization\s*[:=]|Bearer\s+\S/i,
+    /AccessKey|SecretKey/i, /-AsPlainText\b/i,
+  ];
+  function ioIsSensitive(text) { const t = String(text || ''); return IO_SECRET.some(function (re) { return re.test(t); }); }
+
+  /* Nettoie/valide les données d'un paquet (anti-pollution, caps, types). */
+  function sanitizePackageData(raw) {
+    const data = {};
+    if (!raw || typeof raw !== 'object') return data;
+
+    if (Array.isArray(raw.customCmds)) {
+      data.customCmds = raw.customCmds.slice(0, IO_MAX_ITEMS)
+        .filter(function (e) { return e && typeof e === 'object'; })
+        .map(function (e) { return {
+          title: ioSafeStr(e.title, IO_MAX_TITLE), cmd: ioSafeStr(e.cmd, IO_MAX_CMD),
+          desc: ioSafeStr(e.desc, IO_MAX_DESC), category: ioSafeCategory(e.category), group: ioSafeGroup(e.group),
+        }; })
+        .filter(function (e) { return e.cmd; });
+    }
+    if (raw.overrides && typeof raw.overrides === 'object') {
+      const o = {}; let n = 0;
+      Object.keys(raw.overrides).forEach(function (k) {
+        if (n >= IO_MAX_ITEMS || ioForbidden(k)) return;
+        const v = raw.overrides[k];
+        if (!v || typeof v !== 'object') return;
+        o[ioSafeStr(k, IO_MAX_CMD)] = { title: ioSafeStr(v.title, IO_MAX_TITLE), cmd: ioSafeStr(v.cmd, IO_MAX_CMD), desc: ioSafeStr(v.desc, IO_MAX_DESC) };
+        n++;
+      });
+      data.overrides = o;
+    }
+    if (Array.isArray(raw.customGroups)) {
+      data.customGroups = raw.customGroups.slice(0, IO_MAX_ITEMS)
+        .filter(function (g) { return g && typeof g === 'object'; })
+        .map(function (g) { return { name: ioSafeGroup(g.name), section: ioSafeSection(g.section) }; })
+        .filter(function (g) { return g.name && g.section; });
+    }
+    if (raw.groupOverrides && typeof raw.groupOverrides === 'object') {
+      const o = {}; let n = 0;
+      Object.keys(raw.groupOverrides).forEach(function (k) {
+        if (n >= IO_MAX_ITEMS || ioForbidden(k)) return;
+        const disp = ioSafeGroup(raw.groupOverrides[k]);
+        if (!disp) return;
+        o[ioSafeStr(k, IO_MAX_GROUP)] = disp; n++;
+      });
+      data.groupOverrides = o;
+    }
+    if (Array.isArray(raw.saved)) {
+      data.saved = raw.saved.slice(0, IO_MAX_ITEMS)
+        .filter(function (e) { return e && typeof e === 'object'; })
+        .map(function (e) { return { name: ioSafeStr(e.name, IO_MAX_TITLE), cmd: ioSafeStr(e.cmd, IO_MAX_CMD) }; })
+        .filter(function (e) { return e.cmd; });
+    }
+    if (Array.isArray(raw.favorites)) {
+      data.favorites = raw.favorites.slice(0, IO_MAX_ITEMS)
+        .filter(function (c) { return typeof c === 'string' && c; })
+        .map(function (c) { return ioSafeStr(c, IO_MAX_CMD); });
+    }
+    return data;
+  }
+
+  /* Ajoute un texte de commande avec coloration des balises <param> */
+  function appendCmdWithParams(el, text) {
+    String(text).split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+      if (/^<[a-zA-Z]+>$/.test(part)) {
+        const sp = document.createElement('span'); sp.className = 'pf-cmd-param'; sp.textContent = part; el.appendChild(sp);
+      } else if (part) { el.appendChild(document.createTextNode(part)); }
+    });
+  }
+
+  /* Données exportables actuelles, groupées par type */
+  function collectExportable() {
+    const groups = [];
+    const customs = loadCustomCmds();
+    if (customs.length) groups.push({ type: 'customCmds', label: 'Commandes personnalisées',
+      items: customs.map(function (e) { return { key: 'customCmds:' + e.id, raw: e, title: (e.title || e.cmd), cmd: e.cmd, warn: ioIsSensitive(e.cmd + ' ' + (e.desc || '')) ? '⚠ sensible' : null }; }) });
+
+    const ov = loadOverrides();
+    const ovKeys = Object.keys(ov);
+    if (ovKeys.length) groups.push({ type: 'overrides', label: 'Modifications de commandes intégrées',
+      items: ovKeys.map(function (orig) { const d = ov[orig]; return { key: 'overrides:' + orig, raw: { orig: orig, data: d }, title: (d.title || d.cmd || orig), cmd: '↳ remplace : ' + orig, warn: ioIsSensitive((d.cmd || '') + ' ' + (d.desc || '')) ? '⚠ sensible' : null }; }) });
+
+    const cg = loadCustomGroups();
+    if (cg.length) groups.push({ type: 'customGroups', label: 'Groupes créés',
+      items: cg.map(function (g) { return { key: 'customGroups:' + g.id, raw: g, title: g.name, cmd: (g.section === 'windows' ? 'Système Windows' : 'Microsoft 365') }; }) });
+
+    const go = loadGroupOverrides();
+    const goKeys = Object.keys(go);
+    if (goKeys.length) groups.push({ type: 'groupOverrides', label: 'Groupes renommés',
+      items: goKeys.map(function (orig) { return { key: 'groupOverrides:' + orig, raw: { orig: orig, display: go[orig] }, title: orig + ' → ' + go[orig], cmd: null }; }) });
+
+    const saved = loadSaved();
+    if (saved.length) groups.push({ type: 'saved', label: 'Commandes enregistrées',
+      items: saved.map(function (e) { return { key: 'saved:' + e.ts, raw: e, title: (e.name || e.cmd), cmd: e.cmd, warn: ioIsSensitive(e.cmd) ? '⚠ sensible' : null }; }) });
+
+    const favs = [...loadFavorites()];
+    if (favs.length) groups.push({ type: 'favorites', label: '★ Favoris',
+      items: favs.map(function (c) { return { key: 'favorites:' + c, raw: c, title: c, cmd: null, warn: ioIsSensitive(c) ? '⚠ sensible' : null }; }) });
+
+    return groups;
+  }
+
+  /* Données importables d'un paquet, avec statut nouveau / déjà présent */
+  function collectImportable(data) {
+    const groups = [];
+    const cur = {
+      customCmds: loadCustomCmds(), overrides: loadOverrides(),
+      customGroups: loadCustomGroups(), groupOverrides: loadGroupOverrides(),
+      saved: loadSaved(), favorites: loadFavorites(),
+    };
+    if (Array.isArray(data.customCmds) && data.customCmds.length) groups.push({ type: 'customCmds', label: 'Commandes personnalisées',
+      items: data.customCmds.map(function (e, i) { return { key: 'customCmds:' + i, raw: e, title: (e.title || e.cmd || '(sans titre)'), cmd: e.cmd || '', status: cur.customCmds.some(function (x) { return x.cmd === e.cmd; }) ? 'dup' : 'new', warn: ioIsRisky(e.cmd) ? '⚠ à vérifier' : null }; }) });
+
+    if (data.overrides && Object.keys(data.overrides).length) groups.push({ type: 'overrides', label: 'Modifications de commandes intégrées',
+      items: Object.keys(data.overrides).map(function (orig, i) { const d = data.overrides[orig]; return { key: 'overrides:' + i, raw: { orig: orig, data: d }, title: (d.title || d.cmd || orig), cmd: (d.cmd && d.cmd !== orig ? d.cmd + '\n' : '') + '↳ remplace : ' + orig, status: cur.overrides[orig] ? 'dup' : 'new', warn: ioIsRisky((d.cmd || '') + ' ' + orig) ? '⚠ à vérifier' : null }; }) });
+
+    if (Array.isArray(data.customGroups) && data.customGroups.length) groups.push({ type: 'customGroups', label: 'Groupes créés',
+      items: data.customGroups.map(function (g, i) { return { key: 'customGroups:' + i, raw: g, title: g.name, cmd: (g.section === 'windows' ? 'Système Windows' : 'Microsoft 365'), status: cur.customGroups.some(function (x) { return x.section === g.section && x.name === g.name; }) ? 'dup' : 'new' }; }) });
+
+    if (data.groupOverrides && Object.keys(data.groupOverrides).length) groups.push({ type: 'groupOverrides', label: 'Groupes renommés',
+      items: Object.keys(data.groupOverrides).map(function (orig, i) { return { key: 'groupOverrides:' + i, raw: { orig: orig, display: data.groupOverrides[orig] }, title: orig + ' → ' + data.groupOverrides[orig], cmd: null, status: cur.groupOverrides[orig] ? 'dup' : 'new' }; }) });
+
+    if (Array.isArray(data.saved) && data.saved.length) groups.push({ type: 'saved', label: 'Commandes enregistrées',
+      items: data.saved.map(function (e, i) { const c = e.cmd || ''; return { key: 'saved:' + i, raw: e, title: (e.name || c), cmd: c, status: cur.saved.some(function (x) { return x.cmd === e.cmd; }) ? 'dup' : 'new', warn: ioIsRisky(c) ? '⚠ à vérifier' : null }; }) });
+
+    if (Array.isArray(data.favorites) && data.favorites.length) groups.push({ type: 'favorites', label: '★ Favoris',
+      items: data.favorites.map(function (c, i) { return { key: 'favorites:' + i, raw: c, title: c, cmd: null, status: cur.favorites.has(c) ? 'dup' : 'new', warn: ioIsRisky(c) ? '⚠ à vérifier' : null }; }) });
+
+    return groups;
+  }
+
+  /* Construit un groupe de l'arbre de sélection (en-tête + éléments). */
+  function buildIoGroup(g, withStatus, onChange) {
+    const group = document.createElement('div');
+    group.className = 'pf-io-group';
+
+    const head = document.createElement('label');
+    head.className = 'pf-io-group-head';
+    const master = document.createElement('input');
+    master.type = 'checkbox'; master.className = 'pf-io-cb pf-io-master';
+    const title = document.createElement('span');
+    title.className = 'pf-io-group-title'; title.textContent = g.label;
+    const count = document.createElement('span');
+    count.className = 'pf-io-group-count'; count.textContent = g.items.length;
+    head.appendChild(master); head.appendChild(title); head.appendChild(count);
+    group.appendChild(head);
+
+    const itemCbs = [];
+    g.items.forEach(function (it) {
+      const row = document.createElement('label');
+      row.className = 'pf-io-item';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.className = 'pf-io-cb';
+      cb.dataset.iokey = it.key;
+      cb.checked = withStatus ? (it.status === 'new') : true;
+
+      const body = document.createElement('div');
+      body.className = 'pf-io-item-body';
+      const t = document.createElement('div');
+      t.className = 'pf-io-item-title'; t.textContent = it.title;
+      body.appendChild(t);
+      if (it.cmd) {
+        const c = document.createElement('div');
+        c.className = 'pf-io-item-cmd';
+        appendCmdWithParams(c, it.cmd);
+        body.appendChild(c);
+      }
+
+      row.appendChild(cb);
+      row.appendChild(body);
+      if (withStatus && it.status) {
+        const b = document.createElement('span');
+        b.className = 'pf-io-badge pf-io-badge--' + (it.status === 'new' ? 'new' : 'dup');
+        b.textContent = it.status === 'new' ? '✦ nouveau' : '⟳ déjà présent';
+        row.appendChild(b);
+      }
+      if (it.warn) {
+        const w = document.createElement('span');
+        w.className = 'pf-io-badge pf-io-badge--warn';
+        w.textContent = it.warn;
+        if (it.warn.indexOf('vérifier') !== -1) row.classList.add('pf-io-item--risky');
+        row.appendChild(w);
+      }
+
+      cb.addEventListener('change', function () { syncMaster(); onChange(); });
+      group.appendChild(row);
+      itemCbs.push(cb);
+    });
+
+    function syncMaster() {
+      const c = itemCbs.filter(function (x) { return x.checked; }).length;
+      master.checked = c === itemCbs.length;
+      master.indeterminate = c > 0 && c < itemCbs.length;
+    }
+    master.addEventListener('change', function () {
+      itemCbs.forEach(function (x) { x.checked = master.checked; });
+      onChange();
+    });
+    syncMaster();
+    return group;
+  }
+
+  function countIo(treeId) {
+    const cbs = [...document.querySelectorAll('#' + treeId + ' .pf-io-cb:not(.pf-io-master)')];
+    return { sel: cbs.filter(function (c) { return c.checked; }).length, total: cbs.length };
+  }
+  function setAllIo(treeId, checked) {
+    document.querySelectorAll('#' + treeId + ' .pf-io-cb').forEach(function (cb) { cb.checked = checked; cb.indeterminate = false; });
+  }
+  function updateExportCount() {
+    const r = countIo('pfExportTree');
+    const el = document.getElementById('pfExportCount');
+    if (el) el.textContent = r.total ? (r.sel + ' / ' + r.total + ' sélectionné' + (r.sel > 1 ? 's' : '')) : '';
+    const dl = document.getElementById('pfExportDownload');
+    if (dl) dl.disabled = r.sel === 0;
+  }
+  function updateImportCount() {
+    const r = countIo('pfImportTree');
+    const el = document.getElementById('pfImportCount');
+    if (el) el.textContent = r.total ? (r.sel + ' / ' + r.total + ' sélectionné' + (r.sel > 1 ? 's' : '')) : '';
+    const ap = document.getElementById('pfImportApply');
+    if (ap) ap.disabled = r.sel === 0;
+  }
+
+  /* ── Export ── */
+  function renderExportTree() {
+    ioExportLookup = {};
+    const tree = document.getElementById('pfExportTree');
+    tree.replaceChildren();
+    const groups = collectExportable();
+    if (!groups.length) {
+      const e = document.createElement('div');
+      e.className = 'pf-io-empty';
+      e.textContent = 'Rien à exporter pour le moment. Créez d\'abord des commandes dans le Gestionnaire.';
+      tree.appendChild(e);
+      updateExportCount();
+      return;
+    }
+    groups.forEach(function (g) {
+      g.items.forEach(function (it) { ioExportLookup[it.key] = { type: g.type, raw: it.raw }; });
+      tree.appendChild(buildIoGroup(g, false, updateExportCount));
+    });
+    updateExportCount();
+  }
+  function showExportModal() {
+    renderExportTree();
+    document.getElementById('pfExportModal').hidden = false;
+  }
+  function hideExportModal() { document.getElementById('pfExportModal').hidden = true; }
+
+  /* Base64 sûr pour l'UTF-8 (commandes avec accents, flèches, etc.) */
+  function utf8ToB64(str) { return btoa(unescape(encodeURIComponent(str))); }
+  function b64ToUtf8(str) { return decodeURIComponent(escape(atob(str))); }
+  const PKG_CODE_PREFIX = 'PSFORGE1:';
+
+  /* Construit le paquet à partir des cases cochées (ou null si rien). */
+  function buildPackageFromExportSelection() {
+    const tree = document.getElementById('pfExportTree');
+    const data = {};
+    tree.querySelectorAll('.pf-io-cb:not(.pf-io-master)').forEach(function (cb) {
+      if (!cb.checked) return;
+      const it = ioExportLookup[cb.dataset.iokey];
+      if (!it) return;
+      const t = it.type, raw = it.raw;
+      if (t === 'overrides')           { (data.overrides = data.overrides || {})[raw.orig] = raw.data; }
+      else if (t === 'groupOverrides') { (data.groupOverrides = data.groupOverrides || {})[raw.orig] = raw.display; }
+      else                             { (data[t] = data[t] || []).push(raw); }
+    });
+    if (!Object.keys(data).length) return null;
+    return { format: 'psforge-package', version: 1, exportedAt: new Date().toISOString(), data: data };
+  }
+
+  function downloadExportPackage() {
+    const pkg = buildPackageFromExportSelection();
+    if (!pkg) return;
+    const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const d = new Date();
+    const stamp = '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const a = document.createElement('a');
+    a.href = url; a.download = 'psforge-commandes-' + stamp + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    hideExportModal();
+  }
+
+  function copyExportCode() {
+    const pkg = buildPackageFromExportSelection();
+    if (!pkg) return;
+    const code = PKG_CODE_PREFIX + utf8ToB64(JSON.stringify(pkg));
+    copyText(code, null);
+    const btn = document.getElementById('pfExportCopy');
+    if (btn) {
+      const o = btn.textContent;
+      btn.textContent = '✓ Code copié !';
+      setTimeout(function () { btn.textContent = o; }, 1300);
+    }
+  }
+
+  /* ── Import ── */
+  function showImportError(msg) {
+    ioImportLookup = {};
+    const tree = document.getElementById('pfImportTree');
+    tree.replaceChildren();
+    const e = document.createElement('div');
+    e.className = 'pf-io-empty'; e.textContent = msg;
+    tree.appendChild(e);
+    updateImportCount();
+    document.getElementById('pfImportModal').hidden = false;
+  }
+  function renderImportTree(data) {
+    ioImportLookup = {};
+    const tree = document.getElementById('pfImportTree');
+    tree.replaceChildren();
+    const groups = collectImportable(data);
+    if (!groups.length) {
+      const e = document.createElement('div');
+      e.className = 'pf-io-empty'; e.textContent = 'Le paquet ne contient aucune donnée importable.';
+      tree.appendChild(e);
+      updateImportCount();
+      return;
+    }
+    groups.forEach(function (g) {
+      g.items.forEach(function (it) { ioImportLookup[it.key] = { type: g.type, raw: it.raw }; });
+      tree.appendChild(buildIoGroup(g, true, updateImportCount));
+    });
+    updateImportCount();
+  }
+  /* Parse un fichier OU un code texte (PSFORGE1:… ou JSON brut) → paquet | null
+     Données non fiables : taille bornée, schéma validé, contenu nettoyé. */
+  function parseImportText(text) {
+    let t = (text || '').trim();
+    if (!t || t.length > IO_MAX_BYTES * 2) return null;   /* garde-fou taille brute */
+    if (t.indexOf(PKG_CODE_PREFIX) === 0) {
+      t = t.slice(PKG_CODE_PREFIX.length).trim();
+      try { t = b64ToUtf8(t); } catch (e) { return null; }
+    }
+    if (t.length > IO_MAX_BYTES) return null;             /* JSON décodé trop volumineux */
+    let pkg = null;
+    try { pkg = JSON.parse(t); } catch (e) { return null; }
+    if (!pkg || pkg.format !== 'psforge-package' || typeof pkg.data !== 'object' || !pkg.data) return null;
+    return { format: pkg.format, version: pkg.version, data: sanitizePackageData(pkg.data) };
+  }
+
+  /* Ouvre la modale d'import vide (choix fichier ou collage de code) */
+  function showImportModal() {
+    ioImportLookup = {};
+    const code = document.getElementById('pfImportCode');
+    if (code) code.value = '';
+    const tree = document.getElementById('pfImportTree');
+    tree.replaceChildren();
+    const e = document.createElement('div');
+    e.className = 'pf-io-empty';
+    e.textContent = 'Choisissez un fichier .json ou collez un code pour prévisualiser le contenu.';
+    tree.appendChild(e);
+    updateImportCount();
+    document.getElementById('pfImportModal').hidden = false;
+  }
+
+  function analyzeImportCode() {
+    const pkg = parseImportText(document.getElementById('pfImportCode').value);
+    if (!pkg) { showImportError('Code invalide ou illisible. Vérifiez d\'avoir copié le code en entier.'); return; }
+    renderImportTree(pkg.data);
+  }
+
+  function handleImportFile(file) {
+    if (file && file.size > IO_MAX_BYTES) {
+      showImportError('Fichier trop volumineux (max 1 Mo). Refusé par sécurité.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function () {
+      const pkg = parseImportText(reader.result);
+      if (!pkg) { showImportError('Fichier invalide : ce n\'est pas un paquet de commandes PsForge.'); return; }
+      renderImportTree(pkg.data);
+      document.getElementById('pfImportModal').hidden = false;
+    };
+    reader.onerror = function () { showImportError('Impossible de lire le fichier.'); };
+    reader.readAsText(file);
+  }
+  function hideImportModal() {
+    document.getElementById('pfImportModal').hidden = true;
+    ioImportLookup = {};
+  }
+  function applyImport() {
+    const tree = document.getElementById('pfImportTree');
+    const sel  = {};
+    tree.querySelectorAll('.pf-io-cb:not(.pf-io-master)').forEach(function (cb) {
+      if (!cb.checked) return;
+      const it = ioImportLookup[cb.dataset.iokey];
+      if (!it) return;
+      (sel[it.type] = sel[it.type] || []).push(it.raw);
+    });
+
+    /* Groupes d'abord (les commandes peuvent les référencer) */
+    (sel.customGroups   || []).forEach(function (g) { if (g && g.section && g.name) addCustomGroup(g.section, g.name); });
+    (sel.groupOverrides || []).forEach(function (o) { if (o && o.orig) setGroupOverride(o.orig, o.display); });
+    (sel.overrides      || []).forEach(function (o) { if (o && o.orig && o.data) setOverride(o.orig, o.data); });
+
+    if (sel.customCmds) {
+      const arr = loadCustomCmds();
+      sel.customCmds.forEach(function (raw) {
+        if (!raw || !raw.cmd) return;
+        const idx = arr.findIndex(function (e) { return e.cmd === raw.cmd; });
+        const entry = {
+          id:       idx !== -1 ? arr[idx].id : (Date.now() + Math.floor(Math.random() * 1e6)),
+          title:    raw.title || '', cmd: raw.cmd, desc: raw.desc || '',
+          category: raw.category || 'mine', group: raw.group || null,
+        };
+        if (idx !== -1) arr[idx] = entry; else arr.unshift(entry);
+        if ((entry.category === 'windows' || entry.category === 'microsoft365') && entry.group) {
+          const exists = getGroupsForSection(entry.category).some(function (g) { return g.name === entry.group; });
+          if (!exists) addCustomGroup(entry.category, entry.group);
+        }
+      });
+      saveCustomCmds(arr.slice(0, 200));
+    }
+
+    if (sel.saved) {
+      const arr = loadSaved();
+      sel.saved.forEach(function (raw) {
+        if (!raw || !raw.cmd) return;
+        const idx = arr.findIndex(function (e) { return e.cmd === raw.cmd; });
+        if (idx !== -1) { arr[idx] = Object.assign({}, arr[idx], { name: raw.name || arr[idx].name }); }
+        else { arr.unshift({ name: raw.name || '', cmd: raw.cmd, ts: Date.now() + Math.floor(Math.random() * 1e6) }); }
+      });
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(arr.slice(0, 100))); } catch (e) {}
+    }
+
+    if (sel.favorites) {
+      const set = loadFavorites();
+      sel.favorites.forEach(function (c) { if (typeof c === 'string') set.add(c); });
+      saveFavorites(set);
+    }
+
+    hideImportModal();
+    renderManagerList(managerFilter);
+    renderCommandList(document.getElementById('pfCmdSearch')?.value || '');
+  }
+
   function renderScriptChips() {
     const bar = document.getElementById('pfScriptChipsBar');
     if (!bar) return;
@@ -1228,6 +1894,309 @@
         else if (part) { div.appendChild(document.createTextNode(part)); }
       });
     });
+    highlightEditor(div);
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     COLORATION SYNTAXIQUE POWERSHELL (live, dans les éditeurs)
+     ----------------------------------------------------------------
+     Les éditeurs (#pfCmdBuilt, #pfScriptEditor) sont des contenteditable
+     qui mélangent du texte libre et des balises <param> interactives
+     (span.pf-param-tag, contentEditable=false). À chaque frappe on :
+       1. sérialise le contenu en segments (texte / saut de ligne / param)
+       2. capture la position du curseur en offset logique
+       3. reconstruit le DOM avec des <span> colorés pour le texte
+          (les balises <param> sont préservées telles quelles)
+       4. restaure le curseur
+     Les balises <param> ne sont JAMAIS colorées comme du code : elles
+     gardent leur style orange/vert existant.
+     ════════════════════════════════════════════════════════════ */
+
+  /* Mots-clés PowerShell */
+  const PS_KEYWORDS = /^(?:if|else|elseif|switch|foreach|for|while|do|until|function|filter|workflow|return|break|continue|throw|try|catch|finally|param|begin|process|end|in|trap|class|enum|data|dynamicparam|using|exit)$/i;
+
+  /* Tokenise une ligne de texte PowerShell → [{ v, c }]
+     v = texte, c = classe de coloration (ou null pour texte brut). */
+  function tokenizePS(line) {
+    const out = [];
+    const n   = line.length;
+    let i = 0;
+    function isWS(ch) { return ch === ' ' || ch === '\t'; }
+
+    while (i < n) {
+      const c = line[i];
+
+      /* Commentaire — jusqu'à la fin de la ligne */
+      if (c === '#') { out.push({ v: line.slice(i), c: 'cmt' }); break; }
+
+      /* Chaîne double-quote (avec échappement backtick) */
+      if (c === '"') {
+        let j = i + 1;
+        while (j < n) { if (line[j] === '`') { j += 2; continue; } if (line[j] === '"') { j++; break; } j++; }
+        out.push({ v: line.slice(i, j), c: 'str' }); i = j; continue;
+      }
+      /* Chaîne single-quote */
+      if (c === "'") {
+        let j = i + 1;
+        while (j < n) { if (line[j] === "'") { if (line[j + 1] === "'") { j += 2; continue; } j++; break; } j++; }
+        out.push({ v: line.slice(i, j), c: 'str' }); i = j; continue;
+      }
+
+      /* Variable $nom / ${...} / $env:... */
+      if (c === '$') {
+        const m = /^\$(?:\{[^}]*\}|[A-Za-z_][\w:]*)/.exec(line.slice(i));
+        if (m) { out.push({ v: m[0], c: 'var' }); i += m[0].length; continue; }
+      }
+
+      /* Nombre */
+      if (c >= '0' && c <= '9' && (i === 0 || !/[A-Za-z_]/.test(line[i - 1]))) {
+        const m = /^\d+(?:\.\d+)?/.exec(line.slice(i));
+        if (m) { out.push({ v: m[0], c: 'num' }); i += m[0].length; continue; }
+      }
+
+      /* Paramètre -Xxx (précédé d'un espace ou début) */
+      if (c === '-' && (i === 0 || isWS(line[i - 1]) || '({|;,'.indexOf(line[i - 1]) >= 0)) {
+        const m = /^-[A-Za-z][\w-]*/.exec(line.slice(i));
+        if (m) { out.push({ v: m[0], c: 'par' }); i += m[0].length; continue; }
+      }
+
+      /* Mot — cmdlet (Verbe-Nom), mot-clé, ou texte brut */
+      if (/[A-Za-z_]/.test(c)) {
+        const m = /^[A-Za-z_][\w]*(?:-[A-Za-z][\w]*)*/.exec(line.slice(i));
+        const w = m[0];
+        if (/^[A-Za-z]+-[A-Za-z][\w]*$/.test(w))      { out.push({ v: w, c: 'cmd' }); }
+        else if (PS_KEYWORDS.test(w))                 { out.push({ v: w, c: 'kw'  }); }
+        else                                          { out.push({ v: w, c: null }); }
+        i += w.length; continue;
+      }
+
+      /* Opérateurs / ponctuation */
+      if ('|><=+&;(){}@'.indexOf(c) >= 0) { out.push({ v: c, c: 'op' }); i++; continue; }
+
+      /* Caractère brut */
+      out.push({ v: c, c: null }); i++;
+    }
+
+    /* Fusionne les tokens bruts consécutifs (moins de nœuds DOM) */
+    const merged = [];
+    out.forEach(function (t) {
+      const last = merged[merged.length - 1];
+      if (last && last.c === null && t.c === null) { last.v += t.v; }
+      else merged.push({ v: t.v, c: t.c });
+    });
+    return merged;
+  }
+
+  /* Sérialise un éditeur en segments :
+     { t:'text', v } | { t:'nl' } | { t:'param', text, key, filled, active } */
+  function serializeEditor(div) {
+    const segs = [];
+    function pushText(t) { if (t) segs.push({ t: 'text', v: t }); }
+    function walk(node) {
+      const kids = node.childNodes;
+      for (let i = 0; i < kids.length; i++) {
+        const ch = kids[i];
+        if (ch.nodeType === Node.TEXT_NODE) {
+          pushText(ch.nodeValue);
+        } else if (ch.nodeType === Node.ELEMENT_NODE) {
+          if (ch.nodeName === 'BR') {
+            if (ch.classList && ch.classList.contains('pf-eol')) continue; /* sentinelle */
+            segs.push({ t: 'nl' });
+          } else if (ch.classList && ch.classList.contains('pf-param-tag')) {
+            segs.push({
+              t: 'param',
+              text:   ch.textContent,
+              key:    ch.dataset.param || '',
+              filled: ch.classList.contains('filled'),
+              active: ch.classList.contains('active'),
+            });
+          } else {
+            const block = (ch.nodeName === 'DIV' || ch.nodeName === 'P');
+            if (block && segs.length && segs[segs.length - 1].t !== 'nl') segs.push({ t: 'nl' });
+            walk(ch);
+          }
+        }
+      }
+    }
+    walk(div);
+    return segs;
+  }
+
+  /* Mesure l'offset logique (nb de caractères) du début de l'éditeur
+     jusqu'à la position (stopNode, stopOffset). Mêmes règles que serializeEditor. */
+  function measureCaret(root, stopNode, stopOffset) {
+    let count = 0, done = false;
+    function walk(node) {
+      const kids = node.childNodes;
+      for (let i = 0; i < kids.length && !done; i++) {
+        if (node === stopNode && i === stopOffset) { done = true; return; }
+        const ch = kids[i];
+        if (ch.nodeType === Node.TEXT_NODE) {
+          if (ch === stopNode) { count += stopOffset; done = true; return; }
+          count += ch.nodeValue.length;
+        } else if (ch.nodeName === 'BR') {
+          if (ch.classList && ch.classList.contains('pf-eol')) continue;
+          count += 1;
+        } else if (ch.classList && ch.classList.contains('pf-param-tag')) {
+          if (ch === stopNode) { count += (stopOffset > 0 ? ch.textContent.length : 0); done = true; return; }
+          count += ch.textContent.length;
+        } else {
+          const block = (ch.nodeName === 'DIV' || ch.nodeName === 'P');
+          if (block && count > 0) count += 1;
+          walk(ch);
+        }
+      }
+      if (node === stopNode && stopOffset === kids.length) done = true;
+    }
+    walk(root);
+    return count;
+  }
+
+  function caretToOffset(div) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const r = sel.getRangeAt(0);
+    if (!div.contains(r.startContainer)) return null;
+    return measureCaret(div, r.startContainer, r.startOffset);
+  }
+
+  /* Replace le curseur à l'offset logique cible dans l'éditeur reconstruit. */
+  function offsetToCaret(div, target) {
+    if (target == null) return;
+    let remaining = target, placed = false;
+    const range = document.createRange();
+    const kids  = div.childNodes;
+    for (let i = 0; i < kids.length && !placed; i++) {
+      const ch = kids[i];
+      if (ch.nodeType === Node.TEXT_NODE) {
+        if (remaining <= ch.nodeValue.length) { range.setStart(ch, remaining); placed = true; break; }
+        remaining -= ch.nodeValue.length;
+      } else if (ch.nodeName === 'BR') {
+        if (ch.classList && ch.classList.contains('pf-eol')) { if (remaining <= 0) { range.setStartBefore(ch); placed = true; } continue; }
+        if (remaining <= 0) { range.setStartBefore(ch); placed = true; break; }
+        remaining -= 1;
+      } else if (ch.classList && ch.classList.contains('pf-param-tag')) {
+        const len = ch.textContent.length;
+        if (remaining <= 0)   { range.setStartBefore(ch); placed = true; break; }
+        if (remaining <= len) { range.setStartAfter(ch);  placed = true; break; }
+        remaining -= len;
+      } else {
+        /* span de coloration : contient un unique nœud texte */
+        const len = ch.textContent.length;
+        if (remaining <= len) { range.setStart(ch.firstChild || ch, remaining); placed = true; break; }
+        remaining -= len;
+      }
+    }
+    if (!placed) { range.selectNodeContents(div); range.collapse(false); }
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  /* Reconstruit le contenu de l'éditeur avec coloration syntaxique. */
+  function renderHighlighted(div, segs, caretOffset) {
+    activeParamTag = null;
+    div.replaceChildren();
+    let endsWithNl = false;
+
+    function emitText(text) {
+      text.split('\n').forEach(function (line, idx) {
+        if (idx > 0) { div.appendChild(document.createElement('br')); endsWithNl = true; }
+        if (!line) return;
+        tokenizePS(line).forEach(function (tok) {
+          if (tok.c) {
+            const sp = document.createElement('span');
+            sp.className   = 'pf-ps-' + tok.c;
+            sp.textContent = tok.v;
+            div.appendChild(sp);
+          } else {
+            div.appendChild(document.createTextNode(tok.v));
+          }
+          endsWithNl = false;
+        });
+      });
+    }
+
+    segs.forEach(function (seg) {
+      if (seg.t === 'param') {
+        const tag = makeParamTag(seg.text, seg.key);
+        if (seg.filled) tag.classList.add('filled');
+        if (seg.active) { tag.classList.add('active'); activeParamTag = tag; }
+        div.appendChild(tag);
+        endsWithNl = false;
+      } else if (seg.t === 'nl') {
+        div.appendChild(document.createElement('br'));
+        endsWithNl = true;
+      } else {
+        emitText(seg.v);
+      }
+    });
+
+    /* <br> sentinelle pour rendre visible une dernière ligne vide */
+    if (endsWithNl) {
+      const b = document.createElement('br');
+      b.className = 'pf-eol';
+      div.appendChild(b);
+    }
+
+    offsetToCaret(div, caretOffset);
+  }
+
+  /* Point d'entrée : recolore un éditeur en préservant le curseur. */
+  function highlightEditor(div) {
+    if (!div) return;
+    if (div.querySelector('.pf-cmd-hint')) return; /* état initial (hint) */
+    const off  = caretToOffset(div);
+    const segs = serializeEditor(div);
+    renderHighlighted(div, segs, off);
+  }
+
+  /* Insère du texte au curseur (Entrée / coller) en convertissant
+     \n → <br> et <mot> → balise param, puis place le curseur après. */
+  function insertContentAtCaret(div, text) {
+    div.focus();
+    const hint = div.querySelector('.pf-cmd-hint');
+    if (hint) { div.replaceChildren(); if (div.id === 'pfCmdBuilt') selectedTemplate = null; }
+
+    const sel = window.getSelection();
+    let range;
+    if (sel && sel.rangeCount && div.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      range = sel.getRangeAt(0); range.deleteContents();
+    } else {
+      range = document.createRange(); range.selectNodeContents(div); range.collapse(false);
+    }
+
+    const frag = document.createDocumentFragment();
+    text.split('\n').forEach(function (line, idx) {
+      if (idx > 0) frag.appendChild(document.createElement('br'));
+      line.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+        const m = part.match(/^<([a-zA-Z]+)>$/);
+        if (m) { frag.appendChild(makeParamTag(part, m[1].toLowerCase())); }
+        else if (part) { frag.appendChild(document.createTextNode(part)); }
+      });
+    });
+
+    const last = frag.lastChild;
+    range.insertNode(frag);
+    if (last) {
+      const r = document.createRange();
+      r.setStartAfter(last); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r);
+    }
+  }
+
+  /* Insère un saut de ligne (Entrée) de façon canonique (<br>). */
+  function insertNewlineAtCaret(div) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    if (!div.contains(r.startContainer)) return;
+    r.deleteContents();
+    const br = document.createElement('br');
+    r.insertNode(br);
+    r.setStartAfter(br); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
   }
 
   /* ── Dropdown recherche (Script Builder) ── */
@@ -1410,6 +2379,7 @@
       sel.addRange(newRange);
     }
 
+    highlightEditor(div);
     hideScriptSearchDropdown();
   }
 
@@ -2102,6 +3072,23 @@
     if (e.target.closest('#pfMgrCancel'))     { hideManagerForm();  return; }
     if (e.target.closest('#pfMgrSave'))       { submitManagerForm(); return; }
 
+    /* Import / Export */
+    if (e.target.closest('#pfManagerExport')) { showExportModal(); return; }
+    if (e.target.closest('#pfManagerImport')) { showImportModal(); return; }
+    if (e.target.closest('#pfExportClose') || e.target.closest('#pfExportCancel')) { hideExportModal(); return; }
+    if (e.target.id === 'pfExportModal')      { hideExportModal(); return; }
+    if (e.target.closest('#pfExportAll'))     { setAllIo('pfExportTree', true);  updateExportCount(); return; }
+    if (e.target.closest('#pfExportNone'))    { setAllIo('pfExportTree', false); updateExportCount(); return; }
+    if (e.target.closest('#pfExportCopy'))    { copyExportCode(); return; }
+    if (e.target.closest('#pfExportDownload')){ downloadExportPackage(); return; }
+    if (e.target.closest('#pfImportClose') || e.target.closest('#pfImportCancel')) { hideImportModal(); return; }
+    if (e.target.id === 'pfImportModal')      { hideImportModal(); return; }
+    if (e.target.closest('#pfImportFileBtn')) { document.getElementById('pfImportFile').click(); return; }
+    if (e.target.closest('#pfImportAnalyze')) { analyzeImportCode(); return; }
+    if (e.target.closest('#pfImportAll'))     { setAllIo('pfImportTree', true);  updateImportCount(); return; }
+    if (e.target.closest('#pfImportNone'))    { setAllIo('pfImportTree', false); updateImportCount(); return; }
+    if (e.target.closest('#pfImportApply'))   { applyImport(); return; }
+
     /* Description */
     if (e.target.closest('#pfDescToggle'))       { toggleDescContent('pfDescContent');       return; }
     if (e.target.closest('#pfScriptDescToggle')) { toggleDescContent('pfScriptDescContent'); return; }
@@ -2129,6 +3116,16 @@
       return;
     }
     if (e.target.closest('#pfScriptSave')) { showSaveModal(); return; }
+
+    /* Bloc de base — effacer */
+    if (e.target.closest('#pfCmdClear')) {
+      selectedTemplate = null;
+      activeParamTag   = null;
+      renderBuiltCommand();   /* réaffiche le hint */
+      setDescBar(null);
+      document.querySelectorAll('.pf-cmd-item-wrap.selected').forEach(function (el) { el.classList.remove('selected'); });
+      return;
+    }
 
     /* Modale sauvegarde */
     if (e.target.closest('#pfCmdSave'))    { showSaveModal();    return; }
@@ -2173,6 +3170,15 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
+
+    /* Éditeurs : saut de ligne canonique (<br>) puis recoloration */
+    if (e.target.id === 'pfCmdBuilt' || e.target.id === 'pfScriptEditor') {
+      e.preventDefault();
+      insertNewlineAtCaret(e.target);
+      highlightEditor(e.target);
+      return;
+    }
+
     const input = e.target.closest('.pf-input');
     if (input) {
       e.preventDefault();
@@ -2202,8 +3208,21 @@
       return;
     }
     if (e.target.id === 'pfManagerSearch') { renderManagerList(e.target.value); return; }
-    if (e.target.id === 'pfCmdBuilt')    { autoConvertParams(e.target); return; }
-    if (e.target.id === 'pfScriptEditor'){ autoConvertParams(e.target); }
+    if (e.target.id === 'pfCmdBuilt' || e.target.id === 'pfScriptEditor') {
+      if (e.isComposing) return;            /* ne pas casser la saisie IME */
+      autoConvertParams(e.target);
+      highlightEditor(e.target);
+    }
+  });
+
+  /* Collage dans les éditeurs : texte brut (convertit \n et <param>) puis recolore */
+  document.addEventListener('paste', function (e) {
+    const div = e.target.closest && e.target.closest('#pfCmdBuilt, #pfScriptEditor');
+    if (!div) return;
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    insertContentAtCaret(div, text);
+    highlightEditor(div);
   });
 
   /* Sauvegarde la position du curseur dès que le script editor perd le focus
@@ -2211,6 +3230,11 @@
   document.addEventListener('change', function (e) {
     if (e.target.name === 'pfMgrCat') {
       renderSubcatField(e.target.value);
+    }
+    if (e.target.id === 'pfImportFile') {
+      const f = e.target.files && e.target.files[0];
+      if (f) handleImportFile(f);
+      e.target.value = '';   /* permet de réimporter le même fichier */
     }
   });
 
