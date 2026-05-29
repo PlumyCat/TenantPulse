@@ -101,7 +101,10 @@
       <div class="pf-cmd-output">
         <div class="pf-cmd-output-header">
           <button class="pf-btn-save" type="button" id="pfCmdSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
-          <button class="pf-btn-validate" type="button" id="pfCmdCopy">Copier</button>
+          <div class="pf-cmd-output-actions">
+            <button class="pf-script-clear-btn" type="button" id="pfCmdClear">Effacer</button>
+            <button class="pf-btn-validate" type="button" id="pfCmdCopy">Copier</button>
+          </div>
         </div>
         <div class="pf-desc-bar" id="pfDescBar" hidden>
           <button class="pf-desc-toggle" type="button" id="pfDescToggle"><img src="../assets/information.png" class="icon-adaptive pf-desc-icon" alt=""> Description</button>
@@ -137,8 +140,11 @@
       <button class="pf-script-back" type="button" id="pfManagerBack">← Retour</button>
       <span class="pf-manager-title">Gestionnaire de commandes</span>
       <span class="pf-script-spacer"></span>
+      <button class="pf-mgr-io-btn" type="button" id="pfManagerImport" title="Importer un paquet de commandes (.json)">↑ Importer</button>
+      <button class="pf-mgr-io-btn" type="button" id="pfManagerExport" title="Exporter des commandes vers un fichier .json">↓ Exporter</button>
       <button class="pf-btn-validate" type="button" id="pfManagerAdd">+ Nouvelle commande</button>
     </div>
+    <input type="file" id="pfImportFile" accept="application/json,.json" hidden>
     <div class="pf-manager-search-bar">
       <input class="pf-cmd-search pf-manager-search" id="pfManagerSearch" type="search" placeholder="Filtrer les commandes…" autocomplete="off" spellcheck="false">
     </div>
@@ -213,6 +219,63 @@
       <div class="pf-modal-footer">
         <button class="pf-modal-btn-cancel" type="button" id="pfModalCancel">Annuler</button>
         <button class="pf-btn-validate" type="button" id="pfModalSave">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal export ── -->
+  <div class="pf-modal-overlay" id="pfExportModal" hidden>
+    <div class="pf-modal pf-modal--io">
+      <div class="pf-modal-header">
+        <span class="pf-modal-title">↓ Exporter des commandes</span>
+        <button class="pf-modal-close" type="button" id="pfExportClose">✕</button>
+      </div>
+      <div class="pf-modal-body">
+        <p class="pf-io-hint">Cochez ce que vous souhaitez partager, puis téléchargez le fichier <code>.json</code> ou copiez le code. Vos collègues pourront l'importer.</p>
+        <div class="pf-io-warning">⚠ <span>Ne partagez pas d'informations sensibles (mots de passe, jetons, identifiants réels). Les éléments marqués <strong>⚠ sensible</strong> sont à vérifier avant partage.</span></div>
+        <div class="pf-io-toolbar">
+          <button class="pf-mgr-io-btn" type="button" id="pfExportAll">Tout sélectionner</button>
+          <button class="pf-mgr-io-btn" type="button" id="pfExportNone">Tout désélectionner</button>
+          <span class="pf-io-count" id="pfExportCount"></span>
+        </div>
+        <div class="pf-io-tree" id="pfExportTree"></div>
+      </div>
+      <div class="pf-modal-footer">
+        <button class="pf-modal-btn-cancel" type="button" id="pfExportCancel">Annuler</button>
+        <button class="pf-mgr-io-btn" type="button" id="pfExportCopy">⧉ Copier le code</button>
+        <button class="pf-btn-validate" type="button" id="pfExportDownload">↓ Télécharger .json</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal import (aperçu) ── -->
+  <div class="pf-modal-overlay" id="pfImportModal" hidden>
+    <div class="pf-modal pf-modal--io">
+      <div class="pf-modal-header">
+        <span class="pf-modal-title">↑ Importer — aperçu</span>
+        <button class="pf-modal-close" type="button" id="pfImportClose">✕</button>
+      </div>
+      <div class="pf-modal-body">
+        <div class="pf-io-source">
+          <button class="pf-mgr-io-btn" type="button" id="pfImportFileBtn">📄 Choisir un fichier .json…</button>
+          <span class="pf-io-or">ou collez un code reçu :</span>
+          <div class="pf-io-code-row">
+            <textarea class="pf-modal-input pf-io-code" id="pfImportCode" rows="2" placeholder="PSFORGE1:… (collez ici le code partagé)" spellcheck="false"></textarea>
+            <button class="pf-mgr-io-btn" type="button" id="pfImportAnalyze">Analyser</button>
+          </div>
+        </div>
+        <div class="pf-io-warning">⚠ <span>Ce paquet provient d'une source externe. <strong>Vérifiez chaque commande avant de l'exécuter</strong> — une commande peut être dangereuse même sous un titre anodin. Les éléments <strong>⚠ à vérifier</strong> contiennent des motifs à risque.</span></div>
+        <p class="pf-io-hint" id="pfImportHint">Décochez ce que vous ne voulez pas importer. <span class="pf-io-legend"><span class="pf-io-badge pf-io-badge--new">✦ nouveau</span> <span class="pf-io-badge pf-io-badge--dup">⟳ déjà présent</span> <span class="pf-io-badge pf-io-badge--warn">⚠ à vérifier</span></span></p>
+        <div class="pf-io-toolbar">
+          <button class="pf-mgr-io-btn" type="button" id="pfImportAll">Tout cocher</button>
+          <button class="pf-mgr-io-btn" type="button" id="pfImportNone">Tout décocher</button>
+          <span class="pf-io-count" id="pfImportCount"></span>
+        </div>
+        <div class="pf-io-tree" id="pfImportTree"></div>
+      </div>
+      <div class="pf-modal-footer">
+        <button class="pf-modal-btn-cancel" type="button" id="pfImportCancel">Annuler</button>
+        <button class="pf-btn-validate" type="button" id="pfImportApply">Importer la sélection</button>
       </div>
     </div>
   </div>
