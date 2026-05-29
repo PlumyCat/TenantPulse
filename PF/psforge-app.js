@@ -109,8 +109,52 @@
   const FAV_KEY    = 'psforge_favorites_v1';
   const SAVE_KEY   = 'psforge_saved_v1';
   const BLOCKS_KEY = 'psforge_blocks_v1';
-  const CUSTOM_KEY    = 'psforge_custom_cmds_v1';
-  const OVERRIDES_KEY = 'psforge_overrides_v1';
+  const CUSTOM_KEY         = 'psforge_custom_cmds_v1';
+  const OVERRIDES_KEY      = 'psforge_overrides_v1';
+  const GROUPS_KEY         = 'psforge_custom_groups_v1';
+  const GROUP_OVERRIDES_KEY= 'psforge_group_overrides_v1';
+
+  /* Groupes intégrés par section */
+  const BUILTIN_GROUPS = {
+    windows:      ['Intégrité système','Réseau','Services & Processus','Nettoyage & Espace disque','Sécurité locale','Windows Update'],
+    microsoft365: ['Utilisateur','Exchange Online','MFA / Sécurité','Licences','Groupes','Appareils — Intune','Teams'],
+  };
+
+  function loadCustomGroups()  { try { return JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]'); } catch { return []; } }
+  function saveCustomGroups(a) { try { localStorage.setItem(GROUPS_KEY, JSON.stringify(a)); } catch {} }
+  function addCustomGroup(section, name) {
+    const list = loadCustomGroups();
+    if (list.some(function(g){ return g.section === section && g.name === name; })) return false;
+    list.push({ id: Date.now(), name: name, section: section });
+    saveCustomGroups(list);
+    return true;
+  }
+  function deleteCustomGroup(id) {
+    saveCustomGroups(loadCustomGroups().filter(function(g){ return g.id !== id; }));
+  }
+  function renameCustomGroup(id, newName) {
+    saveCustomGroups(loadCustomGroups().map(function(g){
+      return g.id === id ? Object.assign({}, g, { name: newName }) : g;
+    }));
+  }
+
+  function loadGroupOverrides()       { try { return JSON.parse(localStorage.getItem(GROUP_OVERRIDES_KEY) || '{}'); } catch { return {}; } }
+  function saveGroupOverrides(obj)    { try { localStorage.setItem(GROUP_OVERRIDES_KEY, JSON.stringify(obj)); } catch {} }
+  function setGroupOverride(orig, n)  { const o = loadGroupOverrides(); o[orig] = n; saveGroupOverrides(o); }
+  function clearGroupOverride(orig)   { const o = loadGroupOverrides(); delete o[orig]; saveGroupOverrides(o); }
+  function getGroupDisplayName(name)  { return loadGroupOverrides()[name] || name; }
+
+  /* Retourne la liste des groupes disponibles pour une section (mine/windows/microsoft365) */
+  function getGroupsForSection(section) {
+    const overrides = loadGroupOverrides();
+    const builtins  = (BUILTIN_GROUPS[section] || []).map(function(name){
+      return { name: name, display: overrides[name] || name, isBuiltin: true };
+    });
+    const custom = loadCustomGroups()
+      .filter(function(g){ return g.section === section; })
+      .map(function(g){ return { name: g.name, display: g.name, isBuiltin: false, id: g.id }; });
+    return builtins.concat(custom);
+  }
 
   /* ── Config par défaut des blocs sidebar ── */
   const DEFAULT_BLOCKS = [
@@ -453,21 +497,15 @@
     });
   }
 
-  /* Charge un texte de commande dans le builder en convertissant <param> en tags */
+  /* Charge un texte dans le builder.
+     Si le texte est multi-ligne → bascule vers le Script Builder. */
   function loadCommandText(cmdText) {
-    const div = document.getElementById('pfCmdBuilt');
-    if (!div) return;
-    activeParamTag = null;
-    selectedTemplate = null;
-    div.replaceChildren();
-    cmdText.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
-      const m = part.match(/^<([a-zA-Z]+)>$/);
-      if (m) {
-        div.appendChild(makeParamTag(part, m[1].toLowerCase()));
-      } else if (part) {
-        div.appendChild(document.createTextNode(part));
-      }
-    });
+    if (cmdText.indexOf('\n') !== -1) {
+      if (!scriptViewActive) showScriptView();
+      loadTextIntoEditor('pfScriptEditor', cmdText);
+    } else {
+      loadTextIntoEditor('pfCmdBuilt', cmdText);
+    }
   }
 
   function getBuiltText() {
@@ -514,6 +552,56 @@
   let managerFilter      = '';    /* filtre interne au panneau gestionnaire */
 
   /* ── Gestionnaire de commandes ── */
+
+  /* Peuple le champ sous-catégorie selon la section choisie */
+  function renderSubcatField(section, preselect) {
+    const field   = document.getElementById('pfMgrSubcatField');
+    const catsEl  = document.getElementById('pfMgrSubcats');
+    const newRow  = document.getElementById('pfMgrNewGroupRow');
+    if (!field || !catsEl) return;
+
+    const needsSub = (section === 'windows' || section === 'microsoft365');
+    field.hidden = !needsSub;
+    if (!needsSub) return;
+
+    newRow.hidden = true;
+    catsEl.replaceChildren();
+
+    getGroupsForSection(section).forEach(function(g) {
+      const lbl = document.createElement('label');
+      lbl.className = 'pf-manager-cat-opt';
+      const radio = document.createElement('input');
+      radio.type  = 'radio';
+      radio.name  = 'pfMgrSubcat';
+      radio.value = g.name;
+      if (preselect && preselect === g.name) radio.checked = true;
+      const span = document.createElement('span');
+      span.textContent = g.display + (g.isBuiltin ? '' : ' ✦');
+      lbl.appendChild(radio);
+      lbl.appendChild(span);
+      radio.addEventListener('change', function() { if (newRow) newRow.hidden = true; });
+      catsEl.appendChild(lbl);
+    });
+
+    /* Option "Nouveau groupe" */
+    const newLbl  = document.createElement('label');
+    newLbl.className = 'pf-manager-cat-opt pf-manager-cat-opt--new';
+    const newRadio = document.createElement('input');
+    newRadio.type  = 'radio';
+    newRadio.name  = 'pfMgrSubcat';
+    newRadio.value = '##new##';
+    const newSpan  = document.createElement('span');
+    newSpan.textContent = '✚ Nouveau groupe';
+    newLbl.appendChild(newRadio);
+    newLbl.appendChild(newSpan);
+    newRadio.addEventListener('change', function() {
+      if (newRow) {
+        newRow.hidden = false;
+        document.getElementById('pfMgrNewGroupInput')?.focus();
+      }
+    });
+    catsEl.appendChild(newLbl);
+  }
 
   function showManagerView() {
     document.getElementById('pfCmdView').hidden    = true;
@@ -577,6 +665,11 @@
     if (!builtInOriginalCmd) {
       const radio = document.querySelector('input[name="pfMgrCat"][value="' + preCat + '"]');
       if (radio) radio.checked = true;
+      renderSubcatField(preCat, editEntry ? editEntry.group : null);
+    } else {
+      /* Masque aussi le champ sous-catégorie pour les built-ins */
+      const subField = document.getElementById('pfMgrSubcatField');
+      if (subField) subField.hidden = true;
     }
 
     document.getElementById('pfManagerForm').hidden = false;
@@ -605,13 +698,48 @@
         desc:  document.getElementById('pfMgrDesc').value.trim(),
       });
     } else {
-      const catEl = document.querySelector('input[name="pfMgrCat"]:checked');
+      const catEl    = document.querySelector('input[name="pfMgrCat"]:checked');
+      const category = catEl ? catEl.value : 'mine';
+
+      /* Validation sous-catégorie obligatoire pour Windows et M365 */
+      let group = null;
+      if (category === 'windows' || category === 'microsoft365') {
+        const subcatEl = document.querySelector('input[name="pfMgrSubcat"]:checked');
+        if (!subcatEl) {
+          const field = document.getElementById('pfMgrSubcatField');
+          if (field) {
+            field.style.transition = 'box-shadow .08s';
+            field.style.boxShadow  = '0 0 0 2px rgba(220,38,38,.4)';
+            setTimeout(function(){ field.style.boxShadow = ''; }, 700);
+          }
+          return;
+        }
+        if (subcatEl.value === '##new##') {
+          const newName = (document.getElementById('pfMgrNewGroupInput')?.value || '').trim();
+          if (!newName) {
+            const inp = document.getElementById('pfMgrNewGroupInput');
+            if (inp) {
+              inp.style.transition = 'box-shadow .08s';
+              inp.style.boxShadow  = '0 0 0 3px rgba(220,38,38,.35)';
+              setTimeout(function(){ inp.style.boxShadow = ''; }, 600);
+              inp.focus();
+            }
+            return;
+          }
+          addCustomGroup(category, newName);
+          group = newName;
+        } else {
+          group = subcatEl.value;
+        }
+      }
+
       upsertCustomCmd({
         id:       managerEditId || Date.now(),
         title:    document.getElementById('pfMgrTitle').value.trim(),
         cmd:      cmdVal,
         desc:     document.getElementById('pfMgrDesc').value.trim(),
-        category: catEl ? catEl.value : 'mine',
+        category: category,
+        group:    group,
       });
     }
 
@@ -784,6 +912,142 @@
       list.appendChild(section);
     });
 
+    /* ── Section gestion des groupes ── */
+    if (!q) {
+      ['windows','microsoft365'].forEach(function(section) {
+        const sLabel = section === 'windows' ? 'Système Windows' : 'Microsoft 365';
+        const groups = getGroupsForSection(section);
+        const overrides = loadGroupOverrides();
+
+        const sec = document.createElement('div');
+        sec.className = 'pf-manager-groups-section collapsed';
+
+        const hd = document.createElement('div');
+        hd.className = 'pf-manager-groups-heading';
+        hd.addEventListener('click', function(){ sec.classList.toggle('collapsed'); });
+        const hdTitle = document.createElement('span');
+        hdTitle.textContent = 'Groupes — ' + sLabel;
+        const hdArrow = document.createElement('span');
+        hdArrow.className = 'pf-manager-builtin-arrow';
+        hdArrow.textContent = '▾';
+        const hdSp = document.createElement('span');
+        hdSp.style.flex = '1';
+        hd.appendChild(hdTitle);
+        hd.appendChild(hdSp);
+        hd.appendChild(hdArrow);
+
+        const body = document.createElement('div');
+        body.className = 'pf-manager-groups-body';
+
+        /* Ligne par groupe */
+        groups.forEach(function(g) {
+          const row = document.createElement('div');
+          row.className = 'pf-manager-group-row';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'pf-manager-group-name' +
+            (g.isBuiltin ? ' is-builtin' : '') +
+            (!g.isBuiltin ? '' : (overrides[g.name] ? ' is-overridden' : ''));
+          nameSpan.textContent = g.display;
+
+          const editRow = document.createElement('div');
+          editRow.className = 'pf-manager-group-edit-row';
+          editRow.hidden = true;
+          const inp = document.createElement('input');
+          inp.className = 'pf-manager-group-input';
+          inp.type = 'text'; inp.value = g.display; inp.maxLength = 40;
+          const saveBtn = document.createElement('button');
+          saveBtn.className = 'pf-manager-group-save';
+          saveBtn.type = 'button'; saveBtn.textContent = 'OK';
+          editRow.appendChild(inp);
+          editRow.appendChild(saveBtn);
+
+          const editBtn = document.createElement('button');
+          editBtn.className = 'pf-manager-item-edit';
+          editBtn.type = 'button'; editBtn.title = 'Renommer'; editBtn.textContent = '✏';
+          editBtn.addEventListener('click', function(){
+            nameSpan.hidden = true; editRow.hidden = false; editBtn.hidden = true;
+            inp.focus(); inp.select();
+          });
+
+          function applyRename() {
+            const v = inp.value.trim();
+            if (!v) return;
+            if (g.isBuiltin) {
+              if (v === g.name) clearGroupOverride(g.name);
+              else setGroupOverride(g.name, v);
+            } else {
+              renameCustomGroup(g.id, v);
+            }
+            renderManagerList(managerFilter);
+            renderCommandList(document.getElementById('pfCmdSearch')?.value || '');
+          }
+          saveBtn.addEventListener('click', applyRename);
+          inp.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); applyRename(); } });
+
+          const actions = document.createElement('div');
+          actions.className = 'pf-manager-item-actions';
+          actions.appendChild(editBtn);
+
+          /* Bouton reset override (groupes intégrés renommés) */
+          if (g.isBuiltin && overrides[g.name]) {
+            const rstBtn = document.createElement('button');
+            rstBtn.className = 'pf-manager-item-reset';
+            rstBtn.type = 'button'; rstBtn.title = 'Restaurer le nom original'; rstBtn.textContent = '↺';
+            rstBtn.addEventListener('click', function(){
+              clearGroupOverride(g.name);
+              renderManagerList(managerFilter);
+              renderCommandList(document.getElementById('pfCmdSearch')?.value || '');
+            });
+            actions.appendChild(rstBtn);
+          }
+
+          /* Bouton supprimer (groupes custom uniquement) */
+          if (!g.isBuiltin) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'pf-saved-del';
+            delBtn.type = 'button'; delBtn.title = 'Supprimer'; delBtn.textContent = '✕';
+            delBtn.addEventListener('click', function(){
+              deleteCustomGroup(g.id);
+              renderManagerList(managerFilter);
+            });
+            actions.appendChild(delBtn);
+          }
+
+          row.appendChild(nameSpan);
+          row.appendChild(editRow);
+          row.appendChild(actions);
+          body.appendChild(row);
+        });
+
+        /* Ajouter un groupe */
+        const addRow = document.createElement('div');
+        addRow.className = 'pf-manager-groups-add';
+        const addInp = document.createElement('input');
+        addInp.className = 'pf-manager-groups-add-input';
+        addInp.type = 'text'; addInp.placeholder = 'Nouveau groupe…'; addInp.maxLength = 40;
+        const addBtn = document.createElement('button');
+        addBtn.className = 'pf-manager-groups-add-btn';
+        addBtn.type = 'button'; addBtn.textContent = '+ Ajouter';
+        const doAdd = function(){
+          const v = addInp.value.trim();
+          if (!v) return;
+          addCustomGroup(section, v);
+          addInp.value = '';
+          renderManagerList(managerFilter);
+        };
+        addBtn.addEventListener('click', doAdd);
+        addInp.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); doAdd(); } });
+        addRow.appendChild(addInp);
+        addRow.appendChild(addBtn);
+        body.appendChild(addRow);
+
+        sec.appendChild(hd);
+        sec.appendChild(body);
+        list.appendChild(sec);
+      });
+    }
+
     /* Message vide si rien du tout */
     if (!hasContent.custom && !hasContent.builtin) {
       const empty = document.createElement('div');
@@ -939,7 +1203,31 @@
 
   function getScriptText() {
     const div = document.getElementById('pfScriptEditor');
-    return div ? div.textContent : '';
+    if (!div) return '';
+    /* innerText respecte les sauts de ligne visuels créés par les <br> et les <div>
+       contrairement à textContent qui les écrase. */
+    const text = div.innerText || div.textContent || '';
+    /* innerText ajoute un \n final superflu sur Chrome — on le retire */
+    return text.replace(/\n$/, '');
+  }
+
+  /* Charge un texte multi-ligne (scripts sauvegardés) dans un éditeur contenteditable.
+     Chaque \n devient un <br> ; les <param> deviennent des tags interactifs. */
+  function loadTextIntoEditor(editorId, text) {
+    const div = document.getElementById(editorId);
+    if (!div) return;
+    activeParamTag  = null;
+    if (editorId === 'pfCmdBuilt') selectedTemplate = null;
+    div.replaceChildren();
+    const lines = text.split('\n');
+    lines.forEach(function(line, lineIdx) {
+      if (lineIdx > 0) div.appendChild(document.createElement('br'));
+      line.split(/(<[a-zA-Z]+>)/).forEach(function(part) {
+        const m = part.match(/^<([a-zA-Z]+)>$/);
+        if (m) { div.appendChild(makeParamTag(part, m[1].toLowerCase())); }
+        else if (part) { div.appendChild(document.createTextNode(part)); }
+      });
+    });
   }
 
   /* ── Dropdown recherche (Script Builder) ── */
@@ -1370,9 +1658,9 @@
           entry.cmd.toLowerCase().indexOf(q)           === -1 &&
           (entry.desc  || '').toLowerCase().indexOf(q) === -1) return;
       if (!sectionMap[sName]) { sectionMap[sName] = {}; sectionOrder.push(sName); }
-      const grp = 'Mes ajouts';
-      if (!sectionMap[sName][grp]) sectionMap[sName][grp] = [];
-      sectionMap[sName][grp].push({ cmd: entry.cmd, customEntry: entry });
+      const grpKey = entry.group || 'Non classé';
+      if (!sectionMap[sName][grpKey]) sectionMap[sName][grpKey] = [];
+      sectionMap[sName][grpKey].push({ cmd: entry.cmd, customEntry: entry });
     });
 
     if (sectionOrder.length === 0 && list.childElementCount === 0) {
@@ -1406,7 +1694,7 @@
       Object.keys(sectionMap[sName]).forEach(function (gName, i) {
         const lEl = document.createElement('span');
         lEl.className = 'pf-cg-label';
-        lEl.textContent = gName;
+        lEl.textContent = getGroupDisplayName(gName);
         const cmds = sectionMap[sName][gName];
         const block = makeCgBlock(lEl, function (body) {
           cmds.forEach(function (item) {
@@ -1920,6 +2208,12 @@
 
   /* Sauvegarde la position du curseur dès que le script editor perd le focus
      (le clic sur le bouton "injecter" déplace le focus avant que l'action s'exécute) */
+  document.addEventListener('change', function (e) {
+    if (e.target.name === 'pfMgrCat') {
+      renderSubcatField(e.target.value);
+    }
+  });
+
   document.addEventListener('focusout', function (e) {
     if (e.target.id !== 'pfScriptEditor') return;
     const sel = window.getSelection();
