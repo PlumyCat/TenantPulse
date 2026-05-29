@@ -677,6 +677,11 @@ html.embedded nav { display: none; }
   letter-spacing: .08em;
   color: var(--muted);
 }
+.pf-cmd-output-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 /* Zone éditable style terminal */
 .pf-cmd-built {
@@ -729,6 +734,17 @@ html.embedded nav { display: none; }
 .pf-param-tag.filled         { color: #4ade80; }
 .pf-param-tag.filled:hover   { background: rgba(74,222,128,.12); }
 .pf-param-tag.filled.active  { background: rgba(74,222,128,.2); outline: 1px solid #4ade80; color: #86efac; }
+
+/* ── Coloration syntaxique PowerShell (éditeurs) ──
+   Couleurs fixes (fond terminal sombre dans les deux thèmes). */
+.pf-ps-cmt { color: #6a9955; font-style: italic; }   /* commentaire */
+.pf-ps-str { color: #ce9178; }                        /* chaîne */
+.pf-ps-var { color: #4ec9b0; }                        /* $variable */
+.pf-ps-cmd { color: #569cd6; }                        /* cmdlet Verbe-Nom */
+.pf-ps-kw  { color: #c586c0; }                        /* mot-clé */
+.pf-ps-par { color: #9cdcfe; }                        /* -Paramètre */
+.pf-ps-num { color: #b5cea8; }                        /* nombre */
+.pf-ps-op  { color: #d4d4d4; }                        /* opérateur / ponctuation */
 
 /* ── UI Sauvegarde ── */
 .pf-btn-save {
@@ -1123,6 +1139,167 @@ html.embedded nav { display: none; }
   transition: color .12s, border-color .12s;
 }
 .pf-modal-btn-cancel:hover { color: var(--text); border-color: var(--soft); }
+
+/* ════════════════════════════════════════
+   IMPORT / EXPORT
+   ════════════════════════════════════════ */
+.pf-mgr-io-btn {
+  flex-shrink: 0;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-family: var(--font);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.pf-mgr-io-btn:hover { color: var(--text); border-color: var(--soft); background: var(--bg); }
+
+/* Modale plus large pour les arbres de sélection */
+.pf-modal--io { width: 560px; }
+.pf-modal--io .pf-modal-body { gap: 10px; }
+
+.pf-io-hint { font-size: var(--text-sm); color: var(--muted); margin: 0; line-height: 1.5; }
+.pf-io-hint code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.pf-io-legend { display: inline-flex; gap: 8px; margin-left: 4px; }
+
+.pf-io-toolbar { display: flex; align-items: center; gap: 8px; }
+.pf-io-count { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 600; }
+
+/* Zone source d'import (fichier ou code) */
+.pf-io-source {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.pf-io-or { font-size: 11px; color: var(--muted); font-weight: 600; }
+.pf-io-code-row { display: flex; gap: 8px; align-items: flex-start; }
+.pf-io-code {
+  flex: 1;
+  resize: vertical;
+  min-height: 38px;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+.pf-io-code-row .pf-mgr-io-btn { flex-shrink: 0; align-self: stretch; }
+
+.pf-io-tree {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.pf-io-empty { padding: 22px 16px; text-align: center; color: var(--muted); font-size: var(--text-sm); opacity: .7; }
+
+/* Groupe de type (Commandes personnalisées, Favoris, …) */
+.pf-io-group { border-bottom: 1px solid var(--border); }
+.pf-io-group:last-child { border-bottom: none; }
+.pf-io-group-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.pf-io-group-head:hover { background: var(--bg); }
+.pf-io-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+  flex: 1;
+}
+.pf-io-group-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+/* Élément sélectionnable */
+.pf-io-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 12px 7px 26px;
+  cursor: pointer;
+  border-top: 1px solid var(--border);
+  transition: background .1s;
+}
+.pf-io-item:hover { background: var(--surface); }
+.pf-io-cb { accent-color: var(--blue, #4b3fbe); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; margin-top: 1px; }
+.pf-io-item-body { flex: 1; min-width: 0; }
+.pf-io-item-title { font-size: var(--text-sm); color: var(--text); font-weight: 600; word-break: break-word; }
+.pf-io-item-cmd {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-top: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.pf-io-item-cmd .pf-cmd-param { color: #d97706; font-weight: 600; }
+
+/* Élément signalé à risque : liseré rouge pour attirer l'œil */
+.pf-io-item--risky { background: rgba(220,38,38,.05); box-shadow: inset 3px 0 0 #dc2626; }
+.pf-io-item--risky:hover { background: rgba(220,38,38,.09); }
+
+/* Bannière d'avertissement (sources externes / données sensibles) */
+.pf-io-warning {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #b45309;
+  background: rgba(217,119,6,.1);
+  border: 1px solid rgba(217,119,6,.3);
+  border-radius: 8px;
+  padding: 8px 11px;
+}
+[data-theme="dark"] .pf-io-warning { color: #fbbf24; }
+
+/* Badges nouveau / doublon */
+.pf-io-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pf-io-badge--new  { color: #16a34a; background: rgba(22,163,74,.12); border: 1px solid rgba(22,163,74,.3); }
+.pf-io-badge--dup  { color: #d97706; background: rgba(217,119,6,.12); border: 1px solid rgba(217,119,6,.3); }
+.pf-io-badge--warn { color: #dc2626; background: rgba(220,38,38,.12); border: 1px solid rgba(220,38,38,.35); }
+
+.pf-btn-validate:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ════════════════════════════════════════
    SCRIPT BUILDER — vue éditeur
