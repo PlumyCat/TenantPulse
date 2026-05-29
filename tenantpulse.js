@@ -28,8 +28,30 @@ const REDIRECT_BUTTONS = [
   { key:'defender',      label:'Defender',          sub:'Sécurité & menaces',            icon:'assets/MicrosoftDefender.png',     href: id => `https://security.microsoft.com/?tid=${encodeURIComponent(id)}` },
 ];
 
+/* Hôtes Microsoft autorisés pour les boutons de redirection.
+   Défense en profondeur : si une entrée REDIRECT_BUTTONS était altérée (injection,
+   compromission supply-chain), un lien hors de cette liste ne serait jamais rendu. */
+const ALLOWED_REDIRECT_HOSTS = new Set([
+  'partner.microsoft.com', 'entra.microsoft.com', 'admin.microsoft.com',
+  'admin.exchange.microsoft.com', 'intune.microsoft.com', 'admin.teams.microsoft.com',
+  'portal.azure.com', 'security.microsoft.com'
+]);
+
+/* Construit l'URL d'un bouton et ne la renvoie que si elle vise un hôte MS autorisé en HTTPS. */
+function safeRedirectHref(hrefFn, id, dom) {
+  let raw; try { raw = hrefFn(id, dom); } catch { return null; }
+  let u;   try { u = new URL(raw); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  return ALLOWED_REDIRECT_HOSTS.has(u.hostname) ? u.href : null;
+}
+
 const PROFILE_KEY = 'tenantpulse_profile_v1';
 const MHAELLE_PROFILE_KEY = 'mhaelle_profile_v1';
+
+/* Origine cible des postMessage vers les iframes (Mhaelle, PsForge).
+   En prod (http/https) les iframes sont même origine → on restreint à location.origin.
+   Sur file:// l'origine est opaque ("null") : on retombe sur le wildcard pour le dev local. */
+const FRAME_TARGET_ORIGIN = (location.origin && location.origin !== 'null') ? location.origin : '*';
 
 /* Blocs Mhaelle configurables (label + colonne par défaut) */
 const ML_BLOCKS = [
@@ -952,7 +974,7 @@ function saveMhaelleProfileFromModal() {
   /* Envoyer au iframe */
   const frame = document.getElementById('mhaelleFrame');
   if (frame && frame.contentWindow) {
-    try { frame.contentWindow.postMessage({ type: 'ml-profile', profile }, '*'); } catch {}
+    try { frame.contentWindow.postMessage({ type: 'ml-profile', profile }, FRAME_TARGET_ORIGIN); } catch {}
   }
   closeProfilesModal();
 }
@@ -970,7 +992,7 @@ window.addEventListener('load', () => {
   function postThemeToFrames() {
     const msg = { type: 'tp-theme', theme: document.documentElement.getAttribute('data-theme') || 'light' };
     [mhaelleFrame, psforgeFrame].forEach(f => {
-      if (f && f.contentWindow) try { f.contentWindow.postMessage(msg, '*'); } catch(e) {}
+      if (f && f.contentWindow) try { f.contentWindow.postMessage(msg, FRAME_TARGET_ORIGIN); } catch(e) {}
     });
   }
   // Envoie le thème dès que chaque iframe est chargée (1er accès ou rechargement)
@@ -1718,9 +1740,11 @@ function renderHero(ms, domain, confidence) {
       if (enabled.length > 0) {
         const actions = document.createElement('div'); actions.className = 'hero-actions';
         enabled.forEach(btn => {
+          const safeHref = safeRedirectHref(btn.href, ms.tenantId, domain);
+          if (!safeHref) return; // cible non fiable → bouton non rendu
           const a = document.createElement('a');
           a.className = 'hero-partner-btn' + (btn.key === 'partnerCenter' ? ' recommended' : '');
-          a.href = btn.href(ms.tenantId, domain);
+          a.href = safeHref;
           a.target = '_blank'; a.rel = 'noopener noreferrer';
           const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'hero-partner-btn-icon';
           const text = document.createElement('div'); text.className = 'hero-partner-btn-text';
