@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  CSP stricte alignée sur TenantPulse :
+  - 'unsafe-inline' interdit (scripts et styles externalisés)
+  - aucune origine externe autorisée (analyse 100 % locale)
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self';
+  img-src 'self' data:;
+  connect-src 'self';
+  font-src 'self';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'none';
+">
+<title>En-têtes email — Analyseur V9 PRO</title>
+<!-- Feuille principale TenantPulse : layout, nav, sidebar, boutons, tokens -->
+<link rel="stylesheet" href="../tenantpulse.css">
+<!-- Surcharges et composants spécifiques Mhaelle -->
+<link rel="stylesheet" href="mhaelle.css">
+<!-- IIFE de détection iframe : doit s'exécuter avant le rendu du body -->
+<script src="mhaelle.js"></script>
+</head>
+<body>
+
+<div class="topbar">Analyse locale &nbsp;|&nbsp; Aucune donnée transmise à un serveur</div>
+
+<nav>
+  <div class="nav-left">
+    <a class="nav-brand nav-brand-link ml-tab-link" href="../index.html">
+      <img src="../assets/TP.png" class="nav-brand-icon" alt="TenantPulse">
+      TenantPulse
+    </a>
+    <div class="app-tabs" role="tablist">
+      <button class="app-tab active" role="tab" aria-selected="true">
+        <img src="../assets/ML.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">En-têtes email</span>
+        <span class="app-tab-badge">dev</span>
+      </button>
+      <a class="app-tab ml-tab-link" href="../index.html" role="tab" aria-selected="false">
+        <img src="../assets/TP.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">Diagnostic M365</span>
+      </a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <div class="nav-badge">v9 PRO</div>
+  </div>
+</nav>
+
+<div class="app">
+
+  <!-- ── Colonne gauche : saisie (structure identique TenantPulse sidebar) ── -->
+  <aside class="sidebar">
+
+    <div class="sb-head">
+      <h1>Analyse <span>En-têtes email</span></h1>
+      <p>SPF, DKIM, DMARC, EOP, chaîne SMTP et URLs — traitement 100&nbsp;% local.</p>
+    </div>
+
+    <div class="sb-body">
+
+      <label class="flabel" for="header">En-têtes du message</label>
+      <div class="input-wrap">
+        <textarea id="header" placeholder="Collez ici les en-têtes complets du message (Fichier → Propriétés → Internet dans Outlook, ou « Afficher l'original » dans Gmail)…"></textarea>
+      </div>
+      <p class="sb-privacy-note">Seuls les en-têtes saisis sont analysés localement — aucune donnée transmise à un serveur. Les préférences d'affichage sont conservées localement dans votre navigateur (<code>mhaelle_profile_v1</code>).</p>
+
+      <div class="btn-row">
+        <button class="btn-go" id="btnAnalyse" type="button">
+          <img src="../assets/Analyse.png" width="14" height="14" alt="">Analyser
+        </button>
+      </div>
+
+      <div class="ml-sec-row">
+        <button class="btn-sec ml-sec" id="btnReset" type="button">Effacer</button>
+        <button class="btn-sec ml-sec" id="btnSample" type="button">Exemple</button>
+        <label class="btn-sec ml-sec" for="emlFile">
+          Import .eml
+          <input type="file" id="emlFile" accept=".eml,.txt">
+        </label>
+      </div>
+
+      <div class="btn-hints">
+        <div class="btn-hint">Ctrl+Entrée pour analyser</div>
+        <div class="btn-hint">Rapports client &amp; technique</div>
+      </div>
+
+      <button class="btn-export visible" id="btnCopyClient" type="button">
+        <img src="../assets/copy.png" class="icon-adaptive" alt=""> Copier rapport client
+      </button>
+      <button class="btn-export visible" id="btnCopyTech" type="button">
+        Rapport technique
+      </button>
+
+      <div class="msa-check-block">
+        <button class="collapsible-btn" id="btnToolsToggle" type="button">
+          <span>Boîte à outils</span>
+          <span class="coll-arrow" id="toolsArrow">▾</span>
+        </button>
+        <div class="collapsible-body" id="toolsBody">
+          <div class="tools-grid" id="static-tools"></div>
+
+          <div class="ml-inner-coll">
+            <button class="collapsible-btn ml-coll-sm" id="btnGlossaryToggle" type="button">
+              <span>Glossaire des en-têtes</span>
+              <span class="coll-arrow" id="glossaryArrow">▾</span>
+            </button>
+            <div class="collapsible-body" id="glossaryBody">
+              <dl class="glossary">
+                <dt>Received</dt>
+                <dd>Chaque relais SMTP ajoute une ligne ; l'ordre chronologique va du bas (origine) au haut (destination).</dd>
+                <dt>Authentication-Results</dt>
+                <dd>Résultats SPF, DKIM, DMARC et CompAuth tels que vus par le serveur récepteur.</dd>
+                <dt>ARC (Authenticated Received Chain)</dt>
+                <dd>Préserve l'authentification quand le message traverse des relais intermédiaires (listes, forwarding).</dd>
+                <dt>SCL / CAT / SFV (Forefront)</dt>
+                <dd>Score et catégorie anti-spam Microsoft Exchange Online Protection.</dd>
+                <dt>Return-Path</dt>
+                <dd>Adresse de rebond (envelope sender) — peut différer du From affiché.</dd>
+                <dt>Reply-To</dt>
+                <dd>Adresse de réponse ; fréquemment détournée en phishing.</dd>
+              </dl>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /.sb-body -->
+  </aside><!-- /.sidebar -->
+
+  <!-- ── Colonne droite : résultats ── -->
+  <main class="center" id="centerMain">
+    <div class="col-header">
+      <span class="col-header-icon"><img src="../assets/metrics.png" class="icon-adaptive" alt=""></span>
+      <span class="col-header-title">Résultats</span>
+    </div>
+    <div id="result"></div>
+  </main>
+
+</div><!-- /.app -->
+
+</body>
+</html>

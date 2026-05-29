@@ -1,0 +1,691 @@
+/* ──────────────────────────────────────────────────────────────
+   Mhaelle — Analyseur Header Email V9 PRO
+   Surcharges et composants spécifiques (chargé après tenantpulse.css)
+   Tokens partagés définis dans tenantpulse.css.
+   ────────────────────────────────────────────────────────────── */
+
+/* ── Tokens spécifiques Mhaelle (statuts email) ── */
+:root {
+  --good:       #16a34a;
+  --good-bg:    #ecfdf5;
+  --medium:     #d97706;
+  --medium-bg:  #fffbeb;
+  --bad:        #dc2626;
+  --bad-bg:     #fef2f2;
+  --unknown:    #6b7280;
+  --unknown-bg: #f3f4f6;
+}
+
+/* ── Mode sombre — système (media query) ──
+   Couvre TOUS les tokens : ceux de tenantpulse.css (bg, surface, border…)
+   et ceux spécifiques à Mhaelle (good-bg, bad-bg…).
+   Utilisé en mode standalone et en secours si le parent ne répond pas. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Tokens partagés (tenantpulse.css) */
+    --bg:         #383630;
+    --surface:    #2e2c2a;
+    --border:     #4a4845;
+    --text:       #f0ede8;
+    --soft:       #b0ada8;
+    --muted:      #7a7874;
+    --row:        #333230;
+    --acc-hover:  #333230;
+    --step-bg:    #333230;
+    /* Tokens Mhaelle */
+    --good-bg:    rgba(34,197,94,.15);
+    --medium-bg:  rgba(245,158,11,.15);
+    --bad-bg:     rgba(239,68,68,.15);
+    --unknown-bg: rgba(100,116,139,.2);
+  }
+}
+
+/* ── Mode sombre — manuel (data-theme="dark") ── */
+[data-theme="dark"] {
+  /* Tokens partagés */
+  --bg:         #383630;
+  --surface:    #2e2c2a;
+  --border:     #4a4845;
+  --text:       #f0ede8;
+  --soft:       #b0ada8;
+  --muted:      #7a7874;
+  --row:        #333230;
+  --acc-hover:  #333230;
+  --step-bg:    #333230;
+  /* Tokens Mhaelle */
+  --good-bg:    rgba(34,197,94,.15);
+  --medium-bg:  rgba(245,158,11,.15);
+  --bad-bg:     rgba(239,68,68,.15);
+  --unknown-bg: rgba(100,116,139,.2);
+}
+
+/* Icônes adaptatives (même règle que tenantpulse.css, au cas où) */
+[data-theme="dark"] .icon-adaptive     { filter: invert(1); }
+[data-theme="dark"] .icon-adaptive-inv { filter: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .icon-adaptive     { filter: invert(1); }
+  :root:not([data-theme="light"]) .icon-adaptive-inv { filter: none; }
+}
+
+/* ── Typographie de base (compléments) ── */
+body { line-height: 1.55; }
+
+/* ─────────────────────────────────────────────────────────────
+   1. Navigation standalone — lien onglet (pas de text-underline)
+   ───────────────────────────────────────────────────────────── */
+.ml-tab-link { text-decoration: none; }
+
+/* ─────────────────────────────────────────────────────────────
+   2. Panneau gauche — textarea (reprend le style de .input-wrap input)
+   ───────────────────────────────────────────────────────────── */
+.input-wrap textarea {
+  width: 100%;
+  border: 2px solid var(--blue);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
+  outline: none;
+  transition: border-color .2s, box-shadow .2s, background .25s;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgba(75,63,190,.12);
+  resize: vertical;
+  min-height: 200px;
+}
+.input-wrap textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px rgba(75,63,190,.18);
+}
+.input-wrap textarea::placeholder { color: var(--muted); font-weight: 500; }
+[data-theme="dark"] .input-wrap textarea {
+  border-color: #7c74f0;
+  box-shadow: 0 2px 8px rgba(124,116,240,.18);
+}
+[data-theme="dark"] .input-wrap textarea:focus {
+  box-shadow: 0 0 0 4px rgba(124,116,240,.22);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   3. Rangée de boutons secondaires (Effacer / Exemple / Importer)
+   ───────────────────────────────────────────────────────────── */
+.ml-sec-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ml-sec {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  padding: 8px 6px;
+  justify-content: center;
+  cursor: pointer;
+}
+.ml-sec-row input[type="file"] { display: none; }
+
+/* ─────────────────────────────────────────────────────────────
+   4. Boîte à outils — collapsible imbriqué (petit format)
+   ───────────────────────────────────────────────────────────── */
+.ml-inner-coll { margin-top: 8px; }
+.ml-coll-sm {
+  font-size: var(--text-xs);
+  padding: 7px 11px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   5. Boutons secondaires génériques (utilisés dans JS)
+   ───────────────────────────────────────────────────────────── */
+.btn-sec {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all .15s;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.btn-sec:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--row);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   6. Résultats — cartes simples
+   ───────────────────────────────────────────────────────────── */
+
+/* h3 dans les corps d'accordéon (card-details-body) */
+.card-details-body h3 {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  margin: 14px 0 6px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.card-details-body h3:first-child { margin-top: 0; }
+
+/* Textareas des rapports (Rapport client / Rapport technique) */
+.report-textarea {
+  width: 100%;
+  background: var(--row);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--soft);
+  resize: vertical;
+  min-height: 160px;
+  transition: border-color .2s, background .25s;
+}
+.report-textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(75,63,190,.12);
+}
+[data-theme="dark"] .report-textarea { border-color: #4a4845; color: var(--soft); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 18px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15,23,42,.04);
+}
+.card h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--text);
+  letter-spacing: -.005em;
+}
+.card h3 {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  margin: 14px 0 8px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   7. Layout résultats 2 colonnes
+   ───────────────────────────────────────────────────────────── */
+.results-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.results-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.results-col > * { margin-top: 0 !important; }
+@media (max-width: 900px) {
+  .results-2col { grid-template-columns: 1fr; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   8. Card dépliable accordion (résultats)
+   ───────────────────────────────────────────────────────────── */
+.card-details {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  overflow: hidden;
+}
+.card-details > summary {
+  padding: 11px 16px;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.card-details > summary::-webkit-details-marker { display: none; }
+.card-details > summary::after {
+  content: '▾';
+  font-size: 13px;
+  color: var(--muted);
+  transition: transform .2s ease;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.card-details[open] > summary {
+  border-bottom: 1px solid var(--border);
+  background: var(--row);
+}
+.card-details[open] > summary::after { transform: rotate(-180deg); }
+.card-details > summary:hover { background: var(--row); }
+.card-details-body { padding: 14px 16px; }
+.card-details > .grid-2 { padding: 14px 16px; }
+
+/* ─────────────────────────────────────────────────────────────
+   9. Grilles internes (résultats JS)
+   ───────────────────────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   10. Barres de score
+   ───────────────────────────────────────────────────────────── */
+.bar {
+  height: 10px;
+  border-radius: 6px;
+  background: var(--row);
+  overflow: hidden;
+  margin: 8px 0;
+  border: 1px solid var(--border);
+}
+.bar-fill { height: 100%; transition: width .5s ease; border-radius: 6px; width: 0; }
+.good   { background: linear-gradient(90deg, #16a34a, #22c55e); }
+.medium { background: linear-gradient(90deg, #d97706, #f59e0b); }
+.bad    { background: linear-gradient(90deg, #dc2626, #ef4444); }
+
+/* ─────────────────────────────────────────────────────────────
+   11. Badges
+   ───────────────────────────────────────────────────────────── */
+.badge {
+  padding: 5px 12px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.good-bg   { background: linear-gradient(180deg, #22c55e, #16a34a); }
+.medium-bg { background: linear-gradient(180deg, #f59e0b, #d97706); }
+.bad-bg    { background: linear-gradient(180deg, #ef4444, #dc2626); }
+
+.note { font-size: var(--text-xs); color: var(--soft); margin-top: 6px; line-height: 1.5; }
+
+/* ─────────────────────────────────────────────────────────────
+   12. Lignes de données
+   ───────────────────────────────────────────────────────────── */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.row:last-child { border-bottom: none; }
+.label { font-weight: 600; min-width: 120px; font-size: var(--text-sm); color: var(--text); }
+.value {
+  flex: 1;
+  word-break: break-all;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--soft);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   13. Pilules de statut
+   ───────────────────────────────────────────────────────────── */
+.status {
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.status-pass     { background: var(--good-bg);    color: var(--good);    border: 1px solid rgba(22,163,74,.25); }
+.status-fail     { background: var(--bad-bg);     color: var(--bad);     border: 1px solid rgba(220,38,38,.25); }
+.status-softfail,
+.status-neutral,
+.status-none     { background: var(--medium-bg);  color: var(--medium);  border: 1px solid rgba(217,119,6,.25); }
+.status-unknown  { background: var(--unknown-bg); color: var(--unknown); border: 1px solid var(--border); }
+
+/* ─────────────────────────────────────────────────────────────
+   14. Boutons outils (boîte à outils JS)
+   ───────────────────────────────────────────────────────────── */
+.tools-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tool-btn {
+  background: var(--surface);
+  color: var(--blue);
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  transition: all .15s;
+}
+.tool-btn:hover {
+  border-color: var(--blue);
+  background: rgba(75,63,190,.06);
+  transform: translateY(-1px);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   15. Hops SMTP
+   ───────────────────────────────────────────────────────────── */
+.hop {
+  padding: 12px 14px;
+  margin: 8px 0;
+  background: var(--row);
+  border-radius: 9px;
+  border-left: 3px solid var(--blue);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.hop-num { color: var(--blue); font-weight: 700; font-size: var(--text-sm); }
+.hop-tls { color: var(--good); font-weight: 600; margin-left: 6px; }
+
+/* ─────────────────────────────────────────────────────────────
+   16. Alertes
+   ───────────────────────────────────────────────────────────── */
+.alert {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 8px 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border: 1px solid;
+}
+.alert-warn   { background: var(--medium-bg); border-color: rgba(217,119,6,.3);  color: var(--medium); }
+.alert-danger { background: var(--bad-bg);    border-color: rgba(220,38,38,.3);  color: var(--bad); }
+.alert-info   { background: rgba(75,63,190,.06); border-color: rgba(75,63,190,.25); color: var(--blue); }
+
+/* ─────────────────────────────────────────────────────────────
+   17. Glossaire (accordéon sidebar)
+   ───────────────────────────────────────────────────────────── */
+.glossary dt { font-weight: 600; color: var(--text); margin-top: 12px; font-size: var(--text-sm); }
+.glossary dd { margin: 4px 0 0 16px; color: var(--soft); font-size: var(--text-xs); line-height: 1.5; }
+.collapsible-body .glossary { padding-bottom: 6px; }
+
+/* <details> natif utilisés dans les résultats rendus par JS */
+details { margin-top: 16px; }
+details summary { cursor: pointer; color: var(--blue); font-weight: 600; font-size: var(--text-sm); padding: 4px 0; }
+details summary:hover { color: var(--blue-dark); }
+.card > details { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.card > details:first-child { border-top: none; padding-top: 0; margin-top: 8px; }
+
+/* ─────────────────────────────────────────────────────────────
+   18. Divers utilitaires
+   ───────────────────────────────────────────────────────────── */
+input[type="file"] { display: none; }
+.hidden { display: none; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.url-line { font-size: 12px; word-break: break-all; margin: 6px 0 2px; }
+.privacy-notice {
+  font-size: var(--text-xs);
+  color: var(--soft);
+  background: var(--row);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+.privacy-notice strong { color: var(--text); }
+
+/* ─────────────────────────────────────────────────────────────
+   19. Score global (hero "Aurora" — réutilise .tenant-hero de TenantPulse)
+   ───────────────────────────────────────────────────────────── */
+.score-header { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.score-main   { flex: 1; min-width: 220px; }
+.score-num    { font-size: 2.2rem; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+.score-num-suffix { font-size: 1rem; color: var(--muted); }
+.confidence-line  { font-size: var(--text-xs); color: var(--muted); margin-top: 6px; }
+
+/* ── Overrides quand le scoreCard utilise .tenant-hero ──
+   .tenant-hero apporte le fond aurora sombre, la radius, l'ombre, le padding.
+   Ici on adapte chaque élément interne (h2, bar, score-num, badge, axis-grid, alert)
+   pour qu'il s'intègre visuellement sur ce fond sombre. */
+
+/* On retire l'icône MicrosoftN décorative du coin (spécifique au hero TenantPulse) */
+.score-hero::after { background-image: none !important; }
+
+/* Titre "Score de confiance" → style hero-label (small uppercase) */
+.score-hero h2 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  color: rgba(255,255,255,.9);
+  margin: 0 0 10px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
+
+/* Barre de progression — glass sur fond sombre */
+.score-hero .bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.15);
+  margin: 4px 0 10px;
+}
+
+/* Ligne de fiabilité */
+.score-hero .confidence-line {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: rgba(255,255,255,.85);
+  letter-spacing: .01em;
+  margin-top: 0;
+  text-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+
+/* Grand chiffre du score — style hero-guid (mono, blanc) */
+.score-hero .score-num {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -.01em;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  text-shadow: 0 1px 6px rgba(0,0,0,.25);
+}
+.score-hero .score-num-suffix {
+  font-size: 1.05rem;
+  color: rgba(255,255,255,.8);
+  font-weight: 500;
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+
+/* Badge verdict (LÉGITIME / SUSPECT / MALVEILLANT) — renforcé pour fond sombre */
+.score-hero .badge {
+  padding: 6px 14px;
+  border-radius: 999px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.35);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.18) inset, 0 1px 0 rgba(255,255,255,.18) inset, 0 4px 14px rgba(0,0,0,.3);
+  letter-spacing: .04em;
+}
+
+/* Grille des 4 axes — style hero-actions (séparateur + cartes verre) */
+.score-hero .axis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255,255,255,.12);
+}
+@media (max-width: 700px) {
+  .score-hero .axis-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Carte d'axe — style hero-partner-btn (glass) avec lift doux */
+.score-hero .axis-card {
+  background: linear-gradient(180deg, rgba(255,255,255,.09) 0%, rgba(0,0,0,.04) 100%);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.08) inset,
+    0 -1px 0 rgba(0,0,0,.1) inset,
+    0 6px 20px rgba(0,0,0,.28),
+    0 2px 6px rgba(0,0,0,.18);
+}
+.score-hero .axis-name { color: #fff; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.score-hero .axis-weight {
+  background: rgba(255,255,255,.2);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.25);
+  font-weight: 700;
+}
+.score-hero .axis-bar {
+  background: rgba(255,255,255,.18);
+  border: none;
+}
+.score-hero .axis-score-num.good   { color: #86efac; text-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.score-hero .axis-score-num.medium { color: #fcd34d; text-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.score-hero .axis-score-num.bad    { color: #fca5a5; text-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.score-hero .axis-sub { color: rgba(255,255,255,.85); font-weight: 500; text-shadow: 0 1px 3px rgba(0,0,0,.3); }
+
+/* Alertes à l'intérieur du hero — verre teinté avec lift doux */
+.score-hero .alert {
+  margin-top: 10px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.14);
+  color: #fff;
+  font-weight: 600;
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  text-shadow: 0 1px 3px rgba(0,0,0,.3);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.06) inset,
+    0 6px 18px rgba(0,0,0,.25),
+    0 2px 5px rgba(0,0,0,.15);
+}
+.score-hero .alert-warn {
+  background: rgba(245,158,11,.22);
+  border-color: rgba(245,158,11,.45);
+  color: #fef3c7;
+}
+.score-hero .alert-danger {
+  background: rgba(239,68,68,.25);
+  border-color: rgba(239,68,68,.5);
+  color: #fee2e2;
+}
+.score-hero .alert-info {
+  background: rgba(120,108,230,.26);
+  border-color: rgba(120,108,230,.5);
+  color: #e0e7ff;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   20. Grille des 4 axes de score
+   ───────────────────────────────────────────────────────────── */
+.axis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 700px) { .axis-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.axis-card {
+  background: var(--row);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+.axis-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.axis-name   { font-size: var(--text-sm); font-weight: 600; color: var(--text); }
+.axis-weight {
+  font-size: 10px; font-weight: 600; color: var(--muted);
+  background: var(--border); border-radius: 4px; padding: 1px 5px; letter-spacing: .03em;
+}
+.axis-bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 4px 0 6px; }
+.axis-bar-fill { height: 100%; width: 0; transition: width .4s; border-radius: 3px; }
+.axis-bar-fill.good   { background: linear-gradient(90deg, #16a34a, #22c55e); }
+.axis-bar-fill.medium { background: linear-gradient(90deg, #d97706, #f59e0b); }
+.axis-bar-fill.bad    { background: linear-gradient(90deg, #dc2626, #ef4444); }
+.axis-card-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.axis-score-num { font-size: var(--text-base); font-weight: 700; letter-spacing: -.01em; }
+.axis-score-num.good   { color: var(--good); }
+.axis-score-num.medium { color: var(--medium); }
+.axis-score-num.bad    { color: var(--bad); }
+/* Fix : les classes .good/.medium/.bad appliquent un background-gradient (barres).
+   On neutralise ce background sur les numéros de score qui partagent ces classes. */
+.axis-score-num.good,
+.axis-score-num.medium,
+.axis-score-num.bad { background: transparent; }
+.axis-sub { font-size: 10px; color: var(--muted); text-align: right; line-height: 1.2; }
+
+/* ─────────────────────────────────────────────────────────────
+   21. Signaux pondérés (anomalies & bonus)
+   ───────────────────────────────────────────────────────────── */
+.signal-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 10px; border-radius: 8px;
+  background: var(--row); border: 1px solid var(--border); margin: 6px 0;
+}
+.signal-row.danger { border-color: rgba(220,38,38,.3); background: var(--bad-bg); }
+.signal-row.warn   { border-color: rgba(217,119,6,.3);  background: var(--medium-bg); }
+.signal-chip {
+  flex-shrink: 0; min-width: 38px; text-align: center;
+  font-size: 11px; font-weight: 700; padding: 4px 7px;
+  border-radius: 5px; letter-spacing: -.01em; font-variant-numeric: tabular-nums;
+}
+.chip-neg { background: var(--bad);  color: #fff; }
+.chip-pos { background: var(--good); color: #fff; }
+.signal-body  { flex: 1; min-width: 0; }
+.signal-label { font-size: var(--text-sm); font-weight: 600; color: var(--text); line-height: 1.35; }
+.signal-expl  { font-size: var(--text-xs); color: var(--soft); margin-top: 3px; line-height: 1.5; }
+
+/* ─────────────────────────────────────────────────────────────
+   22. Conteneur des résultats (flex colonne avec espacement)
+   ───────────────────────────────────────────────────────────── */
+#result {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   23. État vide du panneau résultats
+   ───────────────────────────────────────────────────────────── */
+.result-empty {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 280px; color: var(--muted);
+  text-align: center; gap: 12px; padding: 40px 24px;
+  background: var(--surface); border: 1px dashed var(--border); border-radius: 12px;
+}
+.result-empty-icon  { font-size: 2.4rem; opacity: .45; line-height: 1; }
+.result-empty-title { font-size: var(--text-base); font-weight: 600; color: var(--soft); }
+.result-empty-hint  { font-size: var(--text-xs); max-width: 260px; line-height: 1.55; }
+
+/* ─────────────────────────────────────────────────────────────
+   24. Mode embarqué (iframe dans TenantPulse)
+   Topbar + nav cachés, le layout .app remplit l'iframe.
+   ───────────────────────────────────────────────────────────── */
+html.embedded .topbar,
+html.embedded nav { display: none !important; }

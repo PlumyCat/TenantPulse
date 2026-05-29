@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self';
+  img-src 'self' data:;
+  connect-src 'self';
+  font-src 'self';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'none';
+">
+<title>PsForge — Commandes PowerShell IT MW</title>
+<link rel="stylesheet" href="../tenantpulse.css">
+<link rel="stylesheet" href="psforge.css">
+<script src="psforge.js"></script>
+</head>
+<body>
+
+<div class="topbar">Traitement local &nbsp;|&nbsp; Aucune donnée transmise à un serveur</div>
+
+<nav>
+  <div class="nav-left">
+    <a class="nav-brand nav-brand-link" href="../index.html">
+      <img src="../assets/TP.png" class="nav-brand-icon" alt="TenantPulse">
+      TenantPulse
+    </a>
+    <div class="app-tabs" role="tablist">
+      <button class="app-tab active" role="tab" aria-selected="true">
+        <img src="../assets/PSB.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">Commandes</span>
+        <span class="app-tab-badge">Alpha</span>
+      </button>
+      <a class="app-tab" href="../index.html" role="tab" aria-selected="false">
+        <img src="../assets/TP.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">Diagnostic M365</span>
+      </a>
+      <a class="app-tab" href="../ML/mhaelle.html" role="tab" aria-selected="false">
+        <img src="../assets/ML.png" class="app-tab-icon" alt="">
+        <span class="app-tab-label">En-têtes email</span>
+      </a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <div class="nav-badge">v1 DEV</div>
+  </div>
+</nav>
+
+<div class="app">
+
+  <aside class="sidebar pf-sidebar">
+    <div class="sb-head">
+      <h1>Commandes <span>PowerShell IT MW</span></h1>
+      <p>Renseignez les champs ci-dessous pour composer vos commandes.</p>
+      <p class="sb-privacy-note">Les commandes sauvegardées, favoris et configuration des blocs sont conservés localement dans votre navigateur — aucune donnée transmise à un serveur.</p>
+    </div>
+
+    <div class="pf-sidebar-actions">
+      <button class="pf-reset-all" type="button" data-action="reset-all" title="Effacer toutes les entrées de tous les blocs">
+        <img src="../assets/warning.png" class="icon-adaptive" alt=""> Tout effacer
+      </button>
+      <button class="pf-reset-config" type="button" data-action="reset-config" title="Réinitialiser les blocs par défaut">
+        ↺ Réinitialiser
+      </button>
+    </div>
+
+    <div class="pf-add-block-form">
+      <input class="pf-add-block-input" id="pfAddBlockInput" type="text" placeholder="Nom du nouveau bloc…" autocomplete="off" spellcheck="false" maxlength="40">
+      <button class="pf-btn-add-block" type="button" data-action="add-block">+ Ajouter</button>
+    </div>
+
+    <div class="pf-blocks-list" id="pfBlocksList"></div>
+  </aside>
+
+  <main class="center" id="centerMain">
+
+    <!-- Barre supérieure commune aux deux vues -->
+    <div class="pf-cmd-search-bar" id="pfSearchBar">
+      <div class="pf-search-top">
+        <div class="pf-brand-header">
+          <img src="../assets/PSB.png" class="pf-brand-icon" alt="PsForge">
+          <span class="pf-brand-name">PsForge</span>
+          <span class="pf-brand-badge">&lt;/Alpha&gt;</span>
+        </div>
+        <div class="pf-search-top-btns">
+          <button class="pf-manager-toggle" type="button" id="pfManagerToggle"><img src="../assets/option.png" class="pf-manager-toggle-icon" alt=""> Gérer</button>
+          <button class="pf-script-toggle" type="button" id="pfScriptToggle"><img src="../assets/tool.png" class="pf-script-toggle-icon" alt=""> Script Builder</button>
+        </div>
+      </div>
+      <input class="pf-cmd-search" id="pfCmdSearch" type="search" placeholder="Rechercher une commande…" autocomplete="off" spellcheck="false">
+      <div class="pf-script-search-dropdown" id="pfScriptSearchDropdown" hidden></div>
+    </div>
+
+    <!-- Vue normale — liste de commandes + zone de build -->
+    <div id="pfCmdView">
+      <div class="pf-cmd-list" id="pfCmdList"></div>
+      <div class="pf-cmd-output">
+        <div class="pf-cmd-output-header">
+          <button class="pf-btn-save" type="button" id="pfCmdSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
+          <button class="pf-btn-validate" type="button" id="pfCmdCopy">Copier</button>
+        </div>
+        <div class="pf-desc-bar" id="pfDescBar" hidden>
+          <button class="pf-desc-toggle" type="button" id="pfDescToggle"><img src="../assets/information.png" class="icon-adaptive pf-desc-icon" alt=""> Description</button>
+          <div class="pf-desc-content" id="pfDescContent" hidden></div>
+        </div>
+        <div class="pf-param-chips-bar" id="pfParamChipsBar"></div>
+        <div class="pf-cmd-built" id="pfCmdBuilt" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"><span class="pf-cmd-hint">← Sélectionnez une commande dans la liste</span></div>
+      </div>
+    </div>
+
+    <!-- Vue Script Builder -->
+    <div class="pf-script-view" id="pfScriptView" hidden>
+      <div class="pf-script-toolbar">
+        <button class="pf-script-back" type="button" id="pfScriptBack">← Retour</button>
+        <span class="pf-script-title">Script Builder</span>
+        <span class="pf-script-spacer"></span>
+        <button class="pf-script-clear-btn" type="button" id="pfScriptClear">Effacer</button>
+        <button class="pf-btn-save" type="button" id="pfScriptSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
+        <button class="pf-btn-validate" type="button" id="pfScriptCopy">Copier</button>
+      </div>
+      <div class="pf-desc-bar" id="pfScriptDescBar" hidden>
+        <button class="pf-desc-toggle" type="button" id="pfScriptDescToggle"><img src="../assets/information.png" class="icon-adaptive pf-desc-icon" alt=""> Description</button>
+        <div class="pf-desc-content" id="pfScriptDescContent" hidden></div>
+      </div>
+      <div class="pf-param-chips-bar" id="pfScriptChipsBar"></div>
+      <div class="pf-script-editor" id="pfScriptEditor" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+    </div>
+
+    <!-- ── Vue Gestionnaire de commandes ── -->
+    <div class="pf-manager-view" id="pfManagerView" hidden>
+
+    <div class="pf-manager-toolbar">
+      <button class="pf-script-back" type="button" id="pfManagerBack">← Retour</button>
+      <span class="pf-manager-title">Gestionnaire de commandes</span>
+      <span class="pf-script-spacer"></span>
+      <button class="pf-btn-validate" type="button" id="pfManagerAdd">+ Nouvelle commande</button>
+    </div>
+    <div class="pf-manager-search-bar">
+      <input class="pf-cmd-search pf-manager-search" id="pfManagerSearch" type="search" placeholder="Filtrer les commandes…" autocomplete="off" spellcheck="false">
+    </div>
+
+    <!-- Formulaire création / édition -->
+    <div class="pf-manager-form" id="pfManagerForm" hidden>
+      <div class="pf-manager-form-inner">
+        <div class="pf-manager-builtin-ctx" id="pfMgrBuiltinCtx" hidden>
+          <span class="pf-manager-builtin-label">Commande originale</span>
+          <code class="pf-manager-builtin-orig" id="pfMgrBuiltinOrig"></code>
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfMgrTitle">Titre d'affichage <span class="pf-manager-optional">(optionnel — affiche la commande si vide)</span></label>
+          <input class="pf-modal-input" id="pfMgrTitle" type="text" placeholder="Ex. Réinitialiser le mot de passe…" autocomplete="off" spellcheck="false" maxlength="80">
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfMgrCmd">Commande <span class="pf-manager-required">*</span></label>
+          <input class="pf-modal-input pf-manager-cmd-input" id="pfMgrCmd" type="text" placeholder="Get-MgUser -UserId &lt;upn&gt;…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfMgrDesc">Description <span class="pf-manager-optional">(visible via le bouton Description dans la vue principale)</span></label>
+          <textarea class="pf-modal-input pf-manager-textarea" id="pfMgrDesc" rows="3" placeholder="Décrivez l'usage, les prérequis, ou le contexte de cette commande…" spellcheck="false"></textarea>
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label">Catégorie</label>
+          <div class="pf-manager-cats">
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="mine" checked><span>Mes commandes</span></label>
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="windows"><span>Système Windows</span></label>
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="microsoft365"><span>Microsoft 365</span></label>
+            <label class="pf-manager-cat-opt"><input type="radio" name="pfMgrCat" value="favorites"><span>★ Favoris</span></label>
+          </div>
+        </div>
+        <div class="pf-manager-field pf-manager-subcat-field" id="pfMgrSubcatField" hidden>
+          <label class="pf-modal-label">Groupe / Sous-catégorie <span class="pf-manager-required">*</span></label>
+          <div class="pf-manager-subcats" id="pfMgrSubcats"></div>
+          <div class="pf-manager-newgroup-row" id="pfMgrNewGroupRow" hidden>
+            <input class="pf-modal-input" id="pfMgrNewGroupInput" type="text" placeholder="Nom du nouveau groupe…" maxlength="40" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="pf-manager-form-actions">
+          <button class="pf-modal-btn-cancel" type="button" id="pfMgrCancel">Annuler</button>
+          <button class="pf-btn-validate" type="button" id="pfMgrSave">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Liste des commandes personnalisées -->
+    <div class="pf-manager-list" id="pfManagerList"></div>
+
+    </div>
+
+  </main>
+
+  <!-- ── Modal sauvegarde ── -->
+  <div class="pf-modal-overlay" id="pfSaveModal" hidden>
+    <div class="pf-modal">
+      <div class="pf-modal-header">
+        <span class="pf-modal-title"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder la commande</span>
+        <button class="pf-modal-close" type="button" id="pfModalClose">✕</button>
+      </div>
+      <div class="pf-modal-body">
+        <div class="pf-modal-cmd-preview" id="pfModalCmdPreview"></div>
+        <div class="pf-modal-field">
+          <label class="pf-modal-label" for="pfModalName">Nom</label>
+          <input class="pf-modal-input" id="pfModalName" type="text" placeholder="Nom de la commande…" autocomplete="off" spellcheck="false" maxlength="60">
+        </div>
+        <label class="pf-modal-fav-row" for="pfModalFav">
+          <input type="checkbox" id="pfModalFav" class="pf-modal-checkbox">
+          <span class="pf-modal-fav-label">★ Ajouter aux favoris</span>
+        </label>
+      </div>
+      <div class="pf-modal-footer">
+        <button class="pf-modal-btn-cancel" type="button" id="pfModalCancel">Annuler</button>
+        <button class="pf-btn-validate" type="button" id="pfModalSave">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="psforge-app.js"></script>
+</body>
+</html>
