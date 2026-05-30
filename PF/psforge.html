@@ -14,7 +14,7 @@
   base-uri 'self';
   form-action 'none';
 ">
-<title>PsForge — Commandes PowerShell IT MW</title>
+<title>PsForge · Commandes PowerShell IT MW</title>
 <link rel="stylesheet" href="../tenantpulse.css">
 <link rel="stylesheet" href="psforge.css">
 <script src="psforge.js"></script>
@@ -56,7 +56,7 @@
     <div class="sb-head">
       <h1>Commandes <span>PowerShell IT MW</span></h1>
       <p>Renseignez les champs ci-dessous pour composer vos commandes.</p>
-      <p class="sb-privacy-note">Les commandes sauvegardées, favoris et configuration des blocs sont conservés localement dans votre navigateur — aucune donnée transmise à un serveur.</p>
+      <p class="sb-privacy-note">Les commandes sauvegardées, favoris et configuration des blocs sont conservés localement dans votre navigateur. Aucune donnée n'est transmise à un serveur.</p>
     </div>
 
     <div class="pf-sidebar-actions">
@@ -95,7 +95,7 @@
       <div class="pf-script-search-dropdown" id="pfScriptSearchDropdown" hidden></div>
     </div>
 
-    <!-- Vue normale — liste de commandes + zone de build -->
+    <!-- Vue normale : liste de commandes + zone de build -->
     <div id="pfCmdView">
       <div class="pf-cmd-list" id="pfCmdList"></div>
       <div class="pf-cmd-output">
@@ -121,16 +121,51 @@
         <button class="pf-script-back" type="button" id="pfScriptBack">← Retour</button>
         <span class="pf-script-title">Script Builder</span>
         <span class="pf-script-spacer"></span>
+        <button class="pf-script-desc-btn" type="button" id="pfScriptDescBtn" title="Aucune description pour ce script" disabled><img src="../assets/information.png" class="icon-adaptive pf-script-find-icon" alt=""> Description</button>
+        <button class="pf-script-find-btn" type="button" id="pfScriptFind" title="Rechercher / Remplacer"><img src="../assets/LOUPE.png" class="icon-adaptive-inv pf-script-find-icon" alt=""> Rechercher</button>
         <button class="pf-script-clear-btn" type="button" id="pfScriptClear">Effacer</button>
         <button class="pf-btn-save" type="button" id="pfScriptSave"><img src="../assets/save.png" class="pf-btn-save-icon" alt=""> Sauvegarder</button>
         <button class="pf-btn-validate" type="button" id="pfScriptCopy">Copier</button>
       </div>
-      <div class="pf-desc-bar" id="pfScriptDescBar" hidden>
-        <button class="pf-desc-toggle" type="button" id="pfScriptDescToggle"><img src="../assets/information.png" class="icon-adaptive pf-desc-icon" alt=""> Description</button>
-        <div class="pf-desc-content" id="pfScriptDescContent" hidden></div>
-      </div>
       <div class="pf-param-chips-bar" id="pfScriptChipsBar"></div>
-      <div class="pf-script-editor" id="pfScriptEditor" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+
+      <!-- Zone d'édition : gouttière (numéros de ligne) + éditeur -->
+      <div class="pf-script-edit-area">
+        <div class="pf-script-gutter" id="pfScriptGutter" aria-hidden="true"></div>
+        <!-- Surbrillance pleine largeur des lignes sélectionnées (au-dessus de l'éditeur, pointer-events:none) -->
+        <div class="pf-line-hl" id="pfScriptLineHL" aria-hidden="true"><div class="pf-line-hl-inner" id="pfScriptLineHLInner"></div></div>
+        <div class="pf-script-editor" id="pfScriptEditor" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+
+        <!-- Panneau Description (flottant, déclenché par le bouton de la toolbar) -->
+        <div class="pf-desc-panel" id="pfScriptDescPanel" hidden>
+          <div class="pf-desc-panel-head">
+            <span class="pf-desc-panel-title"><img src="../assets/information.png" class="icon-adaptive pf-desc-icon" alt=""> Description du script</span>
+            <button class="pf-desc-panel-close" type="button" id="pfScriptDescClose" title="Fermer">×</button>
+          </div>
+          <div class="pf-desc-panel-body" id="pfScriptDescText"></div>
+        </div>
+
+        <!-- Widget Recherche / Remplacement (flottant) -->
+        <div class="pf-find-widget" id="pfFindWidget" hidden>
+          <div class="pf-find-row">
+            <input class="pf-find-input" id="pfFindInput" type="text" placeholder="Rechercher" autocomplete="off" spellcheck="false" aria-label="Rechercher">
+            <span class="pf-find-count" id="pfFindCount">0/0</span>
+            <div class="pf-find-opts">
+              <button class="pf-find-opt" type="button" id="pfFindCase" title="Respecter la casse" aria-pressed="false">Aa</button>
+              <button class="pf-find-opt" type="button" id="pfFindWord" title="Mot entier" aria-pressed="false">ab</button>
+              <button class="pf-find-opt" type="button" id="pfFindRegex" title="Expression régulière" aria-pressed="false">.*</button>
+            </div>
+            <button class="pf-find-nav" type="button" id="pfFindPrev" title="Précédent (occurrence)">‹</button>
+            <button class="pf-find-nav" type="button" id="pfFindNext" title="Suivant (occurrence)">›</button>
+            <button class="pf-find-close" type="button" id="pfFindClose" title="Fermer">×</button>
+          </div>
+          <div class="pf-find-row">
+            <input class="pf-find-input" id="pfReplaceInput" type="text" placeholder="Remplacer par" autocomplete="off" spellcheck="false" aria-label="Remplacer par">
+            <button class="pf-find-rep" type="button" id="pfReplaceOne">Remplacer</button>
+            <button class="pf-find-rep" type="button" id="pfReplaceAll">Tout remplacer</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ── Vue Gestionnaire de commandes ── -->
@@ -157,7 +192,7 @@
           <code class="pf-manager-builtin-orig" id="pfMgrBuiltinOrig"></code>
         </div>
         <div class="pf-manager-field">
-          <label class="pf-modal-label" for="pfMgrTitle">Titre d'affichage <span class="pf-manager-optional">(optionnel — affiche la commande si vide)</span></label>
+          <label class="pf-modal-label" for="pfMgrTitle">Titre d'affichage <span class="pf-manager-optional">(optionnel · affiché si vide)</span></label>
           <input class="pf-modal-input" id="pfMgrTitle" type="text" placeholder="Ex. Réinitialiser le mot de passe…" autocomplete="off" spellcheck="false" maxlength="80">
         </div>
         <div class="pf-manager-field">
@@ -211,6 +246,10 @@
           <label class="pf-modal-label" for="pfModalName">Nom</label>
           <input class="pf-modal-input" id="pfModalName" type="text" placeholder="Nom de la commande…" autocomplete="off" spellcheck="false" maxlength="60">
         </div>
+        <div class="pf-modal-field">
+          <label class="pf-modal-label" for="pfModalDesc">Description <span class="pf-manager-optional">(optionnel · sert de mots-clés pour la recherche)</span></label>
+          <textarea class="pf-modal-input pf-modal-textarea" id="pfModalDesc" placeholder="Décrivez ce que fait le script : objectif, contexte, mots-clés…" autocomplete="off" spellcheck="false" maxlength="400" rows="3"></textarea>
+        </div>
         <label class="pf-modal-fav-row" for="pfModalFav">
           <input type="checkbox" id="pfModalFav" class="pf-modal-checkbox">
           <span class="pf-modal-fav-label">★ Ajouter aux favoris</span>
@@ -252,7 +291,7 @@
   <div class="pf-modal-overlay" id="pfImportModal" hidden>
     <div class="pf-modal pf-modal--io">
       <div class="pf-modal-header">
-        <span class="pf-modal-title">↑ Importer — aperçu</span>
+        <span class="pf-modal-title">↑ Importer : aperçu</span>
         <button class="pf-modal-close" type="button" id="pfImportClose">✕</button>
       </div>
       <div class="pf-modal-body">
@@ -264,7 +303,7 @@
             <button class="pf-mgr-io-btn" type="button" id="pfImportAnalyze">Analyser</button>
           </div>
         </div>
-        <div class="pf-io-warning">⚠ <span>Ce paquet provient d'une source externe. <strong>Vérifiez chaque commande avant de l'exécuter</strong> — une commande peut être dangereuse même sous un titre anodin. Les éléments <strong>⚠ à vérifier</strong> contiennent des motifs à risque.</span></div>
+        <div class="pf-io-warning">⚠ <span>Ce paquet provient d'une source externe. <strong>Vérifiez chaque commande avant de l'exécuter</strong> : une commande peut être dangereuse même sous un titre anodin. Les éléments <strong>⚠ à vérifier</strong> contiennent des motifs à risque.</span></div>
         <p class="pf-io-hint" id="pfImportHint">Décochez ce que vous ne voulez pas importer. <span class="pf-io-legend"><span class="pf-io-badge pf-io-badge--new">✦ nouveau</span> <span class="pf-io-badge pf-io-badge--dup">⟳ déjà présent</span> <span class="pf-io-badge pf-io-badge--warn">⚠ à vérifier</span></span></p>
         <div class="pf-io-toolbar">
           <button class="pf-mgr-io-btn" type="button" id="pfImportAll">Tout cocher</button>
