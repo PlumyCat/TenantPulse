@@ -611,7 +611,8 @@ html:not([data-theme="dark"]) .profiles-modal-title img[src="assets/user.png"]{f
 .profile-item.dragging{opacity:.45}
 .profile-item.drag-over{box-shadow:0 0 0 2px var(--blue)!important}
 /* ── Footer dynamic sections ── */
-.profiles-footer-hidden{display:none}
+/* !important : surclasse les sélecteurs d'ID des footers (ligne suivante) */
+.profiles-footer-hidden{display:none!important}
 .profiles-save-btn-hidden{display:none!important}
 #profilesFooterTP,#profilesFooterML,#profilesFooterPF{display:flex;align-items:center;gap:6px;flex:1}
 /* Bouton "Tout effacer" PsForge */
