@@ -223,6 +223,16 @@
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(saved)); } catch {}
     renderCommandList(document.getElementById('pfCmdSearch')?.value || '');
   }
+  function updateDescSaved(ts, newDesc) {
+    const saved = loadSaved().map(function (e) {
+      if (e.ts !== ts) return e;
+      const updated = Object.assign({}, e);
+      if (newDesc) updated.desc = newDesc; else delete updated.desc;
+      return updated;
+    });
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(saved)); } catch {}
+    renderCommandList(document.getElementById('pfCmdSearch')?.value || '');
+  }
 
   /* ── Commandes personnalisées ── */
   function loadCustomCmds() {
@@ -902,15 +912,25 @@
     }
 
     /* ── Section : commandes enregistrées (modale Sauvegarder) ── */
-    const savedAll = loadSaved().filter(function (e) {
+    const mgrMatchSaved = function (e) {
       return !q || (e.name || '').toLowerCase().indexOf(q) !== -1 ||
-                   e.cmd.toLowerCase().indexOf(q) !== -1;
-    });
-    if (savedAll.length) {
+             e.cmd.toLowerCase().indexOf(q) !== -1 ||
+             (e.desc || '').toLowerCase().indexOf(q) !== -1;
+    };
+    const mgrScripts = loadSaved().filter(function (e) { return e.kind === 'script' && mgrMatchSaved(e); });
+    const mgrCmds    = loadSaved().filter(function (e) { return e.kind !== 'script' && mgrMatchSaved(e); });
+    if (mgrScripts.length) {
       hasContent.extra = true;
       list.appendChild(buildManagerCollapsible(
-        'Commandes enregistrées', savedAll.length, q,
-        function (body) { savedAll.forEach(function (e) { body.appendChild(buildManagerSavedRow(e)); }); }
+        '⚙ Scripts', mgrScripts.length, q,
+        function (body) { mgrScripts.forEach(function (e) { body.appendChild(buildManagerSavedRow(e)); }); }
+      ));
+    }
+    if (mgrCmds.length) {
+      hasContent.extra = true;
+      list.appendChild(buildManagerCollapsible(
+        'Commandes enregistrées', mgrCmds.length, q,
+        function (body) { mgrCmds.forEach(function (e) { body.appendChild(buildManagerSavedRow(e)); }); }
       ));
     }
 
@@ -1198,35 +1218,60 @@
       info.appendChild(descEl);
     }
 
-    const editRow = document.createElement('div');
-    editRow.className = 'pf-manager-group-edit-row';
-    editRow.hidden = true;
-    const inp = document.createElement('input');
-    inp.className = 'pf-manager-group-input'; inp.type = 'text';
-    inp.value = entry.name || ''; inp.maxLength = 60; inp.placeholder = 'Nom…';
+    /* Panneau d'édition : Nom + Description */
+    const editPanel = document.createElement('div');
+    editPanel.className = 'pf-manager-saved-edit';
+    editPanel.hidden = true;
+
+    /* Champ Nom */
+    const nameRow = document.createElement('div');
+    nameRow.className = 'pf-manager-saved-edit-row';
+    const nameInp = document.createElement('input');
+    nameInp.className = 'pf-manager-group-input';
+    nameInp.type = 'text'; nameInp.placeholder = 'Nom…'; nameInp.maxLength = 60;
+    nameInp.value = entry.name || '';
+    nameRow.appendChild(nameInp);
+
+    /* Champ Description */
+    const descRow = document.createElement('div');
+    descRow.className = 'pf-manager-saved-edit-row';
+    const descInp = document.createElement('textarea');
+    descInp.className = 'pf-manager-group-input pf-manager-saved-desc-inp';
+    descInp.placeholder = 'Description (mots-clés de recherche)…';
+    descInp.maxLength = 400; descInp.rows = 2;
+    descInp.value = entry.desc || '';
+    descRow.appendChild(descInp);
+
+    /* Bouton OK commun */
     const okBtn = document.createElement('button');
     okBtn.className = 'pf-manager-group-save'; okBtn.type = 'button'; okBtn.textContent = 'OK';
-    editRow.appendChild(inp); editRow.appendChild(okBtn);
-    info.appendChild(editRow);
+
+    editPanel.appendChild(nameRow);
+    editPanel.appendChild(descRow);
+    editPanel.appendChild(okBtn);
+    info.appendChild(editPanel);
 
     const actions = document.createElement('div');
     actions.className = 'pf-manager-item-actions';
 
     const editBtn = document.createElement('button');
     editBtn.className = 'pf-manager-item-edit'; editBtn.type = 'button';
-    editBtn.title = 'Renommer'; editBtn.textContent = '✏';
+    editBtn.title = 'Modifier le nom et la description'; editBtn.textContent = '✏';
     editBtn.addEventListener('click', function () {
-      editRow.hidden = !editRow.hidden;
-      if (!editRow.hidden) { inp.focus(); inp.select(); }
+      editPanel.hidden = !editPanel.hidden;
+      if (!editPanel.hidden) { nameInp.focus(); nameInp.select(); }
     });
-    function doRename() {
-      const v = inp.value.trim();
-      if (!v) return;
-      renameSaved(entry.ts, v);
+
+    function doSaveEdit() {
+      const newName = nameInp.value.trim();
+      if (newName && newName !== (entry.name || '')) renameSaved(entry.ts, newName);
+      const newDesc = descInp.value.trim();
+      if (newDesc !== (entry.desc || '')) updateDescSaved(entry.ts, newDesc);
       renderManagerList(managerFilter);
     }
-    okBtn.addEventListener('click', doRename);
-    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doRename(); } });
+    okBtn.addEventListener('click', doSaveEdit);
+    nameInp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); descInp.focus(); } });
+    descInp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSaveEdit(); } });
 
     const delBtn = document.createElement('button');
     delBtn.className = 'pf-saved-del'; delBtn.type = 'button';
@@ -1506,7 +1551,12 @@
     if (Array.isArray(raw.saved)) {
       data.saved = raw.saved.slice(0, IO_MAX_ITEMS)
         .filter(function (e) { return e && typeof e === 'object'; })
-        .map(function (e) { return { name: ioSafeStr(e.name, IO_MAX_TITLE), cmd: ioSafeStr(e.cmd, IO_MAX_CMD) }; })
+        .map(function (e) {
+          const o = { name: ioSafeStr(e.name, IO_MAX_TITLE), cmd: ioSafeStr(e.cmd, IO_MAX_CMD) };
+          if (e.desc) o.desc = ioSafeStr(e.desc, IO_MAX_DESC);
+          if (e.kind === 'script') o.kind = 'script';
+          return o;
+        })
         .filter(function (e) { return e.cmd; });
     }
     if (Array.isArray(raw.favorites)) {
@@ -1548,8 +1598,12 @@
       items: goKeys.map(function (orig) { return { key: 'groupOverrides:' + orig, raw: { orig: orig, display: go[orig] }, title: orig + ' → ' + go[orig], cmd: null }; }) });
 
     const saved = loadSaved();
-    if (saved.length) groups.push({ type: 'saved', label: 'Commandes enregistrées',
-      items: saved.map(function (e) { return { key: 'saved:' + e.ts, raw: e, title: (e.name || e.cmd), cmd: e.cmd, warn: ioIsSensitive(e.cmd) ? '⚠ sensible' : null }; }) });
+    const savedScripts = saved.filter(function (e) { return e.kind === 'script'; });
+    const savedCmds    = saved.filter(function (e) { return e.kind !== 'script'; });
+    if (savedScripts.length) groups.push({ type: 'saved', label: '⚙ Scripts',
+      items: savedScripts.map(function (e) { return { key: 'saved:' + e.ts, raw: e, title: (e.name || e.cmd), cmd: e.cmd, warn: ioIsSensitive(e.cmd) ? '⚠ sensible' : null }; }) });
+    if (savedCmds.length) groups.push({ type: 'saved', label: 'Commandes enregistrées',
+      items: savedCmds.map(function (e) { return { key: 'saved:' + e.ts, raw: e, title: (e.name || e.cmd), cmd: e.cmd, warn: ioIsSensitive(e.cmd) ? '⚠ sensible' : null }; }) });
 
     const favs = [...loadFavorites()];
     if (favs.length) groups.push({ type: 'favorites', label: '★ Favoris',
@@ -1578,8 +1632,20 @@
     if (data.groupOverrides && Object.keys(data.groupOverrides).length) groups.push({ type: 'groupOverrides', label: 'Groupes renommés',
       items: Object.keys(data.groupOverrides).map(function (orig, i) { return { key: 'groupOverrides:' + i, raw: { orig: orig, display: data.groupOverrides[orig] }, title: orig + ' → ' + data.groupOverrides[orig], cmd: null, status: cur.groupOverrides[orig] ? 'dup' : 'new' }; }) });
 
-    if (Array.isArray(data.saved) && data.saved.length) groups.push({ type: 'saved', label: 'Commandes enregistrées',
-      items: data.saved.map(function (e, i) { const c = e.cmd || ''; return { key: 'saved:' + i, raw: e, title: (e.name || c), cmd: c, status: cur.saved.some(function (x) { return x.cmd === e.cmd; }) ? 'dup' : 'new', warn: ioIsRisky(c) ? '⚠ à vérifier' : null }; }) });
+    if (Array.isArray(data.saved) && data.saved.length) {
+      const impScripts = data.saved.filter(function (e) { return e.kind === 'script'; });
+      const impCmds    = data.saved.filter(function (e) { return e.kind !== 'script'; });
+      const mkSavedItem = function (e, i) {
+        const c = e.cmd || '';
+        return { key: 'saved:' + i, raw: e, title: (e.name || c), cmd: c,
+                 status: cur.saved.some(function (x) { return x.cmd === e.cmd; }) ? 'dup' : 'new',
+                 warn: ioIsRisky(c) ? '⚠ à vérifier' : null };
+      };
+      if (impScripts.length) groups.push({ type: 'saved', label: '⚙ Scripts',
+        items: impScripts.map(mkSavedItem) });
+      if (impCmds.length) groups.push({ type: 'saved', label: 'Commandes enregistrées',
+        items: impCmds.map(mkSavedItem) });
+    }
 
     if (Array.isArray(data.favorites) && data.favorites.length) groups.push({ type: 'favorites', label: '★ Favoris',
       items: data.favorites.map(function (c, i) { return { key: 'favorites:' + i, raw: c, title: c, cmd: null, status: cur.favorites.has(c) ? 'dup' : 'new', warn: ioIsRisky(c) ? '⚠ à vérifier' : null }; }) });
@@ -1880,8 +1946,16 @@
       sel.saved.forEach(function (raw) {
         if (!raw || !raw.cmd) return;
         const idx = arr.findIndex(function (e) { return e.cmd === raw.cmd; });
-        if (idx !== -1) { arr[idx] = Object.assign({}, arr[idx], { name: raw.name || arr[idx].name }); }
-        else { arr.unshift({ name: raw.name || '', cmd: raw.cmd, ts: Date.now() + Math.floor(Math.random() * 1e6) }); }
+        const entry = { name: raw.name || '', cmd: raw.cmd };
+        if (raw.desc) entry.desc = raw.desc;
+        if (raw.kind) entry.kind = raw.kind;
+        if (idx !== -1) {
+          entry.ts = arr[idx].ts;   /* préserve le timestamp d'origine */
+          arr[idx] = entry;
+        } else {
+          entry.ts = Date.now() + Math.floor(Math.random() * 1e6);
+          arr.unshift(entry);
+        }
       });
       try { localStorage.setItem(SAVE_KEY, JSON.stringify(arr.slice(0, 100))); } catch (e) {}
     }
@@ -2727,10 +2801,15 @@
     });
 
     loadSaved().forEach(function (entry) {
-      if (entry.name.toLowerCase().indexOf(q) !== -1 ||
+      if ((entry.name || '').toLowerCase().indexOf(q) !== -1 ||
           entry.cmd.toLowerCase().indexOf(q)  !== -1 ||
           (entry.desc || '').toLowerCase().indexOf(q) !== -1) {
-        matches.push({ label: entry.name || entry.cmd, cmd: entry.cmd, desc: entry.desc || null });
+        matches.push({
+          label:    entry.name || entry.cmd,
+          cmd:      entry.cmd,
+          desc:     entry.desc || null,
+          isScript: entry.kind === 'script'
+        });
       }
     });
 
@@ -2762,7 +2841,15 @@
       const row = document.createElement('div');
       row.className = 'pf-ssd-row';
 
-      /* Texte de la commande avec paramètres colorés */
+      /* Étiquette + badge Script le cas échéant */
+      const cmdWrap = document.createElement('span');
+      cmdWrap.className = 'pf-ssd-cmd-wrap';
+      if (item.isScript) {
+        const badge = document.createElement('span');
+        badge.className = 'pf-ssd-script-badge';
+        badge.textContent = 'Script';
+        cmdWrap.appendChild(badge);
+      }
       const cmdEl = document.createElement('span');
       cmdEl.className = 'pf-ssd-cmd';
       item.label.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
@@ -2775,6 +2862,7 @@
           cmdEl.appendChild(document.createTextNode(part));
         }
       });
+      cmdWrap.appendChild(cmdEl);
 
       /* Boutons d'action */
       const actions = document.createElement('div');
@@ -2783,7 +2871,7 @@
       const copyBtn = document.createElement('button');
       copyBtn.className = 'pf-ssd-copy';
       copyBtn.type = 'button';
-      copyBtn.title = 'Copier la commande';
+      copyBtn.title = 'Copier';
       copyBtn.textContent = 'Copier';
       copyBtn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -2795,20 +2883,28 @@
       const injectBtn = document.createElement('button');
       injectBtn.className = 'pf-ssd-inject';
       injectBtn.type = 'button';
-      injectBtn.title = 'Injecter dans le script';
+      injectBtn.title = item.isScript ? 'Ouvrir le script' : 'Injecter dans le script';
       const injectImg = document.createElement('img');
       injectImg.src = '../assets/go.png';
       injectImg.className = 'icon-adaptive';
       injectImg.alt = '→';
       injectBtn.appendChild(injectImg);
       injectBtn.addEventListener('click', function () {
-        insertCommandTextIntoScript(item.cmd);
-        setDescBar(item.desc || getDescForCmd(item.cmd));
+        if (item.isScript) {
+          /* Script multi-ligne → recharge l'éditeur en entier */
+          loadTextIntoEditor('pfScriptEditor', item.cmd);
+          highlightEditor(document.getElementById('pfScriptEditor'));
+          setDescBar(item.desc || null);
+        } else {
+          insertCommandTextIntoScript(item.cmd);
+          setDescBar(item.desc || getDescForCmd(item.cmd));
+        }
+        hideScriptSearchDropdown();
       });
 
       actions.appendChild(copyBtn);
       actions.appendChild(injectBtn);
-      row.appendChild(cmdEl);
+      row.appendChild(cmdWrap);
       row.appendChild(actions);
       dd.appendChild(row);
     });
@@ -3079,6 +3175,66 @@
     }, 'pf-cg-block--fav', false);
   }
 
+  /* Bloc "Scripts" — entrées sauvegardées depuis le Script Builder (kind:'script').
+     Clic charge le script multi-ligne dans le Script Builder. */
+  function makeScriptBlock(scriptList) {
+    const labelEl = document.createElement('span');
+    labelEl.className = 'pf-cg-label';
+    const icon = document.createElement('img');
+    icon.src = '../assets/tool.png';
+    icon.className = 'icon-adaptive pf-cg-label-icon';
+    icon.alt = '';
+    labelEl.appendChild(icon);
+    labelEl.appendChild(document.createTextNode(' Scripts '));
+    const cnt = document.createElement('span');
+    cnt.className = 'pf-cg-count';
+    cnt.textContent = scriptList.length;
+    labelEl.appendChild(cnt);
+
+    return makeCgBlock(labelEl, function (body) {
+      scriptList.forEach(function (entry) {
+        const wrap = document.createElement('div');
+        wrap.className = 'pf-cmd-item-wrap';
+
+        const btn = document.createElement('button');
+        btn.className = 'pf-cmd-item';
+        btn.type = 'button';
+        btn.title = entry.desc ? entry.name + '\n\n' + entry.desc : entry.name || entry.cmd;
+        btn.textContent = entry.name || entry.cmd;
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.pf-cmd-item-wrap.selected').forEach(function (el) { el.classList.remove('selected'); });
+          wrap.classList.add('selected');
+          /* Ouvre le Script Builder et charge le texte multi-ligne */
+          if (!scriptViewActive) showScriptView();
+          loadTextIntoEditor('pfScriptEditor', entry.cmd);
+          highlightEditor(document.getElementById('pfScriptEditor'));
+          setDescBar(entry.desc || null);
+        });
+
+        if (entry.desc) {
+          const descEl = document.createElement('div');
+          descEl.className = 'pf-cmd-item-desc';
+          descEl.textContent = entry.desc;
+          btn.appendChild(descEl);
+        }
+
+        const del = document.createElement('button');
+        del.className = 'pf-saved-del';
+        del.type = 'button';
+        del.title = 'Supprimer';
+        del.textContent = '✕';
+        del.addEventListener('click', function (e) {
+          e.stopPropagation();
+          deleteSaved(entry.ts);
+        });
+
+        wrap.appendChild(btn);
+        wrap.appendChild(del);
+        body.appendChild(wrap);
+      });
+    }, 'pf-cg-block--scripts', false);
+  }
+
   function renderCommandList(filter) {
     const list = document.getElementById('pfCmdList');
     if (!list) return;
@@ -3090,10 +3246,14 @@
     const custom = loadCustomCmds();
 
     /* ── Mes commandes : sauvegardées + custom "mine" ── */
-    const filteredSaved = saved.filter(function (e) {
-      return !q || e.name.toLowerCase().indexOf(q) !== -1 || e.cmd.toLowerCase().indexOf(q) !== -1 ||
+    /* Scripts (kind:'script') → bloc séparé ; commandes simples → bloc « Mes commandes » */
+    const matchesSaved = function (e) {
+      return !q || (e.name || '').toLowerCase().indexOf(q) !== -1 ||
+             e.cmd.toLowerCase().indexOf(q) !== -1 ||
              (e.desc || '').toLowerCase().indexOf(q) !== -1;
-    });
+    };
+    const filteredScripts = saved.filter(function (e) { return e.kind === 'script' && matchesSaved(e); });
+    const filteredSaved   = saved.filter(function (e) { return e.kind !== 'script' && matchesSaved(e); });
     const customMine = custom.filter(function (e) {
       return (e.category === 'mine' || !e.category) &&
              (!q || (e.title || '').toLowerCase().indexOf(q) !== -1 ||
@@ -3102,6 +3262,9 @@
     });
     if (filteredSaved.length > 0 || customMine.length > 0) {
       list.appendChild(makeSavedBlock(filteredSaved, customMine));
+    }
+    if (filteredScripts.length > 0) {
+      list.appendChild(makeScriptBlock(filteredScripts));
     }
 
     /* ── Favoris : étoilés + custom "favorites" ── */
@@ -3566,7 +3729,7 @@
     const name  = (document.getElementById('pfModalName')?.value || '').trim() || cmd.substring(0, 40);
     const desc  = (document.getElementById('pfModalDesc')?.value || '').trim();
     const isFav = document.getElementById('pfModalFav')?.checked;
-    saveCommand(name, cmd, desc);
+    saveCommand(name, cmd, desc, scriptViewActive ? 'script' : null);
     if (isFav) {
       const favs = loadFavorites();
       favs.add(cmd);
