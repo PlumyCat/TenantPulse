@@ -387,24 +387,28 @@
   }
 
   function selectParamTag(span) {
+    /* Désélectionne la balise précédente si elle est différente */
     if (activeParamTag && activeParamTag !== span) {
       activeParamTag.classList.remove('active');
     }
+
+    /* Second clic sur la même balise déjà active → désélectionne (bascule off) */
     if (activeParamTag === span) {
       span.classList.remove('active');
       activeParamTag = null;
       return;
     }
 
-    /* Auto-injection si exactement une bulle existe pour ce param */
+    /* Auto-injection si exactement une bulle existe pour ce param.
+       La balise reste active après injection pour permettre de changer la valeur. */
     const blockId = span.dataset.param;
     if (blockId) {
       const bubbleTexts = document.querySelectorAll('#bubbles-' + blockId + ' .pf-bubble-text');
       if (bubbleTexts.length === 1) {
         span.textContent = bubbleTexts[0].textContent;
         span.classList.add('filled');
-        span.classList.remove('active');
-        activeParamTag = null;
+        span.classList.add('active');
+        activeParamTag = span;   /* reste sélectionnée : cliquer sur → changera la valeur */
         return;
       }
     }
@@ -420,8 +424,9 @@
     }
     activeParamTag.textContent = value;
     activeParamTag.classList.add('filled');
-    activeParamTag.classList.remove('active');
-    activeParamTag = null;
+    /* La balise reste active (classe .active conservée, activeParamTag inchangé)
+       pour permettre d'injecter une autre valeur sans avoir à re-cliquer dessus.
+       Elle se désélectionne uniquement en cliquant ailleurs (mousedown sur l'éditeur). */
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -555,6 +560,8 @@
         activeParamTag = null;
       }
     });
+    /* Note : la désélection globale (clic ailleurs dans l'app) est gérée
+       par le listener document mousedown ci-dessous (initParamTagGlobalDeselect). */
 
     highlightEditor(div);
   }
@@ -4021,6 +4028,21 @@
   renderCommandList();
   initDragDrop();
   initScriptTools();
+
+  /* ── Désélection globale de la balise param active ──
+     Désélectionne activeParamTag dès qu'on clique n'importe où dans la page,
+     SAUF sur :
+       - une balise <param> elle-même (.pf-param-tag)
+       - un bouton d'injection → (.pf-bubble-btn-arrow ou ses enfants)
+     Cela permet de changer la valeur injectée en cliquant sur → plusieurs fois
+     sans avoir à re-cliquer la balise, tout en la désélectionnant dès qu'on
+     clique autre part (éditeur, sidebar, fond, inputs…). */
+  document.addEventListener('mousedown', function (e) {
+    if (!activeParamTag) return;
+    if (e.target.closest('.pf-param-tag') || e.target.closest('.pf-bubble-btn-arrow')) return;
+    activeParamTag.classList.remove('active');
+    activeParamTag = null;
+  });
 
   /* Embarqué : 1ers instantanés poussés au shell dès l'init (anti-course) */
   if (window.self !== window.top) { postPfStats(); postPfStorage(); }
