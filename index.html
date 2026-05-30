@@ -44,9 +44,6 @@
     https://rdap.nic.io 
     https://lookup.icann.org;
   font-src 'self';
-  /* MSAL popup flow : Microsoft redirige dans une popup, pas d'iframe → pas besoin de frame-src.
-     Mais le silent-renew utilise un iframe caché → on autorise login.microsoftonline.com en frame. */
-  frame-src https://login.microsoftonline.com;
   object-src 'none';
   base-uri 'self';
   form-action 'none';
@@ -217,11 +214,6 @@
       <span id="cacheIndicatorLabel">Cache inactif</span>
     </div>
     <div class="nav-badge">v1.0.8</div>
-    <!-- Identité connectée (masqué si non authentifié) -->
-    <button class="tp-auth-chip" id="tpAuthChip" hidden type="button" title="Se déconnecter">
-      <img src="assets/user.png" class="tp-auth-chip-icon" alt="">
-      <span id="tpAuthName"></span>
-    </button>
     <button class="nav-drop-btn" id="btnOpenProfiles">
       <img src="assets/user.png" width="14" height="14" alt=""> Profils <span class="drop-arrow">▾</span>
     </button>
@@ -442,29 +434,8 @@
 
 <!--
   Le JS est externalisé dans tenantpulse.js — script-src 'self' est actif.
-  MSAL.js (Microsoft Authentication Library) hébergé localement pour respecter la CSP.
 -->
-<script src="lib/msal-browser.min.js" defer></script>
 <script src="tenantpulse.js" defer></script>
 <div class="conf-tooltip" id="confTooltip"></div>
-
-<!-- ── Écran de connexion Microsoft (masqué après authentification) ── -->
-<div class="tp-login-overlay" id="tpLoginOverlay" hidden>
-  <div class="tp-login-card">
-    <div class="tp-login-logo">
-      <img src="assets/TP.png" class="tp-login-logo-img" alt="TenantPulse">
-      <div class="tp-login-logo-text">TenantPulse</div>
-      <div class="tp-login-proto">Prototype Interne — RUNMW N1</div>
-    </div>
-    <div class="tp-login-divider"></div>
-    <p class="tp-login-desc">Connectez-vous avec votre compte Microsoft pour accéder à l'outil.</p>
-    <button class="tp-login-btn-ms" id="tpLoginBtn" type="button">
-      <img src="assets/MicrosoftN.png" class="tp-login-ms-icon" alt="">
-      Se connecter avec Microsoft
-    </button>
-    <p class="tp-login-error" id="tpLoginError" hidden></p>
-    <p class="tp-login-note">Aucune donnée n'est transmise à un serveur. L'authentification est traitée directement par Microsoft.</p>
-  </div>
-</div>
 </body>
 </html>
