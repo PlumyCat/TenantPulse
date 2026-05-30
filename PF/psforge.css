@@ -548,7 +548,8 @@ html.embedded nav { display: none; }
 
 /* Blocs pleine largeur (favoris, mes commandes) */
 .pf-cg-block--fav,
-.pf-cg-block--saved {
+.pf-cg-block--saved,
+.pf-cg-block--scripts {
   width: 100%;
   flex-shrink: 0;
 }
@@ -559,6 +560,25 @@ html.embedded nav { display: none; }
 .pf-cg-block--saved .pf-cg-body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* Bloc Scripts — colonne unique (les scripts ont des noms longs + description) */
+.pf-cg-block--scripts .pf-cg-body { display: flex; flex-direction: column; }
+.pf-cg-block--scripts .pf-cmd-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+.pf-cmd-item-desc {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .pf-cg-header {
@@ -1746,6 +1766,27 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 .pf-ssd-row:hover { background: rgba(75,63,190,.05); }
 [data-theme="dark"] .pf-ssd-row:hover { background: rgba(124,116,240,.08); }
 
+/* Wrapper label + badge Script */
+.pf-ssd-cmd-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pf-ssd-script-badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(124,116,240,.18);
+  color: #9a90ff;
+  border: 1px solid rgba(124,116,240,.3);
+}
+
 /* Texte de la commande */
 .pf-ssd-cmd {
   flex: 1;
@@ -1977,7 +2018,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 .pf-manager-builtin-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 7px 14px 6px;
   font-size: 10px;
   font-weight: 800;
@@ -1992,6 +2033,8 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   top: 0;
   z-index: 1;
 }
+/* Titre : prend tout l'espace disponible → badge + flèche collés à droite */
+.pf-manager-builtin-heading > span:first-child { flex: 1; min-width: 0; }
 .pf-manager-builtin-heading:hover { background: rgba(75,63,190,.04); }
 .pf-manager-builtin-count {
   font-size: 10px;
@@ -2173,7 +2216,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 .pf-manager-groups-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 7px 14px 6px;
   font-size: 10px;
   font-weight: 800;
@@ -2189,6 +2232,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   z-index: 1;
   gap: 8px;
 }
+.pf-manager-groups-heading > span:first-child { flex: 1; min-width: 0; }
 .pf-manager-groups-heading:hover { background: rgba(75,63,190,.04); }
 .pf-manager-groups-section.collapsed .pf-manager-builtin-arrow { transform: rotate(-90deg); }
 .pf-manager-groups-section.collapsed .pf-manager-groups-body   { display: none; }
@@ -2232,6 +2276,29 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   min-width: 0;
 }
 .pf-manager-group-edit-row[hidden] { display: none !important; }
+
+/* Panneau d'édition Nom + Description pour les commandes/scripts enregistrés */
+.pf-manager-saved-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.pf-manager-saved-edit[hidden] { display: none !important; }
+.pf-manager-saved-edit-row {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.pf-manager-saved-desc-inp {
+  resize: vertical;
+  min-height: 44px;
+  font-family: var(--font) !important;
+  font-size: var(--text-xs) !important;
+  line-height: 1.4;
+}
 .pf-manager-group-input {
   flex: 1;
   min-width: 0;
