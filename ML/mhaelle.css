@@ -75,6 +75,16 @@ body { line-height: 1.55; }
    ───────────────────────────────────────────────────────────── */
 .ml-tab-link { text-decoration: none; }
 
+/* Sidebar : en-tête + note alignés sur le corps du formulaire (16px) */
+.sb-head {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.sb-body .sb-privacy-note {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 /* ─────────────────────────────────────────────────────────────
    2. Panneau gauche — textarea (reprend le style de .input-wrap input)
    ───────────────────────────────────────────────────────────── */
