@@ -676,6 +676,7 @@ input[type="file"] { display: none; }
 #result {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 16px;
 }
 
@@ -683,15 +684,17 @@ input[type="file"] { display: none; }
    23. État vide du panneau résultats
    ───────────────────────────────────────────────────────────── */
 .result-empty {
+  flex: 1;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  min-height: 280px; color: var(--muted);
+  color: var(--muted);
   text-align: center; gap: 12px; padding: 40px 24px;
-  background: var(--surface); border: 1px dashed var(--border); border-radius: 12px;
+  background: var(--surface); border-radius: 14px;
+  opacity: .3;
 }
-.result-empty-icon  { font-size: 2.4rem; opacity: .45; line-height: 1; }
-.result-empty-title { font-size: var(--text-base); font-weight: 600; color: var(--soft); }
-.result-empty-hint  { font-size: var(--text-xs); max-width: 260px; line-height: 1.55; }
+.result-empty-icon  { font-size: 2.4rem; line-height: 1; }
+.result-empty-title { font-size: var(--text-lg); font-weight: 500; color: var(--text); }
+.result-empty-hint  { font-size: var(--text-sm); max-width: 260px; line-height: 1.55; }
 
 /* ─────────────────────────────────────────────────────────────
    24. Mode embarqué (iframe dans TenantPulse)
