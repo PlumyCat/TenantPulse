@@ -432,7 +432,7 @@ function interpretSCL(scl) {
   if (isNaN(n)) return "Non évalué";
   if (n <= 1) return "Très probablement légitime";
   if (n <= 4) return "Probablement légitime / gris";
-  if (n <= 6) return "Suspect — modération possible";
+  if (n <= 6) return "Suspect, modération possible";
   if (n <= 8) return "Probablement spam";
   return "Très probablement spam / blocage";
 }
@@ -523,7 +523,7 @@ function analyseUrls(urls, fromDomain) {
 
     if (/^\d+\.\d+\.\d+\.\d+$/.test(d)) {
       add("URL pointant vers une IP", -22, 'danger',
-          "Lien pointant vers une adresse IP brute — très suspect en contexte email.");
+          "Lien pointant vers une adresse IP brute : très suspect en contexte email.");
     }
     if (URL_SHORTENERS.some(s => d === s || d.endsWith("." + s))) {
       add("URL raccourcie", -15, 'warn',
@@ -535,7 +535,7 @@ function analyseUrls(urls, fromDomain) {
     }
     if (hasHomoglyph(d)) {
       add("Homoglyphe dans le domaine de lien", -30, 'danger',
-          "Mélange de caractères latins et d'alphabets visuellement similaires (cyrillique/grec) — usurpation probable.");
+          "Mélange de caractères latins et d'alphabets visuellement similaires (cyrillique/grec) : usurpation probable.");
     }
     // Typosquatting de marque dans le lien
     const brand = BRAND_KEYWORDS.find(b => lu.includes(b));
@@ -560,7 +560,7 @@ function analyseUrls(urls, fromDomain) {
 
   if (uniqueDomains.length > 3) {
     add("Nombreux domaines distincts", -10, 'warn',
-        `${uniqueDomains.length} domaines différents — indicateur de campagne automatisée.`);
+        `${uniqueDomains.length} domaines différents : indicateur de campagne automatisée.`);
   }
 
   return { domains: uniqueDomains, signals };
@@ -595,7 +595,7 @@ function analyseSubject(subject) {
     signals.push({
       label: "Sujet en MAJUSCULES",
       axis: 'content', weight: -6, level: 'info',
-      explanation: "Sujet contient des passages en majuscules — technique classique d'attention."
+      explanation: "Sujet contient des passages en majuscules : technique classique d'attention."
     });
   }
 
@@ -604,7 +604,7 @@ function analyseSubject(subject) {
     signals.push({
       label: "Caractères Unicode trompeurs dans le sujet",
       axis: 'content', weight: -12, level: 'warn',
-      explanation: "Mélange d'alphabets dans le sujet — souvent utilisé pour contourner les filtres."
+      explanation: "Mélange d'alphabets dans le sujet : souvent utilisé pour contourner les filtres."
     });
   }
 
@@ -622,7 +622,7 @@ function analyseSubject(subject) {
     signals.push({
       label: "Décodage MIME incomplet du sujet",
       axis: 'content', weight: -4, level: 'info',
-      explanation: "Encodage MIME résiduel — peut masquer le vrai sujet."
+      explanation: "Encodage MIME résiduel : peut masquer le vrai sujet."
     });
   }
 
@@ -730,7 +730,7 @@ function copyReport(type) {
   if (!text) { alert("Lancez d'abord une analyse."); return; }
   navigator.clipboard.writeText(text).then(
     () => alert("Copié dans le presse-papiers."),
-    () => alert("Copie impossible — sélectionnez manuellement le texte du rapport.")
+    () => alert("Copie impossible : sélectionnez manuellement le texte du rapport.")
   );
 }
 
@@ -826,17 +826,17 @@ function analyse() {
   if (spf === "fail") signals.push({ label: "SPF FAIL", axis: 'auth', weight: -32, level: 'danger',
     explanation: "Le serveur d'envoi n'est pas autorisé par le domaine expéditeur (SPF)." });
   else if (spf === "softfail") signals.push({ label: "SPF SOFTFAIL", axis: 'auth', weight: -12, level: 'warn',
-    explanation: "SPF en échec partiel — peut être un forwarding légitime ou une usurpation." });
+    explanation: "SPF en échec partiel : peut être un forwarding légitime ou une usurpation." });
   else if (spf === "pass") signals.push({ label: "SPF pass", axis: 'auth', weight: +3, level: 'info',
     explanation: "Le serveur d'envoi est autorisé par le domaine." });
 
   if (dkim === "fail") signals.push({ label: "DKIM FAIL", axis: 'auth', weight: -22, level: 'danger',
-    explanation: "Signature DKIM invalide ou absente — intégrité non garantie." });
+    explanation: "Signature DKIM invalide ou absente : intégrité non garantie." });
   else if (dkim === "pass") signals.push({ label: "DKIM pass", axis: 'auth', weight: +4, level: 'info',
     explanation: "Signature DKIM valide." });
 
   if (dmarc === "fail") signals.push({ label: "DMARC FAIL", axis: 'auth', weight: -28, level: 'danger',
-    explanation: "Politique DMARC non respectée — risque élevé d'usurpation du domaine." });
+    explanation: "Politique DMARC non respectée : risque élevé d'usurpation du domaine." });
   else if (dmarc === "pass") signals.push({ label: "DMARC pass", axis: 'auth', weight: +5, level: 'info',
     explanation: "Alignement DMARC validé." });
 
@@ -846,14 +846,14 @@ function analyse() {
   if (arc === "pass") signals.push({ label: "ARC chain valide", axis: 'auth', weight: +3, level: 'info',
     explanation: "Chaîne ARC préservée à travers les intermédiaires." });
   else if (arc === "fail") signals.push({ label: "ARC FAIL", axis: 'auth', weight: -8, level: 'warn',
-    explanation: "Chaîne ARC rompue — l'authentification d'origine n'a pas survécu au routage." });
+    explanation: "Chaîne ARC rompue : l'authentification d'origine n'a pas survécu au routage." });
 
   // Conflit entre plusieurs blocs Authentication-Results (injection possible)
   const conflict = authResultsConflict(authBlocks);
   if (conflict) signals.push({
     label: "Conflit entre blocs Authentication-Results",
     axis: 'auth', weight: -20, level: 'danger',
-    explanation: `Plusieurs résultats ${conflict.toUpperCase()} contradictoires — un en-tête a pu être injecté en amont.`
+    explanation: `Plusieurs résultats ${conflict.toUpperCase()} contradictoires : un en-tête a pu être injecté en amont.`
   });
 
   // Microsoft SCL / CAT
@@ -895,7 +895,7 @@ function analyse() {
   }
   // Homoglyphe / Punycode dans le domaine From lui-même = catastrophique
   if (hasHomoglyph(fromDomain)) signals.push({ label: "Homoglyphe dans le domaine From", axis: 'identity', weight: -35, level: 'danger',
-    explanation: "Le domaine expéditeur lui-même mélange des alphabets — usurpation quasi certaine." });
+    explanation: "Le domaine expéditeur lui-même mélange des alphabets : usurpation quasi certaine." });
   if (hasPunycode(fromDomain)) signals.push({ label: "Domaine From en Punycode (IDN)", axis: 'identity', weight: -20, level: 'warn',
     explanation: "Le domaine expéditeur est un IDN (xn--), à vérifier visuellement." });
   // Message-ID désaligné
@@ -921,7 +921,7 @@ function analyse() {
   }
   if (receivedHops.length > 8) {
     signals.push({ label: "Chaîne SMTP exceptionnellement longue", axis: 'routing', weight: -8, level: 'warn',
-      explanation: `${receivedHops.length} hops — peut indiquer un routage tortueux destiné à brouiller la piste.` });
+      explanation: `${receivedHops.length} hops : peut indiquer un routage tortueux destiné à brouiller la piste.` });
   }
   // Cohérence Date header vs Received
   const dt = temporalDelta(date, receivedHops);
@@ -979,7 +979,7 @@ Objet : ${subject}
 Date : ${date}
 Expéditeur : ${from}
 ${replyTo !== "Non trouvé" ? "Reply-To : " + replyTo + "\n" : ""}
-Score de confiance : ${score}/100 — ${verdict} (fiabilité détection : ${confidence})
+Score de confiance : ${score}/100, ${verdict} (fiabilité détection : ${confidence})
 
 Détail par axe :
 - Authentification : ${subscores.auth}/100
@@ -1138,7 +1138,7 @@ Score global: ${score}/100 | Verdict: ${verdict} | Fiabilité détection: ${conf
     });
   }
   if (originIP !== "inconnu") {
-    smtpBody.appendChild(el('h3', { text: "IP d'origine — investigation" }));
+    smtpBody.appendChild(el('h3', { text: "IP d'origine : investigation" }));
     smtpBody.appendChild(el('div', { class: 'tools-grid' }, ...toolLinks("ip", originIP)));
   }
   smtpDetails.appendChild(smtpBody);
@@ -1185,7 +1185,7 @@ Score global: ${score}/100 | Verdict: ${verdict} | Fiabilité détection: ${conf
   authDetails.appendChild(el('summary', { text: 'Authentification' }));
   const authBody = el('div', { class: 'card-details-body' });
   authBlocks.forEach((b, i) => {
-    authBody.appendChild(el('h3', { text: `Bloc ${i + 1} — ${b.host}` }));
+    authBody.appendChild(el('h3', { text: `Bloc ${i + 1} : ${b.host}` }));
     authBody.appendChild(row("SPF", b.spf, b.spf));
     authBody.appendChild(row("DKIM", b.dkim, b.dkim));
     authBody.appendChild(row("DMARC", b.dmarc, b.dmarc));
@@ -1200,8 +1200,8 @@ Score global: ${score}/100 | Verdict: ${verdict} | Fiabilité détection: ${conf
   const msDetails = el('details', { class: 'card-details' });
   msDetails.appendChild(el('summary', { text: 'Microsoft / EOP' }));
   const msBody = el('div', { class: 'card-details-body' },
-    row("SCL", ms.SCL + " — " + interpretSCL(ms.SCL)),
-    row("CAT", ms.CAT + " — " + catType),
+    row("SCL", ms.SCL + " : " + interpretSCL(ms.SCL)),
+    row("CAT", ms.CAT + " : " + catType),
     row("SFV", ms.SFV),
     row("CIP", ms.CIP),
     row("Pays", ms.CTRY),
