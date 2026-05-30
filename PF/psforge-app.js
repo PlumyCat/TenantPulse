@@ -92,9 +92,9 @@
     { s: 'Microsoft 365', g: 'Groupes',                     cmd: 'New-MgGroupMember -GroupId <groupid> -DirectoryObjectId <objectid>' },
     { s: 'Microsoft 365', g: 'Groupes',                     cmd: 'Remove-MgGroupMemberByRef -GroupId <groupid> -DirectoryObjectId <objectid>' },
 
-    { s: 'Microsoft 365', g: 'Appareils — Intune',          cmd: 'Get-MgUserRegisteredDevice -UserId <upn>' },
-    { s: 'Microsoft 365', g: 'Appareils — Intune',          cmd: 'Get-MgDeviceManagementManagedDevice -Filter "userPrincipalName eq \'<upn>\'"' },
-    { s: 'Microsoft 365', g: 'Appareils — Intune',          cmd: 'Invoke-MgRetireDeviceManagementManagedDevice -ManagedDeviceId <id>' },
+    { s: 'Microsoft 365', g: 'Appareils Intune',          cmd: 'Get-MgUserRegisteredDevice -UserId <upn>' },
+    { s: 'Microsoft 365', g: 'Appareils Intune',          cmd: 'Get-MgDeviceManagementManagedDevice -Filter "userPrincipalName eq \'<upn>\'"' },
+    { s: 'Microsoft 365', g: 'Appareils Intune',          cmd: 'Invoke-MgRetireDeviceManagementManagedDevice -ManagedDeviceId <id>' },
 
     { s: 'Microsoft 365', g: 'Teams',                       cmd: 'Get-Team -User <upn>' },
     { s: 'Microsoft 365', g: 'Teams',                       cmd: 'Get-TeamUser -GroupId <groupid>' },
@@ -117,7 +117,7 @@
   /* Groupes intégrés par section */
   const BUILTIN_GROUPS = {
     windows:      ['Intégrité système','Réseau','Services & Processus','Nettoyage & Espace disque','Sécurité locale','Windows Update'],
-    microsoft365: ['Utilisateur','Exchange Online','MFA / Sécurité','Licences','Groupes','Appareils — Intune','Teams'],
+    microsoft365: ['Utilisateur','Exchange Online','MFA / Sécurité','Licences','Groupes','Appareils Intune','Teams'],
   };
 
   function loadCustomGroups()  { try { return JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]'); } catch { return []; } }
@@ -203,9 +203,12 @@
     try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); }
     catch { return []; }
   }
-  function saveCommand(name, cmdText) {
+  function saveCommand(name, cmdText, desc, kind) {
     const saved = loadSaved();
-    saved.unshift({ name, cmd: cmdText, ts: Date.now() });
+    const entry = { name, cmd: cmdText, ts: Date.now() };
+    if (desc) entry.desc = desc;
+    if (kind) entry.kind = kind;   /* 'script' = enregistré depuis le Script Builder */
+    saved.unshift(entry);
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(saved.slice(0, 100))); } catch {}
   }
   function deleteSaved(ts) {
@@ -308,23 +311,58 @@
 
   function setDescBar(desc) {
     currentCmdDesc = desc || null;
-    [
-      { bar: 'pfDescBar',       content: 'pfDescContent'       },
-      { bar: 'pfScriptDescBar', content: 'pfScriptDescContent' },
-    ].forEach(function (ids) {
-      const bar     = document.getElementById(ids.bar);
-      const content = document.getElementById(ids.content);
-      if (!bar) return;
+    /* Vue commande simple : barre dépliable sous la toolbar. */
+    const bar     = document.getElementById('pfDescBar');
+    const content = document.getElementById('pfDescContent');
+    if (bar) {
       if (desc) {
         bar.hidden = false;
-        /* Garde le texte synchronisé même si le panneau est déjà ouvert
-           (sinon la description reste celle de la commande précédente). */
         if (content && !content.hidden) content.textContent = desc;
       } else {
         bar.hidden = true;
         if (content) { content.hidden = true; content.textContent = ''; }
       }
-    });
+    }
+    /* Vue Script Builder : bouton toolbar + panneau flottant. */
+    updateScriptDescUI();
+  }
+
+  /* Active/désactive le bouton Description de la toolbar selon la description
+     courante, et synchronise le panneau s'il est ouvert. */
+  function updateScriptDescUI() {
+    const btn   = document.getElementById('pfScriptDescBtn');
+    const panel = document.getElementById('pfScriptDescPanel');
+    const text  = document.getElementById('pfScriptDescText');
+    if (btn) {
+      btn.disabled = !currentCmdDesc;
+      btn.title = currentCmdDesc ? 'Voir la description du script' : 'Aucune description pour ce script';
+      if (!currentCmdDesc) btn.classList.remove('active');
+    }
+    if (panel) {
+      if (!currentCmdDesc) { panel.hidden = true; if (text) text.textContent = ''; }
+      else if (!panel.hidden && text) { text.textContent = currentCmdDesc; }
+    }
+  }
+
+  function toggleScriptDescPanel() {
+    const panel = document.getElementById('pfScriptDescPanel');
+    const btn   = document.getElementById('pfScriptDescBtn');
+    const text  = document.getElementById('pfScriptDescText');
+    if (!panel || !currentCmdDesc) return;
+    if (panel.hidden) {
+      if (text) text.textContent = currentCmdDesc;
+      panel.hidden = false;
+      if (btn) btn.classList.add('active');
+    } else {
+      panel.hidden = true;
+      if (btn) btn.classList.remove('active');
+    }
+  }
+  function closeScriptDescPanel() {
+    const panel = document.getElementById('pfScriptDescPanel');
+    const btn   = document.getElementById('pfScriptDescBtn');
+    if (panel) panel.hidden = true;
+    if (btn) btn.classList.remove('active');
   }
 
   function toggleDescContent(contentId) {
@@ -827,7 +865,10 @@
     const overrides  = loadOverrides();
     const hasContent = { custom: false, builtin: false, extra: false };
 
-    /* ── Section : commandes personnalisées ── */
+    /* ── Section : commandes personnalisées ──
+       Un seul parent repliable regroupant les sous-catégories (Mes commandes,
+       Système Windows, Microsoft 365, Favoris). Évite la confusion avec les
+       sections intégrées qui portent les mêmes noms, et permet de replier. */
     const groupOrder  = ['mine', 'windows', 'microsoft365', 'favorites'];
     const groupLabels = { mine: 'Mes commandes', windows: 'Système Windows', microsoft365: 'Microsoft 365', favorites: '★ Favoris' };
     const groups      = { mine: [], windows: [], microsoft365: [], favorites: [] };
@@ -839,24 +880,26 @@
       (groups[e.category || 'mine'] || groups.mine).push(e);
     });
 
-    groupOrder.forEach(function (cat) {
-      const items = groups[cat];
-      if (!items.length) return;
+    const customTotal = groupOrder.reduce(function (n, cat) { return n + groups[cat].length; }, 0);
+    if (customTotal) {
       hasContent.custom = true;
-
-      const section = document.createElement('div');
-      section.className = 'pf-manager-section';
-
-      const heading = document.createElement('div');
-      heading.className   = 'pf-manager-section-heading';
-      heading.textContent = groupLabels[cat];
-      section.appendChild(heading);
-
-      items.forEach(function (entry) {
-        section.appendChild(buildManagerCustomRow(entry));
-      });
-      list.appendChild(section);
-    });
+      const customSec = buildManagerCollapsible(
+        'Commandes personnalisées', customTotal, true,
+        function (body) {
+          groupOrder.forEach(function (cat) {
+            const items = groups[cat];
+            if (!items.length) return;
+            const grpHeading = document.createElement('div');
+            grpHeading.className   = 'pf-manager-builtin-group-heading';
+            grpHeading.textContent = groupLabels[cat];
+            body.appendChild(grpHeading);
+            items.forEach(function (entry) { body.appendChild(buildManagerCustomRow(entry)); });
+          });
+        }
+      );
+      customSec.classList.add('pf-manager-builtin-section--custom'); /* accent bleu */
+      list.appendChild(customSec);
+    }
 
     /* ── Section : commandes enregistrées (modale Sauvegarder) ── */
     const savedAll = loadSaved().filter(function (e) {
@@ -965,7 +1008,7 @@
         hd.className = 'pf-manager-groups-heading';
         hd.addEventListener('click', function(){ sec.classList.toggle('collapsed'); });
         const hdTitle = document.createElement('span');
-        hdTitle.textContent = 'Groupes — ' + sLabel;
+        hdTitle.textContent = 'Groupes · ' + sLabel;
         const hdArrow = document.createElement('span');
         hdArrow.className = 'pf-manager-builtin-arrow';
         hdArrow.textContent = '▾';
@@ -1147,6 +1190,12 @@
         } else if (part) { cmdEl.appendChild(document.createTextNode(part)); }
       });
       info.appendChild(cmdEl);
+    }
+
+    if (entry.desc) {
+      const descEl = document.createElement('div');
+      descEl.className = 'pf-manager-item-desc'; descEl.textContent = entry.desc;
+      info.appendChild(descEl);
     }
 
     const editRow = document.createElement('div');
@@ -2141,6 +2190,12 @@
     }
 
     offsetToCaret(div, caretOffset);
+
+    /* Script Builder : rafraîchir la gouttière et, si ouvert, la recherche. */
+    if (div.id === 'pfScriptEditor') {
+      refreshScriptGutter();
+      if (findOpen) runFind(false);
+    }
   }
 
   /* Point d'entrée : recolore un éditeur en préservant le curseur. */
@@ -2150,6 +2205,453 @@
     const off  = caretToOffset(div);
     const segs = serializeEditor(div);
     renderHighlighted(div, segs, off);
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     SCRIPT BUILDER — GOUTTIÈRE (numéros de ligne) + FIND/REPLACE
+     ════════════════════════════════════════════════════════════ */
+
+  function scriptEditorEl() { return document.getElementById('pfScriptEditor'); }
+  function scriptGutterEl() { return document.getElementById('pfScriptGutter'); }
+
+  /* ── Modèle segments ↔ lignes (préserve couleurs et balises param) ── */
+  function segmentsToLines(segs) {
+    const lines = [[]];
+    segs.forEach(function (s) {
+      if (s.t === 'nl') lines.push([]);
+      else lines[lines.length - 1].push(s);
+    });
+    return lines;
+  }
+  function linesToSegments(lines) {
+    const segs = [];
+    lines.forEach(function (line, i) {
+      if (i > 0) segs.push({ t: 'nl' });
+      line.forEach(function (s) { segs.push(s); });
+    });
+    return segs;
+  }
+  function getScriptLines() {
+    const ed = scriptEditorEl();
+    return ed ? segmentsToLines(serializeEditor(ed)) : [[]];
+  }
+  /* Applique un nouveau tableau de lignes (réutilise le pipeline coloré). */
+  function setScriptLines(lines, caretOffset) {
+    const ed = scriptEditorEl();
+    if (!ed) return;
+    if (!lines.length) lines = [[]];
+    renderHighlighted(ed, linesToSegments(lines), caretOffset != null ? caretOffset : null);
+  }
+  function scriptLineCount() {
+    const ed = scriptEditorEl();
+    if (!ed) return 1;
+    let n = 1;
+    serializeEditor(ed).forEach(function (s) { if (s.t === 'nl') n++; });
+    return n;
+  }
+
+  /* ── Gouttière ── */
+  let gutterSel    = new Set();   /* indices de lignes sélectionnées */
+  let gutterAnchor = null;        /* ancre pour Shift+clic */
+  let dragLines    = null;        /* indices en cours de glisser-déposer */
+
+  function refreshScriptGutter() {
+    const ed = scriptEditorEl();
+    const g  = scriptGutterEl();
+    if (!ed || !g) return;
+    const n = scriptLineCount();
+    /* purge des sélections hors limites */
+    Array.from(gutterSel).forEach(function (i) { if (i >= n) gutterSel.delete(i); });
+    g.replaceChildren();
+    for (let i = 0; i < n; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'pf-gutter-num' + (gutterSel.has(i) ? ' selected' : '');
+      cell.textContent = String(i + 1);
+      cell.dataset.line = String(i);
+      cell.setAttribute('draggable', 'true');
+      g.appendChild(cell);
+    }
+    g.scrollTop = ed.scrollTop;
+    refreshLineHighlight();
+  }
+
+  /* Bandes de surbrillance pleine largeur pour les lignes sélectionnées.
+     Réutilise la géométrie des cellules de gouttière (déjà alignées au pixel
+     près sur les lignes de l'éditeur) ; la couche est translatée en sync avec
+     le défilement vertical de l'éditeur. */
+  function refreshLineHighlight() {
+    const ed    = scriptEditorEl();
+    const g     = scriptGutterEl();
+    const inner = document.getElementById('pfScriptLineHLInner');
+    if (!ed || !g || !inner) return;
+    inner.replaceChildren();
+    gutterSel.forEach(function (i) {
+      const cell = g.children[i];
+      if (!cell) return;
+      const band = document.createElement('div');
+      band.className = 'pf-line-hl-band';
+      band.style.top    = cell.offsetTop + 'px';
+      band.style.height = cell.offsetHeight + 'px';
+      inner.appendChild(band);
+    });
+    inner.style.transform = 'translateY(' + (-ed.scrollTop) + 'px)';
+  }
+  function syncLineHighlightScroll() {
+    const ed    = scriptEditorEl();
+    const inner = document.getElementById('pfScriptLineHLInner');
+    if (ed && inner) inner.style.transform = 'translateY(' + (-ed.scrollTop) + 'px)';
+  }
+
+  function clearGutterSelection() {
+    if (!gutterSel.size) return;
+    gutterSel.clear(); gutterAnchor = null;
+    refreshScriptGutter();
+  }
+
+  function deleteSelectedLines() {
+    if (!gutterSel.size) return;
+    const lines = getScriptLines();
+    const keep  = lines.filter(function (_, i) { return !gutterSel.has(i); });
+    gutterSel.clear(); gutterAnchor = null;
+    setScriptLines(keep.length ? keep : [[]]);
+  }
+
+  function onGutterClick(e) {
+    const cell = e.target.closest('.pf-gutter-num');
+    if (!cell) return;
+    const i = +cell.dataset.line;
+    if (e.shiftKey && gutterAnchor != null) {
+      const lo = Math.min(gutterAnchor, i), hi = Math.max(gutterAnchor, i);
+      gutterSel.clear();
+      for (let k = lo; k <= hi; k++) gutterSel.add(k);
+    } else if (e.ctrlKey || e.metaKey) {
+      if (gutterSel.has(i)) gutterSel.delete(i); else gutterSel.add(i);
+      gutterAnchor = i;
+    } else {
+      gutterSel.clear(); gutterSel.add(i); gutterAnchor = i;
+    }
+    refreshScriptGutter();
+  }
+
+  function clearDropMarkers() {
+    const g = scriptGutterEl();
+    if (!g) return;
+    g.querySelectorAll('.drop-before, .drop-after').forEach(function (c) {
+      c.classList.remove('drop-before', 'drop-after');
+    });
+  }
+
+  function onGutterDragStart(e) {
+    const cell = e.target.closest('.pf-gutter-num');
+    if (!cell) return;
+    const i = +cell.dataset.line;
+    if (!gutterSel.has(i)) { gutterSel.clear(); gutterSel.add(i); gutterAnchor = i; refreshScriptGutter(); }
+    dragLines = Array.from(gutterSel).sort(function (a, b) { return a - b; });
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragLines.join(',')); } catch (_) {}
+    scriptGutterEl().querySelectorAll('.pf-gutter-num').forEach(function (c) {
+      if (gutterSel.has(+c.dataset.line)) c.classList.add('dragging');
+    });
+  }
+  function onGutterDragOver(e) {
+    if (!dragLines) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clearDropMarkers();
+    const cell = e.target.closest('.pf-gutter-num');
+    if (!cell) return;
+    const r = cell.getBoundingClientRect();
+    const after = (e.clientY - r.top) > r.height / 2;
+    cell.classList.add(after ? 'drop-after' : 'drop-before');
+  }
+  function onGutterDragLeave() { clearDropMarkers(); }
+  function onGutterDrop(e) {
+    if (!dragLines) return;
+    e.preventDefault();
+    const cell = e.target.closest('.pf-gutter-num');
+    let boundary;
+    if (!cell) {
+      boundary = scriptLineCount();
+    } else {
+      const idx = +cell.dataset.line;
+      const r = cell.getBoundingClientRect();
+      boundary = ((e.clientY - r.top) > r.height / 2) ? idx + 1 : idx;
+    }
+    const moved     = dragLines.slice();
+    const movedSet  = new Set(moved);
+    const lines     = getScriptLines();
+    const movedRows = moved.map(function (i) { return lines[i]; });
+    const remaining = lines.filter(function (_, i) { return !movedSet.has(i); });
+    let shift = 0; moved.forEach(function (i) { if (i < boundary) shift++; });
+    const insertAt = boundary - shift;
+    remaining.splice.apply(remaining, [insertAt, 0].concat(movedRows));
+    gutterSel = new Set();
+    for (let k = 0; k < movedRows.length; k++) gutterSel.add(insertAt + k);
+    gutterAnchor = insertAt;
+    dragLines = null;
+    setScriptLines(remaining);
+  }
+  function onGutterDragEnd() {
+    dragLines = null;
+    clearDropMarkers();
+    const g = scriptGutterEl();
+    if (g) g.querySelectorAll('.dragging').forEach(function (c) { c.classList.remove('dragging'); });
+  }
+
+  /* ── Find / Replace (CSS Custom Highlight API) ── */
+  let findOpen   = false;
+  let findMatches = [];           /* [{start,end}] en offsets logiques */
+  let findIndex   = -1;
+  const findOpts  = { case: false, word: false, regex: false };
+
+  function findSupportsHighlight() {
+    return typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight !== 'undefined';
+  }
+  function findEl(id) { return document.getElementById(id); }
+
+  /* Texte source aligné sur les offsets logiques (nl = 1 char, param = son texte). */
+  function findSourceText() {
+    const ed = scriptEditorEl();
+    if (!ed) return '';
+    let t = '';
+    serializeEditor(ed).forEach(function (s) {
+      if (s.t === 'nl') t += '\n';
+      else if (s.t === 'param') t += s.text;
+      else t += s.v;
+    });
+    return t;
+  }
+
+  /* Position (node, offset) DOM correspondant à un offset logique. */
+  function findLocate(div, target) {
+    let remaining = target;
+    const kids = div.childNodes;
+    for (let i = 0; i < kids.length; i++) {
+      const ch = kids[i];
+      if (ch.nodeType === Node.TEXT_NODE) {
+        if (remaining <= ch.nodeValue.length) return { node: ch, offset: remaining };
+        remaining -= ch.nodeValue.length;
+      } else if (ch.nodeName === 'BR') {
+        if (ch.classList && ch.classList.contains('pf-eol')) continue;
+        if (remaining <= 0) return { node: div, offset: i };
+        remaining -= 1;
+      } else if (ch.classList && ch.classList.contains('pf-param-tag')) {
+        const len = ch.textContent.length;
+        if (remaining <= 0)   return { node: div, offset: i };
+        if (remaining <= len) return { node: div, offset: i + 1 };
+        remaining -= len;
+      } else {
+        const len = ch.textContent.length;
+        if (remaining <= len) return { node: ch.firstChild || ch, offset: remaining };
+        remaining -= len;
+      }
+    }
+    return { node: div, offset: kids.length };
+  }
+  function findBuildRange(start, end) {
+    const div = scriptEditorEl();
+    const a = findLocate(div, start), b = findLocate(div, end);
+    const r = document.createRange();
+    r.setStart(a.node, a.offset);
+    r.setEnd(b.node, b.offset);
+    return r;
+  }
+
+  function findBuildRegex(query) {
+    if (!query) return null;
+    let src = findOpts.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (findOpts.word) src = '\\b(?:' + src + ')\\b';
+    try { return new RegExp(src, 'g' + (findOpts.case ? '' : 'i')); }
+    catch (e) { return null; }
+  }
+
+  function findClearHighlights() {
+    if (!findSupportsHighlight()) return;
+    CSS.highlights.delete('pf-find');
+    CSS.highlights.delete('pf-find-current');
+  }
+  function findApplyHighlights() {
+    if (!findSupportsHighlight()) return;
+    const all = new Highlight();
+    findMatches.forEach(function (m) {
+      try { all.add(findBuildRange(m.start, m.end)); } catch (e) {}
+    });
+    all.priority = 0;
+    CSS.highlights.set('pf-find', all);
+    const cur = new Highlight();
+    if (findIndex >= 0 && findMatches[findIndex]) {
+      try { cur.add(findBuildRange(findMatches[findIndex].start, findMatches[findIndex].end)); } catch (e) {}
+    }
+    cur.priority = 1;
+    CSS.highlights.set('pf-find-current', cur);
+  }
+
+  function findUpdateCount() {
+    const c = findEl('pfFindCount');
+    if (c) c.textContent = findMatches.length ? (findIndex + 1) + '/' + findMatches.length : '0/0';
+  }
+  function findScrollTo(i) {
+    const m = findMatches[i];
+    if (!m) return;
+    const ed = scriptEditorEl();
+    let r; try { r = findBuildRange(m.start, m.end); } catch (e) { return; }
+    const rect = r.getBoundingClientRect(), erect = ed.getBoundingClientRect();
+    if (rect.height || rect.width) {
+      if (rect.top < erect.top + 4 || rect.bottom > erect.bottom - 4)
+        ed.scrollTop += (rect.top - erect.top) - ed.clientHeight / 2 + rect.height / 2;
+      if (rect.left < erect.left + 4 || rect.right > erect.right - 4)
+        ed.scrollLeft += (rect.left - erect.left) - ed.clientWidth / 2 + rect.width / 2;
+    }
+    const g = scriptGutterEl(); if (g) g.scrollTop = ed.scrollTop;
+  }
+
+  function runFind(doScroll) {
+    const input = findEl('pfFindInput');
+    const q = input ? input.value : '';
+    findClearHighlights();
+    findMatches = []; findIndex = -1;
+    if (input) input.classList.remove('pf-find-error');
+    if (!q) { findUpdateCount(); return; }
+    const re = findBuildRegex(q);
+    if (!re) { if (input) input.classList.add('pf-find-error'); findUpdateCount(); return; }
+    const text = findSourceText();
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m[0] === '') { re.lastIndex++; continue; }
+      findMatches.push({ start: m.index, end: m.index + m[0].length });
+      if (findMatches.length > 5000) break; /* garde-fou */
+    }
+    if (findMatches.length) findIndex = 0;
+    findApplyHighlights();
+    findUpdateCount();
+    if (doScroll && findIndex >= 0) findScrollTo(findIndex);
+  }
+  function findNav(delta) {
+    if (!findMatches.length) return;
+    findIndex = (findIndex + delta + findMatches.length) % findMatches.length;
+    findApplyHighlights();
+    findUpdateCount();
+    findScrollTo(findIndex);
+  }
+
+  function findExpandRepl(tpl, groups) {
+    if (!findOpts.regex) return tpl;
+    return tpl.replace(/\$(\d+)/g, function (_, d) { const g = groups[+d - 1]; return g != null ? g : ''; });
+  }
+  function findReplaceCurrent() {
+    if (findIndex < 0 || !findMatches[findIndex]) return;
+    const re = findBuildRegex(findEl('pfFindInput').value);
+    if (!re) return;
+    const repTpl = findEl('pfReplaceInput').value;
+    const text = findSourceText();
+    let count = -1;
+    const newText = text.replace(re, function (match) {
+      count++;
+      if (count !== findIndex) return match;
+      const groups = Array.prototype.slice.call(arguments, 1, arguments.length - 2);
+      return findExpandRepl(repTpl, groups);
+    });
+    loadTextIntoEditor('pfScriptEditor', newText);
+    /* loadTextIntoEditor → highlightEditor → runFind(false) ; on avance ensuite. */
+    if (findMatches.length) { findIndex = Math.min(findIndex, findMatches.length - 1); findApplyHighlights(); findUpdateCount(); findScrollTo(findIndex); }
+  }
+  function findReplaceAll() {
+    const re = findBuildRegex(findEl('pfFindInput').value);
+    if (!re) return;
+    const repTpl = findEl('pfReplaceInput').value;
+    const text = findSourceText();
+    const newText = text.replace(re, function (match) {
+      const groups = Array.prototype.slice.call(arguments, 1, arguments.length - 2);
+      return findExpandRepl(repTpl, groups);
+    });
+    loadTextIntoEditor('pfScriptEditor', newText);
+    runFind(true);
+  }
+
+  function findToggleOpt(key, btn) {
+    findOpts[key] = !findOpts[key];
+    btn.setAttribute('aria-pressed', findOpts[key] ? 'true' : 'false');
+    runFind(true);
+  }
+  function openFind() {
+    const w = findEl('pfFindWidget');
+    if (!w) return;
+    findOpen = true;
+    w.hidden = false;
+    const btn = findEl('pfScriptFind'); if (btn) btn.classList.add('active');
+    const input = findEl('pfFindInput');
+    if (input) {
+      const sel = window.getSelection();
+      const selText = sel && sel.rangeCount ? sel.toString() : '';
+      if (selText && selText.indexOf('\n') === -1) input.value = selText;
+      input.focus(); input.select();
+    }
+    runFind(true);
+  }
+  function closeFind() {
+    findOpen = false;
+    const w = findEl('pfFindWidget'); if (w) w.hidden = true;
+    const btn = findEl('pfScriptFind'); if (btn) btn.classList.remove('active');
+    findClearHighlights();
+    findMatches = []; findIndex = -1;
+    findUpdateCount();
+    const ed = scriptEditorEl(); if (ed) ed.focus();
+  }
+  function toggleFind() { findOpen ? closeFind() : openFind(); }
+
+  function onFindInputKey(e) {
+    if (e.key === 'Enter')      { e.preventDefault(); findNav(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+  }
+
+  /* Touches globales du Script Builder : Suppr (lignes sélectionnées) + Échap. */
+  function onScriptToolsKey(e) {
+    if (!scriptViewActive) return;
+    if (e.key === 'Escape') {
+      const descPanel = document.getElementById('pfScriptDescPanel');
+      if (findOpen) { closeFind(); }
+      else if (descPanel && !descPanel.hidden) { closeScriptDescPanel(); }
+      else if (gutterSel.size) { clearGutterSelection(); }
+      return;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && gutterSel.size) {
+      const a = document.activeElement;
+      const typing = a && (a.id === 'pfScriptEditor' || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable);
+      if (typing) return;
+      e.preventDefault();
+      deleteSelectedLines();
+    }
+  }
+
+  /* Câblage (appelé à l'init ; les éléments existent déjà dans le DOM). */
+  function initScriptTools() {
+    const g  = scriptGutterEl();
+    const ed = scriptEditorEl();
+    if (g) {
+      g.addEventListener('click',     onGutterClick);
+      g.addEventListener('dragstart', onGutterDragStart);
+      g.addEventListener('dragover',  onGutterDragOver);
+      g.addEventListener('dragleave', onGutterDragLeave);
+      g.addEventListener('drop',      onGutterDrop);
+      g.addEventListener('dragend',   onGutterDragEnd);
+    }
+    if (ed) {
+      ed.addEventListener('scroll', function () { if (g) g.scrollTop = ed.scrollTop; syncLineHighlightScroll(); });
+      ed.addEventListener('focus',  clearGutterSelection);
+    }
+    const wire = function (id, ev, fn) { const el = findEl(id); if (el) el.addEventListener(ev, fn); };
+    wire('pfScriptFind',  'click', toggleFind);
+    wire('pfFindClose',   'click', closeFind);
+    wire('pfFindNext',    'click', function () { findNav(1); });
+    wire('pfFindPrev',    'click', function () { findNav(-1); });
+    wire('pfFindCase',    'click', function (e) { findToggleOpt('case',  e.currentTarget); });
+    wire('pfFindWord',    'click', function (e) { findToggleOpt('word',  e.currentTarget); });
+    wire('pfFindRegex',   'click', function (e) { findToggleOpt('regex', e.currentTarget); });
+    wire('pfFindInput',   'input', function () { runFind(true); });
+    wire('pfFindInput',   'keydown', onFindInputKey);
+    wire('pfReplaceOne',  'click', findReplaceCurrent);
+    wire('pfReplaceAll',  'click', findReplaceAll);
+    document.addEventListener('keydown', onScriptToolsKey);
   }
 
   /* Insère du texte au curseur (Entrée / coller) en convertissant
@@ -2226,16 +2728,22 @@
 
     loadSaved().forEach(function (entry) {
       if (entry.name.toLowerCase().indexOf(q) !== -1 ||
-          entry.cmd.toLowerCase().indexOf(q)  !== -1) {
-        matches.push({ label: entry.name || entry.cmd, cmd: entry.cmd });
+          entry.cmd.toLowerCase().indexOf(q)  !== -1 ||
+          (entry.desc || '').toLowerCase().indexOf(q) !== -1) {
+        matches.push({ label: entry.name || entry.cmd, cmd: entry.cmd, desc: entry.desc || null });
       }
     });
 
+    const ddOverrides = loadOverrides();
     PF_COMMANDS.forEach(function (entry) {
+      const ov = ddOverrides[entry.cmd];
       if (entry.cmd.toLowerCase().indexOf(q) !== -1 ||
           entry.g.toLowerCase().indexOf(q)   !== -1 ||
-          entry.s.toLowerCase().indexOf(q)   !== -1) {
-        matches.push({ label: entry.cmd, cmd: entry.cmd });
+          entry.s.toLowerCase().indexOf(q)   !== -1 ||
+          (ov && ((ov.title || '').toLowerCase().indexOf(q) !== -1 ||
+                  (ov.cmd   || '').toLowerCase().indexOf(q) !== -1 ||
+                  (ov.desc  || '').toLowerCase().indexOf(q) !== -1))) {
+        matches.push({ label: (ov && ov.cmd) || entry.cmd, cmd: (ov && ov.cmd) || entry.cmd, desc: (ov && ov.desc) || null });
       }
     });
 
@@ -2395,6 +2903,9 @@
     if (searchInput && searchInput.value.trim()) {
       renderScriptSearchDropdown(searchInput.value);
     }
+    gutterSel.clear(); gutterAnchor = null;
+    refreshScriptGutter();
+    updateScriptDescUI();
     document.getElementById('pfScriptEditor')?.focus();
   }
 
@@ -2404,6 +2915,8 @@
     document.getElementById('pfSearchBar').classList.remove('pf-search-bar--script');
     document.getElementById('pfScriptToggle').classList.remove('active');
     scriptViewActive = false;
+    if (findOpen) closeFind();
+    closeScriptDescPanel();
     hideScriptSearchDropdown();
     /* Re-rendre la liste avec l'éventuelle valeur de recherche */
     const searchInput = document.getElementById('pfCmdSearch');
@@ -2456,7 +2969,7 @@
     if (ov) {
       const badge = document.createElement('span');
       badge.className   = 'pf-override-badge';
-      badge.title       = 'Commande modifiée — voir le Gestionnaire pour restaurer';
+      badge.title       = 'Commande modifiée : voir le Gestionnaire pour restaurer';
       badge.textContent = 'modifié';
       wrap.appendChild(btn);
       wrap.appendChild(badge);
@@ -2530,7 +3043,7 @@
           document.querySelectorAll('.pf-cmd-item-wrap.selected').forEach(function (el) { el.classList.remove('selected'); });
           wrap.classList.add('selected');
           loadCommandText(entry.cmd);
-          setDescBar(null);
+          setDescBar(entry.desc || null);
         });
 
         const del = document.createElement('button');
@@ -2578,7 +3091,8 @@
 
     /* ── Mes commandes : sauvegardées + custom "mine" ── */
     const filteredSaved = saved.filter(function (e) {
-      return !q || e.name.toLowerCase().indexOf(q) !== -1 || e.cmd.toLowerCase().indexOf(q) !== -1;
+      return !q || e.name.toLowerCase().indexOf(q) !== -1 || e.cmd.toLowerCase().indexOf(q) !== -1 ||
+             (e.desc || '').toLowerCase().indexOf(q) !== -1;
     });
     const customMine = custom.filter(function (e) {
       return (e.category === 'mine' || !e.category) &&
@@ -2607,11 +3121,16 @@
     const sectionMap   = {};
     const sectionOrder = [];
 
+    const clOverrides = loadOverrides();
     PF_COMMANDS.forEach(function (entry) {
+      const ov = clOverrides[entry.cmd];
       if (q &&
           entry.cmd.toLowerCase().indexOf(q) === -1 &&
           entry.g.toLowerCase().indexOf(q)   === -1 &&
-          entry.s.toLowerCase().indexOf(q)   === -1) return;
+          entry.s.toLowerCase().indexOf(q)   === -1 &&
+          !(ov && ((ov.title || '').toLowerCase().indexOf(q) !== -1 ||
+                   (ov.cmd   || '').toLowerCase().indexOf(q) !== -1 ||
+                   (ov.desc  || '').toLowerCase().indexOf(q) !== -1))) return;
 
       if (!sectionMap[entry.s]) { sectionMap[entry.s] = {}; sectionOrder.push(entry.s); }
       if (!sectionMap[entry.s][entry.g]) sectionMap[entry.s][entry.g] = [];
@@ -3025,10 +3544,12 @@
     const modal   = document.getElementById('pfSaveModal');
     const preview = document.getElementById('pfModalCmdPreview');
     const nameInp = document.getElementById('pfModalName');
+    const descInp = document.getElementById('pfModalDesc');
     const favChk  = document.getElementById('pfModalFav');
     if (!modal) return;
     if (preview) preview.textContent = cmd;
     if (nameInp) nameInp.value = '';
+    if (descInp) descInp.value = '';
     if (favChk)  favChk.checked = false;
     modal.hidden = false;
     if (nameInp) nameInp.focus();
@@ -3043,8 +3564,9 @@
     const cmd = scriptViewActive ? getScriptText() : getBuiltText();
     if (!cmd) { hideSaveModal(); return; }
     const name  = (document.getElementById('pfModalName')?.value || '').trim() || cmd.substring(0, 40);
+    const desc  = (document.getElementById('pfModalDesc')?.value || '').trim();
     const isFav = document.getElementById('pfModalFav')?.checked;
-    saveCommand(name, cmd);
+    saveCommand(name, cmd, desc);
     if (isFav) {
       const favs = loadFavorites();
       favs.add(cmd);
@@ -3090,8 +3612,9 @@
     if (e.target.closest('#pfImportApply'))   { applyImport(); return; }
 
     /* Description */
-    if (e.target.closest('#pfDescToggle'))       { toggleDescContent('pfDescContent');       return; }
-    if (e.target.closest('#pfScriptDescToggle')) { toggleDescContent('pfScriptDescContent'); return; }
+    if (e.target.closest('#pfDescToggle'))     { toggleDescContent('pfDescContent'); return; }
+    if (e.target.closest('#pfScriptDescBtn'))  { toggleScriptDescPanel();             return; }
+    if (e.target.closest('#pfScriptDescClose')){ closeScriptDescPanel();              return; }
 
     /* Script Builder — bascule */
     if (e.target.closest('#pfScriptToggle')) {
@@ -3105,6 +3628,9 @@
     if (e.target.closest('#pfScriptClear')) {
       const ed = document.getElementById('pfScriptEditor');
       if (ed) ed.replaceChildren();
+      gutterSel.clear(); gutterAnchor = null;
+      refreshScriptGutter();
+      if (findOpen) runFind(false);
       return;
     }
     if (e.target.closest('#pfScriptCopy')) {
@@ -3258,10 +3784,82 @@
   });
 
   /* ════════════════════════════════════════════════════════════
+     PONT PROFILS ← shell (postMessage : query/clear → stats)
+     ════════════════════════════════════════════════════════════ */
+  function pfProfileStats() {
+    var blocks = null;
+    try { blocks = JSON.parse(localStorage.getItem(BLOCKS_KEY)); } catch (e) {}
+    return {
+      saved:          loadSaved().length,
+      favorites:      loadFavorites().size,
+      blocksCustom:   blocks !== null,
+      blocksCount:    Array.isArray(blocks) ? blocks.length : null,
+      customCmds:     loadCustomCmds().length,
+      overrides:      Object.keys(loadOverrides()).length,
+      groups:         loadCustomGroups().length,
+      groupOverrides: Object.keys(loadGroupOverrides()).length
+    };
+  }
+  function postPfStats() {
+    try { parent.postMessage({ type: 'pf-profile-stats', stats: pfProfileStats() }, '*'); } catch (e) {}
+  }
+  function refreshPfView() {
+    try {
+      renderSidebar();
+      var cs = document.getElementById('pfCmdSearch');
+      renderCommandList(cs ? cs.value : '');
+      var ms = document.getElementById('pfManagerSearch');
+      renderManagerList(ms ? ms.value : '');
+    } catch (e) {}   /* un rendu en échec ne doit pas bloquer les réponses du pont */
+  }
+  function pfClearTarget(target) {
+    function rm(k) { try { localStorage.removeItem(k); } catch (e) {} }
+    if      (target === 'saved')     rm(SAVE_KEY);
+    else if (target === 'favorites') rm(FAV_KEY);
+    else if (target === 'blocks')    rm(BLOCKS_KEY);
+    else if (target === 'imports')   { rm(CUSTOM_KEY); rm(OVERRIDES_KEY); rm(GROUPS_KEY); rm(GROUP_OVERRIDES_KEY); }
+    else if (target === 'all')       { [SAVE_KEY, FAV_KEY, BLOCKS_KEY, CUSTOM_KEY, OVERRIDES_KEY, GROUPS_KEY, GROUP_OVERRIDES_KEY].forEach(rm); }
+    else return;
+    refreshPfView();
+  }
+  /* Inspecteur de stockage : dump/suppression des clés psforge_* */
+  function postPfStorage() {
+    var entries = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('psforge') === 0) entries.push({ key: k, value: localStorage.getItem(k) });
+      }
+    } catch (e) {}
+    try { parent.postMessage({ type: 'pf-storage-data', entries: entries }, '*'); } catch (e) {}
+  }
+  function pfStorageClearAll() {
+    try {
+      var ks = [];
+      for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('psforge') === 0) ks.push(k); }
+      ks.forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) {}
+    refreshPfView();
+  }
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || !d.type) return;
+    if (d.type === 'pf-profile-query')       { postPfStats(); }
+    else if (d.type === 'pf-profile-clear')  { pfClearTarget(d.target); postPfStats(); }
+    else if (d.type === 'pf-storage-list')   { postPfStorage(); }
+    else if (d.type === 'pf-storage-remove') { try { localStorage.removeItem(d.key); } catch (er) {} refreshPfView(); postPfStorage(); postPfStats(); }
+    else if (d.type === 'pf-storage-clear')  { pfStorageClearAll(); postPfStorage(); postPfStats(); }
+  });
+
+  /* ════════════════════════════════════════════════════════════
      INIT
      ════════════════════════════════════════════════════════════ */
   renderSidebar();
   renderCommandList();
   initDragDrop();
+  initScriptTools();
+
+  /* Embarqué : 1ers instantanés poussés au shell dès l'init (anti-course) */
+  if (window.self !== window.top) { postPfStats(); postPfStorage(); }
 
 })();
