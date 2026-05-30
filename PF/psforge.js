@@ -21,8 +21,10 @@
 })();
 
 /* ── Synchronisation thème clair / sombre ──
-   Stratégie double :
-   1. Accès DOM direct au parent (fonctionne sur serveur, même origine HTTP/S)
+   Stratégie triple :
+   1. Accès DOM direct au parent + MutationObserver (même origine HTTP/S)
+      + polling de secours toutes les 200 ms (Edge/file:// : le MutationObserver
+      cross-frame ne se déclenche pas toujours).
    2. postMessage de TenantPulse (fonctionne aussi sur file://)
    Mode standalone : préférence système via matchMedia.
    Exécuté depuis <head> pour éviter le flash (FOUC). */
@@ -42,7 +44,17 @@
         new MutationObserver(function () {
           applyTheme(parentHtml.getAttribute('data-theme'));
         }).observe(parentHtml, { attributes: true, attributeFilter: ['data-theme'] });
-      } catch (e) { /* accès bloqué (file://) — on se rabat sur postMessage */ }
+
+        /* Polling de secours : Edge ne déclenche pas toujours le MutationObserver
+           cross-frame en contexte file://. Le timer se détruit si l'accès est révoqué. */
+        var _prev = t;
+        var _poll = setInterval(function () {
+          try {
+            var cur = parentHtml.getAttribute('data-theme') || 'light';
+            if (cur !== _prev) { _prev = cur; applyTheme(cur); }
+          } catch (e) { clearInterval(_poll); }
+        }, 200);
+      } catch (e) { /* accès bloqué — on se rabat sur postMessage */ }
 
       /* 2. postMessage — fiable sur file:// et toute origine */
       window.addEventListener('message', function (e) {
