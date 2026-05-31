@@ -140,6 +140,7 @@ body.view-pf footer{display:none}
   box-shadow:0 0 0 1px rgba(255,255,255,.36), 0 1px 0 rgba(255,255,255,.22) inset, 0 1px 3px rgba(0,0,0,.12)
 }
 .nav-drop-btn .drop-arrow{font-size:var(--text-xs);transition:transform .2s;display:inline-block}
+.nav-logout-btn{text-decoration:none}
 .nav-drop-btn-label-long{display:inline}
 .nav-drop-btn-label-short{display:none}
 .nav-dropdown.open .drop-arrow{transform:rotate(180deg)}

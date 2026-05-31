@@ -1,0 +1,10 @@
+# Config locale Claude Code (ne pas publier)
+.claude/
+
+# Graphe généré par graphify (régénérable, non versionné)
+graphify-out/
+
+# Artefacts OS / éditeur
+Thumbs.db
+desktop.ini
+.DS_Store
