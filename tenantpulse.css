@@ -37,7 +37,9 @@
 html{height:100%}
 body{background:var(--bg);font-family:var(--font);font-size:var(--text-base);color:var(--text);height:100%;overflow:hidden;display:flex;flex-direction:column;transition:background .25s,color .25s}
 
-.topbar{background:#121212!important;color:#fff;text-align:center;font-size:var(--text-sm);font-weight:400;padding:6px 20px;letter-spacing:.03em}
+.topbar{background:#121212!important;color:#fff;text-align:center;font-size:var(--text-sm);font-weight:400;padding:6px 20px;letter-spacing:.03em;position:relative}
+.topbar-logout{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:5px;color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
+.topbar-logout:hover{opacity:1;text-decoration:underline}
 nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:300;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 /* ── Marque nav (logo + nom app) + wrapper gauche ── */
 .nav-left{display:flex;align-items:center;height:100%}
@@ -140,7 +142,6 @@ body.view-pf footer{display:none}
   box-shadow:0 0 0 1px rgba(255,255,255,.36), 0 1px 0 rgba(255,255,255,.22) inset, 0 1px 3px rgba(0,0,0,.12)
 }
 .nav-drop-btn .drop-arrow{font-size:var(--text-xs);transition:transform .2s;display:inline-block}
-.nav-logout-btn{text-decoration:none}
 .nav-drop-btn-label-long{display:inline}
 .nav-drop-btn-label-short{display:none}
 .nav-dropdown.open .drop-arrow{transform:rotate(180deg)}
@@ -1056,6 +1057,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 
   /* Topbar */
   .topbar{font-size:10px;padding:4px 12px;letter-spacing:.02em}
+  .topbar-logout{right:12px}
 
   /* Nav */
   nav{padding:0 10px;height:52px;gap:5px}
