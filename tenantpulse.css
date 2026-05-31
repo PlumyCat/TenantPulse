@@ -40,13 +40,8 @@ body{background:var(--bg);font-family:var(--font);font-size:var(--text-base);col
 .topbar{background:#121212!important;color:#fff;text-align:center;font-size:var(--text-sm);font-weight:400;padding:6px 20px;letter-spacing:.03em;position:relative}
 .topbar-logout{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:5px;color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
 .topbar-logout:hover{opacity:1;text-decoration:underline}
-.topbar-bug{position:absolute;left:20px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:6px}
-.topbar-bug-link{color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
-.topbar-bug-link:hover{opacity:1;text-decoration:underline}
-.topbar-bug-copy{background:none;border:0;padding:0;margin:0;cursor:pointer;display:inline-flex;align-items:center;opacity:.85;transition:opacity .2s}
-.topbar-bug-copy:hover{opacity:1}
-/* icône copier forcée en blanc sur la barre noire (idem feedback checked.png) */
-.topbar-bug-copy img{width:1em;height:1em;display:block;filter:brightness(0) invert(1)}
+.topbar-bug{position:absolute;left:20px;top:50%;transform:translateY(-50%);color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
+.topbar-bug:hover{opacity:1;text-decoration:underline}
 nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:300;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 /* ── Marque nav (logo + nom app) + wrapper gauche ── */
 .nav-left{display:flex;align-items:center;height:100%}

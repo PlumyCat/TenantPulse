@@ -406,17 +406,6 @@ function copyHistoryGuid(guid, btn) {
   navigator.clipboard.writeText(guid).then(() => { btn.replaceChildren(); const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; btn.appendChild(ck); setTimeout(() => { btn.replaceChildren(); const img = document.createElement('img'); img.src = 'assets/copy.png'; img.className = 'icon-adaptive'; img.alt = ''; btn.appendChild(img); }, 1500); });
 }
 
-// Adresse de signalement de bugs (bouton "Report Bug(s)" de la topbar)
-const BUG_EMAIL = 'aribeiropereira@be-cloud.fr';
-function copyBugEmail(btn) {
-  const img = btn.querySelector('img');
-  navigator.clipboard.writeText(BUG_EMAIL).then(() => {
-    if (!img) return;
-    img.src = 'assets/checked.png';
-    setTimeout(() => { img.src = 'assets/copy.png'; }, 1500);
-  }).catch(() => {});
-}
-
 // ── Onglets TenantPulse / Mhaelle / PsForge (vue type navigateur) ──
 // Les iframes sont lazy-loaded au premier clic puis restent montées,
 // ce qui préserve l'état de l'analyse des deux côtés au switch.
@@ -461,8 +450,6 @@ function bindEvents() {
   document.getElementById('btnStorageCloseFooter').addEventListener('click', hideStoragePanel);
   document.getElementById('btnClearAllStorage').addEventListener('click', clearAllStorage);
   document.getElementById('btnShowStorage').addEventListener('click', showStoragePanel);
-  const btnCopyBug = document.getElementById('btnCopyBugEmail');
-  if (btnCopyBug) btnCopyBug.addEventListener('click', () => copyBugEmail(btnCopyBug));
   document.querySelectorAll('[data-drop-section]').forEach(btn => {
     btn.addEventListener('click', () => toggleDropSection(btn));
   });
