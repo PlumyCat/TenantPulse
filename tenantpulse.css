@@ -1290,9 +1290,10 @@ footer{position:relative}
 .hero-badge-approved[data-type="indirect"]{background:#ea580c}
 .hero-badge-approved[data-type="gdap_actif"]{background:#0ea5e9}
 .hero-badge-approved[data-type="gdap_non"]{background:#64748b}
-.hero-badge-pending{background:rgba(245,158,11,.18);border:1px dashed #f59e0b;color:#fbbf24}
+.hero-badge-pending{background:#f59e0b;border:1px dashed rgba(255,255,255,.55);color:#fff}
 .hero-badge-pending.clickable{cursor:pointer}
-.hero-badge-pending.clickable:hover{background:rgba(245,158,11,.32)}
+.hero-badge-pending.clickable:hover{background:#d97706}
+.badge-ico{width:11px;height:11px;flex-shrink:0;object-fit:contain;filter:brightness(0) invert(1)}
 .hero-badge-locked{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff}
 .hero-badge-remove{margin-left:3px;background:transparent;border:none;color:inherit;font-size:14px;line-height:1;cursor:pointer;opacity:.75;padding:0 0 0 2px}
 .hero-badge-remove:hover{opacity:1}
@@ -1337,6 +1338,7 @@ footer{position:relative}
 .admin-subtab{position:relative;display:inline-flex;align-items:center;gap:6px;padding:10px 12px 8px;margin-bottom:-1px;font-family:var(--font);font-size:var(--text-xs);font-weight:600;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s}
 .admin-subtab:hover{color:var(--text)}
 .admin-subtab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.admin-subtab-ico{width:13px;height:13px;object-fit:contain;flex-shrink:0}
 .admin-subtab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:9px;font-weight:700;color:#fff}
 .admin-subtab-badge-req{background:#6b7280}
 .admin-subtab-badge-alert{background:#dc2626}
@@ -1372,7 +1374,7 @@ html:not([data-theme="dark"]) .admin-req-row,html:not([data-theme="dark"]) .admi
 .admin-req-actions{display:flex;gap:6px;flex-shrink:0}
 
 /* ── Boutons admin ── */
-.admin-btn{border:1px solid transparent;border-radius:8px;padding:8px 14px;font-family:var(--font);font-size:var(--text-xs);font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,transform .1s,filter .15s}
+.admin-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid transparent;border-radius:8px;padding:8px 14px;font-family:var(--font);font-size:var(--text-xs);font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,transform .1s,filter .15s}
 .admin-btn:disabled{opacity:.5;cursor:not-allowed}
 /* Valider — vert sémantique, finition charte */
 .admin-btn-approve{color:#fff;background:linear-gradient(180deg, rgba(22,163,74,.95) 0%, rgba(21,128,61,.95) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.18) inset, 0 4px 14px rgba(22,128,61,.3)}

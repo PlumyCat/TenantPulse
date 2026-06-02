@@ -1352,7 +1352,9 @@ async function refreshHeroTags(tenantId, domain, zoneEl) {
   if (locked && TP_AUTH.hasRole('moderator')) {
     const lockBadge = document.createElement('span');
     lockBadge.className = 'hero-badge hero-badge-locked';
-    lockBadge.textContent = '🔒 Verrouillé';
+    lockBadge.appendChild(badgeIcon('assets/padlock.png'));
+    const lt = document.createElement('span'); lt.textContent = 'Verrouillé';
+    lockBadge.appendChild(lt);
     badges.appendChild(lockBadge);
   }
 
@@ -1367,6 +1369,13 @@ async function refreshHeroTags(tenantId, domain, zoneEl) {
   }
 }
 
+/* Crée une petite icône blanche pour l'intérieur d'un badge coloré. */
+function badgeIcon(src) {
+  const i = document.createElement('img');
+  i.src = src; i.alt = ''; i.className = 'badge-ico';
+  return i;
+}
+
 /* Badge d'un tag validé. Manager/Admin peuvent le retirer au clic. */
 function makeApprovedBadge(type, approved, tenantId, domain) {
   const meta = resolveTagMeta(type);
@@ -1376,8 +1385,9 @@ function makeApprovedBadge(type, approved, tenantId, domain) {
   if (meta.group) b.dataset.group = meta.group;
   if (meta.color) b.style.setProperty('--tag-color', meta.color);
 
+  b.appendChild(badgeIcon('assets/checked.png'));
   const txt = document.createElement('span');
-  txt.textContent = '✓ ' + meta.label;
+  txt.textContent = meta.label;
   b.appendChild(txt);
 
   // Clic sur le badge → bulle d'info (description + qui/quand)
@@ -1496,7 +1506,10 @@ function makePendingBadge(p, tenantId, domain) {
   if (meta.color) b.style.setProperty('--tag-color', meta.color);
 
   const pct = (typeof p.percent === 'number') ? ' ' + p.percent + '%' : '';
-  b.textContent = '⏳ ' + meta.label + pct;
+  b.appendChild(badgeIcon('assets/time.png'));
+  const pt = document.createElement('span');
+  pt.textContent = meta.label + pct;
+  b.appendChild(pt);
 
   let tip = (p.count || 0) + ' demande(s) en attente';
   if (TP_AUTH.hasRole('moderator')) {
@@ -1721,7 +1734,9 @@ function buildRequestRow(req) {
   const badge = document.createElement('span');
   badge.className = 'hero-badge hero-badge-pending';
   if (meta.color) badge.style.setProperty('--tag-color', meta.color);
-  badge.textContent = meta.label;
+  badge.appendChild(badgeIcon('assets/time.png'));
+  const blbl = document.createElement('span'); blbl.textContent = meta.label;
+  badge.appendChild(blbl);
   info.appendChild(badge);
 
   const dom = document.createElement('div');
@@ -1751,7 +1766,9 @@ function buildRequestRow(req) {
   const actions = document.createElement('div');
   actions.className = 'admin-req-actions';
   const approve = document.createElement('button');
-  approve.type = 'button'; approve.className = 'admin-btn admin-btn-approve'; approve.textContent = 'Approuver';
+  approve.type = 'button'; approve.className = 'admin-btn admin-btn-approve';
+  approve.appendChild(badgeIcon('assets/checked.png'));
+  approve.appendChild(document.createTextNode(' Approuver'));
   approve.addEventListener('click', () => reviewRequest(req, 'approved', row));
   const reject = document.createElement('button');
   reject.type = 'button'; reject.className = 'admin-btn admin-btn-reject'; reject.textContent = 'Rejeter';
@@ -1888,7 +1905,8 @@ function buildAssignedRow(it) {
   badge.dataset.type = it.type;
   if (meta.group) badge.dataset.group = meta.group;
   if (meta.color) badge.style.setProperty('--tag-color', meta.color);
-  const bt = document.createElement('span'); bt.textContent = '✓ ' + meta.label;
+  badge.appendChild(badgeIcon('assets/checked.png'));
+  const bt = document.createElement('span'); bt.textContent = meta.label;
   badge.appendChild(bt);
 
   const dom = document.createElement('span');
@@ -2062,7 +2080,10 @@ function buildExpiredRow(it) {
   const meta = resolveTagMeta(it.type);
   const badge = document.createElement('span'); badge.className = 'hero-badge hero-badge-expired';
   if (meta.color) badge.style.setProperty('--tag-color', meta.color);
-  badge.textContent = meta.label;
+  const wi = document.createElement('img'); wi.src = 'assets/warning.png'; wi.alt = ''; wi.className = 'icon-adaptive';
+  badge.appendChild(wi);
+  const el = document.createElement('span'); el.textContent = meta.label;
+  badge.appendChild(el);
   const dom = document.createElement('span'); dom.className = 'admin-expired-domain';
   dom.textContent = it.domain || it.tenantId;
   const since = document.createElement('span'); since.className = 'admin-expired-since';
