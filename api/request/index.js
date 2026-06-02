@@ -1,7 +1,9 @@
 const { v4: uuidv4 } = require("uuid");
 const { getAuthContext, hasRole } = require("../shared/auth");
-const { requestsClient, locksClient } = require("../shared/tableClient");
+const { requestsClient, locksClient, classificationsClient } = require("../shared/tableClient");
 const { applyApprovedTag } = require("../shared/classify");
+
+function esc(v) { return String(v).replace(/'/g, "''"); }
 
 /**
  * POST /api/request
@@ -85,6 +87,35 @@ module.exports = async function (context, req) {
         status: 200,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId: null, status: "approved" })
+      };
+      return;
+    }
+
+    // ── Garde-fous anti-doublon (user / modérateur) ──
+    // 1. Tag déjà validé sur ce tenant → inutile de le proposer
+    try {
+      await classificationsClient.getEntity(tenantId, type);
+      context.res = {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Ce tag est déjà appliqué à ce tenant" })
+      };
+      return;
+    } catch {
+      // non trouvé → OK, on continue
+    }
+
+    // 2. Demande identique déjà en attente du même utilisateur
+    const dupQuery = requestsClient.listEntities({
+      queryOptions: {
+        filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and type eq '${esc(type)}' and status eq 'pending' and requestedBy eq '${esc(auth.email)}'`
+      }
+    });
+    for await (const _dup of dupQuery) {
+      context.res = {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Vous avez déjà proposé ce tag pour ce tenant" })
       };
       return;
     }

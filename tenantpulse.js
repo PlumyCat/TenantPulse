@@ -1259,7 +1259,7 @@ async function submitHeroTag(tenantId, domain, type, comment, optEl) {
     });
 
     if (res.status === 403) { heroTagFeedback('Action verrouillée pour ce tenant', true); closeHeroTagMenu(); return; }
-    if (!res.ok) { heroTagFeedback('Erreur lors de l\'envoi', true); return; }
+    if (!res.ok) { heroTagFeedback((await safeErr(res)) || 'Erreur lors de l\'envoi', true); return; }
 
     const data = await res.json();
     closeHeroTagMenu();
