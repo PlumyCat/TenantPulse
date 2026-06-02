@@ -7,38 +7,64 @@ function isCustomType(type) {
   return tagGroup(type).startsWith("custom:");
 }
 
+function esc(v) { return String(v).replace(/'/g, "''"); }
+function json(status, body) {
+  return { status, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+
 /**
- * GET /api/classification?tenantId=xxxx
- * Retourne tous les tags validés + les demandes en attente pour un tenant.
+ * /api/classification
  *
- * Modèle Classifications : partitionKey = tenantId, rowKey = type
- * (plusieurs tags possibles par tenant).
- *
- * Réponse :
- * {
- *   approvedTags: [ { type, approvedBy, approvedAt, comment } ],
- *   pending:      [ { type, count, group, percent } ],   // percent calculé par groupe
- *   locked:       boolean
- * }
+ * GET  ?tenantId=xxx           → tags validés + en attente + verrou pour un tenant
+ * GET  ?all=1                  → tous les tags assignés (manager+) : recherche/consultation
+ * DELETE { tenantId, type }    → supprime un tag validé (modérateur+)
  */
 module.exports = async function (context, req) {
   try {
     const auth = await getAuthContext(req);
-    if (!auth) {
-      context.res = json(401, { error: "Non authentifié" });
+    if (!auth) { context.res = json(401, { error: "Non authentifié" }); return; }
+
+    // ── DELETE : suppression d'un tag validé (modérateur+) ──
+    if (req.method === "DELETE") {
+      if (!hasRole(auth.role, "moderator")) { context.res = json(403, { error: "Accès refusé" }); return; }
+      const { tenantId, type } = req.body || {};
+      if (!tenantId || !type) { context.res = json(400, { error: "tenantId et type sont obligatoires" }); return; }
+      try {
+        await classificationsClient.deleteEntity(tenantId, type);
+      } catch {
+        context.res = json(404, { error: "Tag introuvable" });
+        return;
+      }
+      context.res = json(200, { success: true });
       return;
     }
 
+    // ── GET ?all=1 : tous les tags assignés (manager+) ──
+    if (req.query.all === "1") {
+      if (!hasRole(auth.role, "manager")) { context.res = json(403, { error: "Accès refusé" }); return; }
+      const items = [];
+      for await (const e of classificationsClient.listEntities()) {
+        items.push({
+          tenantId:   e.partitionKey,
+          type:       e.rowKey,
+          domain:     e.domain || "",
+          approvedBy: e.approvedBy || "",
+          approvedAt: e.approvedAt || ""
+        });
+      }
+      items.sort((a, b) => new Date(b.approvedAt) - new Date(a.approvedAt));
+      context.res = json(200, { items });
+      return;
+    }
+
+    // ── GET ?tenantId=xxx : détail d'un tenant ──
     const tenantId = req.query.tenantId;
-    if (!tenantId) {
-      context.res = json(400, { error: "Paramètre tenantId manquant" });
-      return;
-    }
+    if (!tenantId) { context.res = json(400, { error: "Paramètre tenantId manquant" }); return; }
 
-    // 1. Tags validés — query par partitionKey (= tenantId)
+    // 1. Tags validés
     const approvedTags = [];
     const approvedQuery = classificationsClient.listEntities({
-      queryOptions: { filter: `PartitionKey eq '${tenantId.replace(/'/g, "''")}'` }
+      queryOptions: { filter: `PartitionKey eq '${esc(tenantId)}'` }
     });
     for await (const e of approvedQuery) {
       approvedTags.push({
@@ -49,18 +75,15 @@ module.exports = async function (context, req) {
       });
     }
 
-    // 2. Demandes en attente — agrégées par type, pourcentage calculé par groupe
+    // 2. Demandes en attente — agrégées par type, pourcentage par groupe
     const pendingEntities = [];
     const pendingQuery = requestsClient.listEntities({
       queryOptions: {
-        filter: `PartitionKey eq 'request' and tenantId eq '${tenantId.replace(/'/g, "''")}' and status eq 'pending'`
+        filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and status eq 'pending'`
       }
     });
-    for await (const e of pendingQuery) {
-      pendingEntities.push(e);
-    }
+    for await (const e of pendingQuery) pendingEntities.push(e);
 
-    // Comptage par type + total par groupe
     const countByType = {};
     const totalByGroup = {};
     const distinctTypesByGroup = {};
@@ -73,31 +96,20 @@ module.exports = async function (context, req) {
 
     const pending = Object.entries(countByType).map(([type, count]) => {
       const g = tagGroup(type);
-      // Pourcentage uniquement pertinent quand plusieurs types s'opposent dans le groupe
       const multiple = distinctTypesByGroup[g] && distinctTypesByGroup[g].size > 1;
-      return {
-        type,
-        count,
-        group: g,
-        percent: multiple ? Math.round((count / totalByGroup[g]) * 100) : null
-      };
+      return { type, count, group: g, percent: multiple ? Math.round((count / totalByGroup[g]) * 100) : null };
     });
 
-    // 3. Verrou : tenant spécifique ou global
+    // 3. Verrou
     let locked = false;
     try {
       await locksClient.getEntity("lock", tenantId);
       locked = true;
     } catch {
-      try {
-        await locksClient.getEntity("lock", "global");
-        locked = true;
-      } catch {
-        locked = false;
-      }
+      try { await locksClient.getEntity("lock", "global"); locked = true; } catch { locked = false; }
     }
 
-    // Les tags custom ne sont visibles que par les managers/admins
+    // 4. Filtrage : tags custom réservés aux managers/admins
     let approvedOut = approvedTags;
     let pendingOut = pending;
     if (!hasRole(auth.role, "manager")) {
@@ -112,11 +124,3 @@ module.exports = async function (context, req) {
     context.res = json(500, { error: "Erreur serveur" });
   }
 };
-
-function json(status, body) {
-  return {
-    status,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  };
-}

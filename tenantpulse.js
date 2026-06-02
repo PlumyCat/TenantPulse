@@ -1377,6 +1377,21 @@ function makeApprovedBadge(type, approved, tenantId, domain) {
   txt.textContent = '✓ ' + meta.label;
   b.appendChild(txt);
 
+  // Suppression d'un tag validé — modérateur, manager, admin
+  if (TP_AUTH.hasRole('moderator')) {
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'hero-badge-remove';
+    rm.textContent = '×';
+    rm.title = 'Supprimer ce tag';
+    rm.setAttribute('aria-label', 'Supprimer ce tag');
+    rm.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteApprovedTag(tenantId, type, domain);
+    });
+    b.appendChild(rm);
+  }
+
   const tip = [];
   if (approved.approvedBy) tip.push('Validé par ' + approved.approvedBy);
   if (approved.approvedAt) tip.push(new Date(approved.approvedAt).toLocaleDateString('fr-FR'));
@@ -1384,6 +1399,24 @@ function makeApprovedBadge(type, approved, tenantId, domain) {
   if (tip.length) b.title = tip.join(' · ');
 
   return b;
+}
+
+/* Supprime un tag validé d'un tenant (modérateur+). */
+async function deleteApprovedTag(tenantId, type, domain) {
+  try {
+    const r = await fetch('/api/classification', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId, type })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur lors de la suppression', true); return; }
+    heroTagFeedback('Tag supprimé', false);
+    const zone = document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(tenantId) : tenantId) + '"]');
+    if (zone) refreshHeroTags(tenantId, domain, zone);
+    if (typeof refreshAdminBadges === 'function') refreshAdminBadges();
+  } catch {
+    heroTagFeedback('Erreur réseau', true);
+  }
 }
 
 /* Badge d'une demande en attente avec pourcentage. Modérateur+ valide au clic. */
@@ -1732,6 +1765,93 @@ async function loadAdminTags() {
     expSection.appendChild(adminEmpty('Aucun tag expiré'));
   }
   pane.appendChild(expSection);
+
+  // Tous les tags assignés (consultation + recherche)
+  pane.appendChild(await buildAssignedTagsSection());
+}
+
+/* Section "Tags assignés" : liste de tous les tags validés (tous tenants)
+   avec recherche par tag / domaine / tenant. Manager+ (onglet Tags). */
+async function buildAssignedTagsSection() {
+  const section = adminSection('Tags assignés');
+
+  let items = [];
+  try {
+    const r = await fetch('/api/classification?all=1', { headers: { 'Accept': 'application/json' } });
+    if (r.ok) { const d = await r.json(); items = Array.isArray(d.items) ? d.items : []; }
+  } catch {}
+
+  const search = document.createElement('input');
+  search.type = 'text';
+  search.className = 'admin-input';
+  search.placeholder = 'Rechercher par tag, domaine ou tenant…';
+  section.appendChild(search);
+
+  const list = document.createElement('div');
+  list.className = 'admin-assigned-list';
+  section.appendChild(list);
+
+  const render = (filter) => {
+    list.replaceChildren();
+    const f = (filter || '').trim().toLowerCase();
+    const filtered = items.filter(it => {
+      const meta = resolveTagMeta(it.type);
+      return !f
+        || meta.label.toLowerCase().includes(f)
+        || (it.domain || '').toLowerCase().includes(f)
+        || it.tenantId.toLowerCase().includes(f);
+    });
+    if (!filtered.length) { list.appendChild(adminEmpty('Aucun tag assigné')); return; }
+    filtered.forEach(it => list.appendChild(buildAssignedRow(it)));
+  };
+
+  search.addEventListener('input', () => render(search.value));
+  render('');
+  return section;
+}
+
+function buildAssignedRow(it) {
+  const row = document.createElement('div');
+  row.className = 'admin-assigned-row';
+
+  const meta = resolveTagMeta(it.type);
+  const badge = document.createElement('span');
+  badge.className = 'hero-badge hero-badge-approved';
+  badge.dataset.type = it.type;
+  if (meta.group) badge.dataset.group = meta.group;
+  if (meta.color) badge.style.setProperty('--tag-color', meta.color);
+  const bt = document.createElement('span'); bt.textContent = '✓ ' + meta.label;
+  badge.appendChild(bt);
+
+  const dom = document.createElement('span');
+  dom.className = 'admin-assigned-domain';
+  dom.textContent = it.domain || '(domaine inconnu)';
+
+  const tid = document.createElement('span');
+  tid.className = 'admin-assigned-tenant';
+  tid.textContent = it.tenantId;
+
+  const del = document.createElement('button');
+  del.type = 'button'; del.className = 'admin-btn admin-btn-small admin-btn-reject'; del.textContent = 'Supprimer';
+  del.addEventListener('click', () => removeAssigned(it, row));
+
+  row.appendChild(badge); row.appendChild(dom); row.appendChild(tid); row.appendChild(del);
+  return row;
+}
+
+async function removeAssigned(it, rowEl) {
+  try {
+    const r = await fetch('/api/classification', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId: it.tenantId, type: it.type })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback('Tag supprimé', false);
+    rowEl.remove();
+    const zone = document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(it.tenantId) : it.tenantId) + '"]');
+    if (zone) refreshHeroTags(it.tenantId, it.domain, zone);
+  } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
 function buildTagForm(existing) {
