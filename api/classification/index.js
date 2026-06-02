@@ -1,6 +1,11 @@
-const { getAuthContext } = require("../shared/auth");
+const { getAuthContext, hasRole } = require("../shared/auth");
 const { classificationsClient, requestsClient, locksClient } = require("../shared/tableClient");
 const { tagGroup } = require("../shared/tagUtils");
+
+/* Un tag custom appartient à un groupe "custom:*". Réservé aux managers/admins. */
+function isCustomType(type) {
+  return tagGroup(type).startsWith("custom:");
+}
 
 /**
  * GET /api/classification?tenantId=xxxx
@@ -92,7 +97,15 @@ module.exports = async function (context, req) {
       }
     }
 
-    context.res = json(200, { approvedTags, pending, locked });
+    // Les tags custom ne sont visibles que par les managers/admins
+    let approvedOut = approvedTags;
+    let pendingOut = pending;
+    if (!hasRole(auth.role, "manager")) {
+      approvedOut = approvedTags.filter(t => !isCustomType(t.type));
+      pendingOut  = pending.filter(p => !isCustomType(p.type));
+    }
+
+    context.res = json(200, { approvedTags: approvedOut, pending: pendingOut, locked });
 
   } catch (err) {
     context.log.error("Erreur /api/classification :", err.message);
