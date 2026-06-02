@@ -1347,7 +1347,9 @@ async function refreshHeroTags(tenantId, domain, zoneEl) {
       ? 'Tenant verrouillé — modifications réservées aux managers'
       : (TP_AUTH.hasRole('manager') ? 'Appliquer un tag' : 'Proposer une classification');
   }
-  if (locked) {
+  // Badge "Verrouillé" réservé aux modérateurs+ (info de gestion).
+  // Les utilisateurs ont simplement le bouton (+) désactivé, sans badge.
+  if (locked && TP_AUTH.hasRole('moderator')) {
     const lockBadge = document.createElement('span');
     lockBadge.className = 'hero-badge hero-badge-locked';
     lockBadge.textContent = '🔒 Verrouillé';
