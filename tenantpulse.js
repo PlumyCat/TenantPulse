@@ -2229,6 +2229,11 @@ async function deleteTag(tag, rowEl) {
     _customTagsCache = null;
     rowEl.remove();
     refreshAdminBadges();
+    // Rafraîchit le hero du tenant affiché (le badge résiduel disparaît)
+    if (currentState && currentState.ms && currentState.ms.tenantId) {
+      const zone = document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(currentState.ms.tenantId) : currentState.ms.tenantId) + '"]');
+      if (zone) refreshHeroTags(currentState.ms.tenantId, currentState.domain, zone);
+    }
   } catch { heroTagFeedback('Erreur réseau', true); }
 }
 

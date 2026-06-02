@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const { getAuthContext, hasRole } = require("../shared/auth");
-const { tagsClient, classificationsClient } = require("../shared/tableClient");
+const { tagsClient, classificationsClient, requestsClient } = require("../shared/tableClient");
 
 /**
  * GET /api/tags
@@ -175,10 +175,31 @@ module.exports = async function (context, req) {
         return;
       }
 
+      // Cascade : retirer toutes les assignations de ce tag (Classifications)
+      // rowKey = type = tagId, partitionKey = tenantId
+      let removedAssignments = 0;
+      try {
+        for await (const c of classificationsClient.listEntities()) {
+          if (c.rowKey === tagId) {
+            try { await classificationsClient.deleteEntity(c.partitionKey, c.rowKey); removedAssignments++; } catch {}
+          }
+        }
+      } catch {}
+
+      // Cascade : retirer les demandes en attente de ce tag
+      try {
+        const pending = requestsClient.listEntities({
+          queryOptions: { filter: `PartitionKey eq 'request' and type eq '${String(tagId).replace(/'/g, "''")}'` }
+        });
+        for await (const e of pending) {
+          try { await requestsClient.deleteEntity(e.partitionKey, e.rowKey); } catch {}
+        }
+      } catch {}
+
       context.res = {
         status: 200,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ success: true, tagId })
+        body: JSON.stringify({ success: true, tagId, removedAssignments })
       };
       return;
     }
