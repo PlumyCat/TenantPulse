@@ -1315,7 +1315,7 @@ footer{position:relative}
 .admin-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.58);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto}
 .admin-modal{
   width:100%;max-width:780px;display:flex;flex-direction:column;max-height:calc(100vh - 96px);
-  background:linear-gradient(180deg, rgba(44,42,40,.92) 0%, rgba(32,30,28,.92) 100%);
+  background:linear-gradient(180deg, rgba(44,42,40,.8) 0%, rgba(32,30,28,.8) 100%);
   backdrop-filter:blur(40px) saturate(200%);-webkit-backdrop-filter:blur(40px) saturate(200%);
   border:1px solid transparent;border-radius:16px;
   box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.12) inset, 0 16px 48px rgba(0,0,0,.45);
@@ -1331,6 +1331,15 @@ footer{position:relative}
 .admin-modal-close{background:none;border:none;cursor:pointer;font-size:var(--text-base);color:var(--muted);padding:4px 8px;border-radius:6px;transition:background .15s,color .15s}
 .admin-modal-close:hover{background:rgba(255,255,255,.08);color:var(--text)}
 [data-theme="light"] .admin-modal-close:hover,html:not([data-theme="dark"]) .admin-modal-close:hover{background:rgba(0,0,0,.06)}
+/* Scrollbar de la modale admin (clair + sombre) */
+.admin-body::-webkit-scrollbar,.admin-overlay::-webkit-scrollbar{width:8px;height:8px}
+.admin-body::-webkit-scrollbar-track,.admin-overlay::-webkit-scrollbar-track{background:transparent}
+.admin-body::-webkit-scrollbar-thumb,.admin-overlay::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:4px}
+.admin-body::-webkit-scrollbar-thumb:hover,.admin-overlay::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.32)}
+[data-theme="dark"] .admin-body::-webkit-scrollbar-thumb,[data-theme="dark"] .admin-overlay::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2)}
+[data-theme="dark"] .admin-body::-webkit-scrollbar-thumb:hover,[data-theme="dark"] .admin-overlay::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.35)}
+.admin-body,.admin-overlay{scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.18) transparent}
+[data-theme="dark"] .admin-body,[data-theme="dark"] .admin-overlay{scrollbar-color:rgba(255,255,255,.2) transparent}
 
 /* ── Sous-onglets (style Profils) ── */
 .admin-subtabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid rgba(255,255,255,.08)}
