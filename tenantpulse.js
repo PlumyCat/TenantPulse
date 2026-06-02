@@ -1327,8 +1327,9 @@ async function refreshHeroTags(tenantId, domain, zoneEl) {
     return;
   }
 
-  // S'assure que les tags personnalisés sont en cache pour résoudre leurs libellés
-  if (TP_AUTH.hasRole('manager') && !_customTagsCache) {
+  // S'assure que les tags personnalisés sont en cache pour résoudre leurs
+  // libellés/couleurs/descriptions (lecture seule pour tous les rôles)
+  if (!_customTagsCache) {
     try { await getCustomTags(); } catch {}
   }
 
@@ -1377,6 +1378,13 @@ function makeApprovedBadge(type, approved, tenantId, domain) {
   txt.textContent = '✓ ' + meta.label;
   b.appendChild(txt);
 
+  // Clic sur le badge → bulle d'info (description + qui/quand)
+  txt.style.cursor = 'pointer';
+  txt.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showBadgePopover(b, meta, approved);
+  });
+
   // Suppression d'un tag validé — modérateur, manager, admin
   if (TP_AUTH.hasRole('moderator')) {
     const rm = document.createElement('button');
@@ -1392,13 +1400,71 @@ function makeApprovedBadge(type, approved, tenantId, domain) {
     b.appendChild(rm);
   }
 
-  const tip = [];
-  if (approved.approvedBy) tip.push('Validé par ' + approved.approvedBy);
-  if (approved.approvedAt) tip.push(new Date(approved.approvedAt).toLocaleDateString('fr-FR'));
-  if (meta.description) tip.push(meta.description);
-  if (tip.length) b.title = tip.join(' · ');
-
   return b;
+}
+
+let _openBadgePopover = null;
+
+function closeBadgePopover() {
+  if (_openBadgePopover) {
+    _openBadgePopover.remove();
+    _openBadgePopover = null;
+    document.removeEventListener('click', closeBadgePopover);
+    window.removeEventListener('scroll', closeBadgePopover, true);
+  }
+}
+
+/* Affiche une bulle d'info au clic sur un badge validé : nom, description,
+   et qui/quand l'a validé. Positionnée en fixed au-dessus de tout. */
+function showBadgePopover(anchorEl, meta, approved) {
+  if (_openBadgePopover) { closeBadgePopover(); return; }
+
+  const pop = document.createElement('div');
+  pop.className = 'badge-popover';
+  pop.addEventListener('click', (e) => e.stopPropagation());
+
+  const title = document.createElement('div');
+  title.className = 'badge-popover-title';
+  if (meta.color) title.style.color = meta.color;
+  title.textContent = meta.label;
+  pop.appendChild(title);
+
+  if (meta.description) {
+    const desc = document.createElement('div');
+    desc.className = 'badge-popover-desc';
+    desc.textContent = meta.description;
+    pop.appendChild(desc);
+  } else {
+    const desc = document.createElement('div');
+    desc.className = 'badge-popover-desc badge-popover-muted';
+    desc.textContent = 'Aucune description.';
+    pop.appendChild(desc);
+  }
+
+  if (approved && (approved.approvedBy || approved.approvedAt)) {
+    const meta2 = document.createElement('div');
+    meta2.className = 'badge-popover-meta';
+    const who = approved.approvedBy ? 'Validé par ' + approved.approvedBy : 'Validé';
+    const when = approved.approvedAt ? ' le ' + new Date(approved.approvedAt).toLocaleDateString('fr-FR') : '';
+    meta2.textContent = who + when;
+    pop.appendChild(meta2);
+  }
+
+  // Positionnement fixe près du badge
+  const rect = anchorEl.getBoundingClientRect();
+  pop.style.position = 'fixed';
+  pop.style.zIndex = '3000';
+  let left = rect.left;
+  const w = 260;
+  if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;
+  if (left < 12) left = 12;
+  pop.style.left = left + 'px';
+  pop.style.top = (rect.bottom + 6) + 'px';
+
+  document.body.appendChild(pop);
+  _openBadgePopover = pop;
+  setTimeout(() => document.addEventListener('click', closeBadgePopover), 0);
+  window.addEventListener('scroll', closeBadgePopover, true);
 }
 
 /* Supprime un tag validé d'un tenant (modérateur+). */

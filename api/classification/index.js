@@ -2,11 +2,6 @@ const { getAuthContext, hasRole } = require("../shared/auth");
 const { classificationsClient, requestsClient, locksClient } = require("../shared/tableClient");
 const { tagGroup } = require("../shared/tagUtils");
 
-/* Un tag custom appartient à un groupe "custom:*". Réservé aux managers/admins. */
-function isCustomType(type) {
-  return tagGroup(type).startsWith("custom:");
-}
-
 function esc(v) { return String(v).replace(/'/g, "''"); }
 function json(status, body) {
   return { status, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
@@ -109,15 +104,9 @@ module.exports = async function (context, req) {
       try { await locksClient.getEntity("lock", "global"); locked = true; } catch { locked = false; }
     }
 
-    // 4. Filtrage : tags custom réservés aux managers/admins
-    let approvedOut = approvedTags;
-    let pendingOut = pending;
-    if (!hasRole(auth.role, "manager")) {
-      approvedOut = approvedTags.filter(t => !isCustomType(t.type));
-      pendingOut  = pending.filter(p => !isCustomType(p.type));
-    }
-
-    context.res = json(200, { approvedTags: approvedOut, pending: pendingOut, locked });
+    // Tags custom visibles par tous (lecture seule) — pas de filtrage ici.
+    // La proposition/création de tags custom reste réservée aux managers/admins.
+    context.res = json(200, { approvedTags, pending, locked });
 
   } catch (err) {
     context.log.error("Erreur /api/classification :", err.message);
