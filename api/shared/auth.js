@@ -24,22 +24,50 @@ function getClientPrincipal(req) {
 }
 
 /**
+ * Normalise la valeur de rôle d'une entité, tolérant à la casse et au nom
+ * de propriété (role / Role / ROLE). Retourne un rôle valide ou null.
+ */
+function normalizeRole(entity) {
+  let r = entity.role ?? entity.Role ?? entity.ROLE ?? "";
+  r = String(r).trim().toLowerCase();
+  return ["admin", "manager", "moderator"].includes(r) ? r : null;
+}
+
+/**
  * Retourne le rôle applicatif de l'utilisateur :
  * "admin" | "manager" | "moderator" | "user"
  * Cherche dans la table Roles via l'email.
+ *
+ * Robustesse : insensible à la casse sur l'email (RowKey), la valeur du rôle
+ * et le nom de la propriété. Fallback par scan si la clé exacte ne matche pas
+ * (ex. PartitionKey saisie différemment lors de la création manuelle).
  */
 async function getUserRole(email) {
   if (!email) return "user";
+  const target = email.trim().toLowerCase();
 
+  // 1. Cas nominal : PartitionKey "role", RowKey = email en minuscules
   try {
-    const entity = await rolesClient.getEntity("role", email.toLowerCase());
-    const role = entity.role;
-    if (["admin", "manager", "moderator"].includes(role)) return role;
-    return "user";
+    const entity = await rolesClient.getEntity("role", target);
+    const r = normalizeRole(entity);
+    if (r) return r;
   } catch {
-    // Entité introuvable = utilisateur classique
-    return "user";
+    // pas trouvé en lookup direct → on tente le fallback
   }
+
+  // 2. Fallback tolérant : scan, match du RowKey insensible à la casse
+  try {
+    for await (const e of rolesClient.listEntities()) {
+      if (String(e.rowKey).trim().toLowerCase() === target) {
+        const r = normalizeRole(e);
+        if (r) return r;
+      }
+    }
+  } catch {
+    // table inaccessible → utilisateur par défaut
+  }
+
+  return "user";
 }
 
 /**

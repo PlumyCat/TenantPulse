@@ -1076,6 +1076,7 @@ function applyAuthToUI() {
   if (footerRole && footerRoleValue) {
     if (TP_AUTH.loaded) {
       footerRoleValue.textContent = roleLabel(TP_AUTH.role);
+      footerRole.title = TP_AUTH.email ? ('Connecté : ' + TP_AUTH.email) : '';
       footerRole.hidden = false;
     } else {
       footerRole.hidden = true;
