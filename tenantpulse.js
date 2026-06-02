@@ -1295,9 +1295,11 @@ function resolveTagMeta(type) {
   return { label: type, color: null };
 }
 
-/* Interroge l'API et (re)dessine les badges d'un hero pour un tenant donné. */
-async function refreshHeroTags(tenantId, domain) {
-  const zone = document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(tenantId) : tenantId) + '"]');
+/* Interroge l'API et (re)dessine les badges d'un hero pour un tenant donné.
+   zoneEl peut être fourni directement (cas du rendu initial où le hero n'est
+   pas encore inséré dans le document → querySelector ne le trouverait pas). */
+async function refreshHeroTags(tenantId, domain, zoneEl) {
+  const zone = zoneEl || document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(tenantId) : tenantId) + '"]');
   if (!zone) return;
   const badges = zone.querySelector('.hero-tags-badges');
   if (!badges) return;
@@ -1663,10 +1665,10 @@ async function reviewRequest(req, decision, rowEl) {
     rowEl.remove();
     refreshAdminBadges();
 
-    // Rafraîchit le hero si le tenant concerné est affiché
-    if (currentState && currentState.ms && currentState.ms.tenantId === req.tenantId) {
-      refreshHeroTags(req.tenantId, req.domain);
-    }
+    // Rafraîchit le hero du tenant concerné s'il est affiché (recherche directe)
+    const zone = document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(req.tenantId) : req.tenantId) + '"]');
+    if (zone) refreshHeroTags(req.tenantId, req.domain, zone);
+
     const pane = document.getElementById('adminPaneRequests');
     if (pane && !pane.querySelector('.admin-req-row')) {
       pane.replaceChildren(adminEmpty('Aucune demande en attente'));
@@ -2815,7 +2817,8 @@ function renderHero(ms, domain, confidence) {
       const tagZone = buildHeroTagZone(ms.tenantId, domain);
       if (tagZone) {
         hero.appendChild(tagZone);
-        if (typeof refreshHeroTags === 'function') refreshHeroTags(ms.tenantId, domain);
+        // On passe la zone directement : le hero n'est pas encore dans le document
+        if (typeof refreshHeroTags === 'function') refreshHeroTags(ms.tenantId, domain, tagZone);
       }
       const profile = loadProfile();
       const enabled = orderedRedirectButtons(profile).filter(b => profile[b.key] !== false);
