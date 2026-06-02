@@ -1171,6 +1171,7 @@ function closeHeroTagMenu() {
     _openHeroMenu.remove();
     _openHeroMenu = null;
     document.removeEventListener('click', closeHeroTagMenu);
+    window.removeEventListener('scroll', closeHeroTagMenu, true);
   }
 }
 
@@ -1217,9 +1218,22 @@ async function toggleHeroTagMenu(zone, anchorBtn, tenantId, domain) {
   menu.appendChild(comment);
   menu._commentInput = comment;
 
-  zone.appendChild(menu);
+  // Positionnement fixe + ajout au body pour passer au-dessus de tout
+  // (évite d'être piégé dans le contexte d'empilement du hero)
+  const rect = anchorBtn.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '3000';
+  let left = rect.left;
+  const menuWidth = 240;
+  if (left + menuWidth > window.innerWidth - 12) left = window.innerWidth - menuWidth - 12;
+  if (left < 12) left = 12;
+  menu.style.left = left + 'px';
+  menu.style.top = (rect.bottom + 6) + 'px';
+
+  document.body.appendChild(menu);
   _openHeroMenu = menu;
   setTimeout(() => document.addEventListener('click', closeHeroTagMenu), 0);
+  window.addEventListener('scroll', closeHeroTagMenu, true);
 }
 
 function makeTagOption(label, type, tenantId, domain) {

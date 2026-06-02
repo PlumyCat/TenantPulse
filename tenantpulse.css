@@ -1276,7 +1276,7 @@ footer{position:relative}
 .hero-tag-add:disabled,.hero-tag-add.locked{opacity:.4;cursor:not-allowed}
 
 /* ── Menu contextuel du bouton (+) ── */
-.hero-tag-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:50;min-width:215px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.22);padding:8px;display:flex;flex-direction:column;gap:3px}
+.hero-tag-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:3000;min-width:215px;max-width:240px;max-height:60vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.22);padding:8px;display:flex;flex-direction:column;gap:3px}
 .hero-tag-menu-title{font-size:var(--text-xs);font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:4px 6px}
 .hero-tag-menu-sep{font-size:var(--text-xs);font-weight:600;color:var(--muted);padding:6px 6px 2px;border-top:1px solid var(--border);margin-top:4px}
 .hero-tag-opt{text-align:left;background:transparent;border:none;border-radius:6px;padding:7px 9px;font-family:var(--font);font-size:var(--text-sm);color:var(--text);cursor:pointer;border-left:3px solid var(--tag-color,transparent)}
