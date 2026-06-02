@@ -1446,11 +1446,6 @@ function showBadgePopover(anchorEl, meta, approved) {
     desc.className = 'badge-popover-desc';
     desc.textContent = meta.description;
     pop.appendChild(desc);
-  } else {
-    const desc = document.createElement('div');
-    desc.className = 'badge-popover-desc badge-popover-muted';
-    desc.textContent = 'Aucune description.';
-    pop.appendChild(desc);
   }
 
   if (approved && (approved.approvedBy || approved.approvedAt)) {
