@@ -1312,10 +1312,10 @@ footer{position:relative}
 .hero-tag-toast.error{background:#dc2626}
 
 /* ── Overlay / modal Administration (charte « Profils ») ── */
-.admin-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto}
+.admin-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.58);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto}
 .admin-modal{
   width:100%;max-width:780px;display:flex;flex-direction:column;max-height:calc(100vh - 96px);
-  background:linear-gradient(180deg, rgba(46,44,42,.6) 0%, rgba(34,32,30,.6) 100%);
+  background:linear-gradient(180deg, rgba(44,42,40,.92) 0%, rgba(32,30,28,.92) 100%);
   backdrop-filter:blur(40px) saturate(200%);-webkit-backdrop-filter:blur(40px) saturate(200%);
   border:1px solid transparent;border-radius:16px;
   box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.12) inset, 0 16px 48px rgba(0,0,0,.45);
@@ -1389,14 +1389,16 @@ html:not([data-theme="dark"]) .admin-req-row,html:not([data-theme="dark"]) .admi
 .admin-btn-small.admin-btn-reject{padding:6px 12px;color:#fff;background:linear-gradient(180deg, rgba(220,38,38,.95) 0%, rgba(185,28,28,.95) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.18) inset, 0 4px 14px rgba(185,28,28,.3)}
 
 /* ── Formulaires (tags / rôles) ── */
-.admin-tag-form{display:flex;flex-direction:column;gap:8px;padding:14px}
+.admin-tag-form{display:flex;flex-direction:column;gap:10px;padding:16px;margin-top:12px}
 .admin-input{width:100%;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 10px;font-family:var(--font);font-size:var(--text-sm);background:rgba(0,0,0,.18);color:var(--text)}
 [data-theme="light"] .admin-input,html:not([data-theme="dark"]) .admin-input{background:rgba(255,255,255,.85);border-color:rgba(0,0,0,.1)}
 .admin-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(75,63,190,.25)}
 .admin-textarea{min-height:60px;resize:vertical}
 .admin-color{width:46px;height:34px;padding:2px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:transparent;cursor:pointer}
 .admin-input-num{width:90px}
-.admin-form-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:var(--text-sm);color:var(--text)}
+.admin-form-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:var(--text-sm);color:var(--text);margin-bottom:10px}
+.admin-form-row:last-child{margin-bottom:0}
+.admin-section + .admin-section{margin-top:22px}
 .admin-check{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 select.admin-input{cursor:pointer}
 
