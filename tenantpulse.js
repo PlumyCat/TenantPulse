@@ -1083,10 +1083,14 @@ function applyAuthToUI() {
     }
   }
 
-  // Bouton Administration : visible pour modérateur, manager, admin
+  // Bouton d'accès : visible pour tout utilisateur connecté.
+  // Libellé "Tenant connu" pour les utilisateurs, "Administration" pour les autres.
   const btnAdmin = document.getElementById('btnOpenAdmin');
+  const btnAdminLabel = document.querySelector('#btnOpenAdmin .topbar-admin-label');
   if (btnAdmin) {
-    btnAdmin.hidden = !TP_AUTH.hasRole('moderator');
+    btnAdmin.hidden = !TP_AUTH.loaded;
+    if (btnAdminLabel) btnAdminLabel.textContent = TP_AUTH.hasRole('moderator') ? 'Administration' : 'Tenant connu';
+    btnAdmin.title = TP_AUTH.hasRole('moderator') ? 'Onglet administration' : 'Tenants connus';
   }
 
   // Alimente les badges (demandes en attente / alertes) dès le chargement
@@ -1583,18 +1587,25 @@ function applyAdminRoleVisibility() {
 }
 
 function openAdmin() {
-  if (!TP_AUTH.hasRole('moderator')) return;
+  if (!TP_AUTH.loaded) return;
   const overlay = document.getElementById('adminOverlay');
   if (!overlay) return;
   applyAdminRoleVisibility();
 
-  // Si le sous-onglet courant n'est plus visible pour ce rôle, revenir à "requests"
-  const activeBtn = document.querySelector('.admin-subtab[data-subtab="' + currentAdminSubtab + '"]');
-  if (!activeBtn || activeBtn.hidden) currentAdminSubtab = 'requests';
+  // Titre de la modale selon le rôle
+  const titleEl = document.getElementById('adminModalTitleText');
+  if (titleEl) titleEl.textContent = TP_AUTH.hasRole('moderator') ? 'Administration' : 'Tenant connu';
+
+  // Si le sous-onglet courant n'est plus visible pour ce rôle, prendre le 1er visible
+  let activeBtn = document.querySelector('.admin-subtab[data-subtab="' + currentAdminSubtab + '"]');
+  if (!activeBtn || activeBtn.hidden) {
+    const firstVisible = Array.from(document.querySelectorAll('.admin-subtab')).find(b => !b.hidden);
+    currentAdminSubtab = firstVisible ? firstVisible.dataset.subtab : 'known';
+  }
 
   overlay.hidden = false;
   switchAdminSubtab(currentAdminSubtab);
-  refreshAdminBadges();
+  if (TP_AUTH.hasRole('moderator')) refreshAdminBadges();
 }
 
 function closeAdmin() {
@@ -1609,14 +1620,15 @@ function switchAdminSubtab(name) {
   document.querySelectorAll('.admin-subtab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.subtab === name);
   });
-  const panes = { requests: 'adminPaneRequests', tags: 'adminPaneTags', users: 'adminPaneUsers' };
+  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers' };
   Object.entries(panes).forEach(([key, id]) => {
     const pane = document.getElementById(id);
     if (pane) pane.hidden = (key !== name);
   });
 
-  // Chargement du contenu (défini aux étapes 15/16/17)
+  // Chargement du contenu
   if (name === 'requests' && typeof loadAdminRequests === 'function') loadAdminRequests();
+  else if (name === 'known' && typeof loadKnownTenants === 'function') loadKnownTenants();
   else if (name === 'tags' && typeof loadAdminTags === 'function') loadAdminTags();
   else if (name === 'users' && typeof loadAdminUsers === 'function') loadAdminUsers();
   else adminPanePlaceholder(panes[name]);
@@ -1850,8 +1862,149 @@ async function loadAdminTags() {
   pane.appendChild(await buildAssignedTagsSection());
 }
 
+// ── Helpers partagés : type de tag, chips de filtre, copie ──
+const TAG_KINDS = [
+  { key: 'all',      label: 'Tous' },
+  { key: 'direct',   label: 'Direct' },
+  { key: 'indirect', label: 'Indirect' },
+  { key: 'gdap',     label: 'GDAP' },
+  { key: 'custom',   label: 'Custom' }
+];
+
+function tagKind(type) {
+  if (type === 'direct') return 'direct';
+  if (type === 'indirect') return 'indirect';
+  if (type === 'gdap_actif' || type === 'gdap_non') return 'gdap';
+  return 'custom';
+}
+
+/* Construit une barre de chips de filtre. onChange(activeKey) appelé au clic. */
+function buildFilterChips(onChange) {
+  const wrap = document.createElement('div');
+  wrap.className = 'admin-chips';
+  const state = { active: 'all' };
+  TAG_KINDS.forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'admin-chip' + (k.key === 'all' ? ' active' : '');
+    b.textContent = k.label;
+    b.addEventListener('click', () => {
+      state.active = k.key;
+      wrap.querySelectorAll('.admin-chip').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      onChange(state.active);
+    });
+    wrap.appendChild(b);
+  });
+  return { el: wrap, state };
+}
+
+/* Copie un tenant ID dans le presse-papier avec retour visuel. */
+function copyTenantId(tenantId, btn) {
+  const ok = () => {
+    if (btn) { const o = btn.textContent; btn.textContent = 'Copié ✓'; setTimeout(() => { btn.textContent = o; }, 1200); }
+    heroTagFeedback('Tenant ID copié', false);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tenantId).then(ok).catch(() => heroTagFeedback('Copie impossible', true));
+  } else {
+    heroTagFeedback('Copie non supportée par le navigateur', true);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  Sous-onglet TENANT CONNU (utilisateurs + modérateurs + plus)
+//  Liste groupée par tenant (un tenant = une ligne, tous ses tags) + filtres
+//  rapides par type + recherche + copie du tenant ID. Lecture seule.
+// ══════════════════════════════════════════════════════════════════════════
+async function loadKnownTenants() {
+  const pane = document.getElementById('adminPaneKnown');
+  if (!pane) return;
+  pane.replaceChildren(adminLoading());
+
+  if (!_customTagsCache) { try { await getCustomTags(); } catch {} }
+
+  let items = [];
+  try {
+    const r = await fetch('/api/classification?all=1', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) { pane.replaceChildren(adminError('Erreur serveur')); return; }
+    const d = await r.json();
+    items = Array.isArray(d.items) ? d.items : [];
+  } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
+
+  // Regroupement par tenant (évite les doublons)
+  const byTenant = new Map();
+  items.forEach(it => {
+    if (!byTenant.has(it.tenantId)) byTenant.set(it.tenantId, { tenantId: it.tenantId, domain: it.domain || '', types: [] });
+    const g = byTenant.get(it.tenantId);
+    if (it.domain && !g.domain) g.domain = it.domain;
+    if (!g.types.includes(it.type)) g.types.push(it.type);
+  });
+  const tenants = Array.from(byTenant.values())
+    .sort((a, b) => (a.domain || a.tenantId).localeCompare(b.domain || b.tenantId));
+
+  pane.replaceChildren();
+  const section = adminSection('Tenants connus');
+
+  const chips = buildFilterChips(() => render());
+  section.appendChild(chips.el);
+
+  const search = document.createElement('input');
+  search.type = 'text'; search.className = 'admin-input';
+  search.placeholder = 'Rechercher par domaine, tenant ou tag…';
+  section.appendChild(search);
+
+  const list = document.createElement('div');
+  list.className = 'admin-assigned-list';
+  section.appendChild(list);
+
+  const render = () => {
+    list.replaceChildren();
+    const f = search.value.trim().toLowerCase();
+    const kind = chips.state.active;
+    const filtered = tenants.filter(t => {
+      const kindOk = kind === 'all' || t.types.some(ty => tagKind(ty) === kind);
+      if (!kindOk) return false;
+      if (!f) return true;
+      const labels = t.types.map(ty => resolveTagMeta(ty).label.toLowerCase()).join(' ');
+      return (t.domain || '').toLowerCase().includes(f) || t.tenantId.toLowerCase().includes(f) || labels.includes(f);
+    });
+    if (!filtered.length) { list.appendChild(adminEmpty('Aucun tenant connu')); return; }
+    filtered.forEach(t => list.appendChild(buildKnownRow(t)));
+  };
+
+  search.addEventListener('input', render);
+  render();
+  pane.appendChild(section);
+}
+
+function buildKnownRow(t) {
+  const row = document.createElement('div'); row.className = 'admin-known-row';
+
+  const head = document.createElement('div'); head.className = 'admin-known-head';
+  const dom = document.createElement('span'); dom.className = 'admin-assigned-domain'; dom.textContent = t.domain || '(domaine inconnu)';
+  const tid = document.createElement('span'); tid.className = 'admin-assigned-tenant'; tid.textContent = t.tenantId;
+  const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'admin-btn admin-btn-small'; copy.textContent = 'Copier ID';
+  copy.addEventListener('click', () => copyTenantId(t.tenantId, copy));
+  head.appendChild(dom); head.appendChild(tid); head.appendChild(copy);
+
+  const badges = document.createElement('div'); badges.className = 'admin-known-badges';
+  t.types.forEach(ty => {
+    const meta = resolveTagMeta(ty);
+    const b = document.createElement('span'); b.className = 'hero-badge hero-badge-approved'; b.dataset.type = ty;
+    if (meta.group) b.dataset.group = meta.group;
+    if (meta.color) b.style.setProperty('--tag-color', meta.color);
+    b.appendChild(badgeIcon('assets/checked.png'));
+    const s = document.createElement('span'); s.textContent = meta.label; b.appendChild(s);
+    badges.appendChild(b);
+  });
+
+  row.appendChild(head); row.appendChild(badges);
+  return row;
+}
+
 /* Section "Tags assignés" : liste de tous les tags validés (tous tenants)
-   avec recherche par tag / domaine / tenant. Manager+ (onglet Tags). */
+   avec filtres rapides + recherche + copie. Manager+ (onglet Tags). */
 async function buildAssignedTagsSection() {
   const section = adminSection('Tags assignés');
 
@@ -1860,6 +2013,9 @@ async function buildAssignedTagsSection() {
     const r = await fetch('/api/classification?all=1', { headers: { 'Accept': 'application/json' } });
     if (r.ok) { const d = await r.json(); items = Array.isArray(d.items) ? d.items : []; }
   } catch {}
+
+  const chips = buildFilterChips(() => render());
+  section.appendChild(chips.el);
 
   const search = document.createElement('input');
   search.type = 'text';
@@ -1871,10 +2027,12 @@ async function buildAssignedTagsSection() {
   list.className = 'admin-assigned-list';
   section.appendChild(list);
 
-  const render = (filter) => {
+  const render = () => {
     list.replaceChildren();
-    const f = (filter || '').trim().toLowerCase();
+    const f = search.value.trim().toLowerCase();
+    const kind = chips.state.active;
     const filtered = items.filter(it => {
+      if (kind !== 'all' && tagKind(it.type) !== kind) return false;
       const meta = resolveTagMeta(it.type);
       return !f
         || meta.label.toLowerCase().includes(f)
@@ -1885,8 +2043,8 @@ async function buildAssignedTagsSection() {
     filtered.forEach(it => list.appendChild(buildAssignedRow(it)));
   };
 
-  search.addEventListener('input', () => render(search.value));
-  render('');
+  search.addEventListener('input', render);
+  render();
   return section;
 }
 
@@ -1912,11 +2070,15 @@ function buildAssignedRow(it) {
   tid.className = 'admin-assigned-tenant';
   tid.textContent = it.tenantId;
 
+  const copy = document.createElement('button');
+  copy.type = 'button'; copy.className = 'admin-btn admin-btn-small'; copy.textContent = 'Copier ID';
+  copy.addEventListener('click', () => copyTenantId(it.tenantId, copy));
+
   const del = document.createElement('button');
   del.type = 'button'; del.className = 'admin-btn admin-btn-small admin-btn-reject'; del.textContent = 'Supprimer';
   del.addEventListener('click', () => removeAssigned(it, row));
 
-  row.appendChild(badge); row.appendChild(dom); row.appendChild(tid); row.appendChild(del);
+  row.appendChild(badge); row.appendChild(dom); row.appendChild(tid); row.appendChild(copy); row.appendChild(del);
   return row;
 }
 

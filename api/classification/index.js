@@ -36,7 +36,7 @@ module.exports = async function (context, req) {
 
     // ── GET ?all=1 : tous les tags assignés (manager+) ──
     if (req.query.all === "1") {
-      if (!hasRole(auth.role, "manager")) { context.res = json(403, { error: "Accès refusé" }); return; }
+      // Liste des tenants connus — accessible à tout utilisateur connecté (lecture seule)
       const items = [];
       for await (const e of classificationsClient.listEntities()) {
         items.push({

@@ -1427,6 +1427,20 @@ select.admin-input{cursor:pointer}
 .admin-role-manager{background:linear-gradient(180deg,#3b82f6,#2563eb)}
 .admin-role-moderator{background:linear-gradient(180deg,#14b8a6,#0d9488)}
 
+/* ── Chips de filtre rapide ── */
+.admin-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.admin-chip{padding:5px 12px;border-radius:999px;font-family:var(--font);font-size:var(--text-xs);font-weight:600;color:var(--soft);cursor:pointer;border:1px solid transparent;background:linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.02) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.1) inset;transition:background .15s,color .15s,box-shadow .15s}
+[data-theme="light"] .admin-chip,html:not([data-theme="dark"]) .admin-chip{background:linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.01) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.08) inset}
+.admin-chip:hover{color:var(--text)}
+.admin-chip.active{color:#fff;background:linear-gradient(180deg, rgba(90,78,210,.95) 0%, rgba(75,63,190,.95) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.14) inset}
+
+/* ── Lignes "Tenant connu" (groupées) ── */
+.admin-known-row{display:flex;flex-direction:column;gap:8px;padding:11px 14px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,.02) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.08) inset}
+[data-theme="light"] .admin-known-row,html:not([data-theme="dark"]) .admin-known-row{background:linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.01) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.06) inset}
+.admin-known-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.admin-known-head .admin-assigned-tenant{margin-right:auto}
+.admin-known-badges{display:flex;flex-wrap:wrap;gap:6px}
+
 /* ── Garde-fous [hidden] (les règles display ci-dessus battent le UA [hidden]) ── */
 .topbar-admin[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
 

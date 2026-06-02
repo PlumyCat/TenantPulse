@@ -335,14 +335,18 @@
 <div class="admin-overlay" id="adminOverlay" hidden>
   <div class="admin-modal" id="adminModalInner">
     <div class="admin-modal-head">
-      <div class="admin-modal-title"><img src="assets/option.png" class="icon-adaptive-inv" alt=""> Administration</div>
+      <div class="admin-modal-title"><img src="assets/option.png" class="icon-adaptive-inv" alt=""> <span id="adminModalTitleText">Administration</span></div>
       <button class="admin-modal-close" id="btnAdminClose" aria-label="Fermer">✕</button>
     </div>
     <div class="admin-subtabs" id="adminSubtabs" role="tablist">
-      <button class="admin-subtab active" data-subtab="requests" role="tab" type="button">
+      <button class="admin-subtab" data-subtab="requests" data-min-role="moderator" role="tab" type="button" hidden>
         <img src="assets/inbox.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
         Demandes
         <span class="admin-subtab-badge admin-subtab-badge-req" id="subtabBadgeRequests" hidden>0</span>
+      </button>
+      <button class="admin-subtab active" data-subtab="known" role="tab" type="button">
+        <img src="assets/LOUPE.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
+        Tenant connu
       </button>
       <button class="admin-subtab" data-subtab="tags" data-min-role="manager" role="tab" type="button" hidden>
         <img src="assets/tag.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
@@ -355,7 +359,8 @@
       </button>
     </div>
     <div class="admin-body">
-      <div class="admin-pane" id="adminPaneRequests"></div>
+      <div class="admin-pane" id="adminPaneRequests" hidden></div>
+      <div class="admin-pane" id="adminPaneKnown"></div>
       <div class="admin-pane" id="adminPaneTags" hidden></div>
       <div class="admin-pane" id="adminPaneUsers" hidden></div>
     </div>
