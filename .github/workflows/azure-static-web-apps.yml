@@ -29,10 +29,10 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "/"     # racine du repo = racine du site
-          api_location: ""       # pas de backend
+          app_location: "/"      # racine du repo = racine du site
+          api_location: "api"    # Azure Functions (classification, tags, rôles…)
           output_location: ""    # pas de dossier de build
-          skip_app_build: true   # fichiers statiques servis tels quels (pas d'Oryx)
+          skip_app_build: true   # front statique servi tel quel (l'API est buildée à part)
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
