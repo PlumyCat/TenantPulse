@@ -1084,13 +1084,13 @@ function applyAuthToUI() {
   }
 
   // Bouton d'accès : visible pour tout utilisateur connecté.
-  // Libellé "Tenant connu" pour les utilisateurs, "Administration" pour les autres.
+  // Libellé "Annuaire des tenants" pour les utilisateurs, "Administration" pour les autres.
   const btnAdmin = document.getElementById('btnOpenAdmin');
   const btnAdminLabel = document.querySelector('#btnOpenAdmin .topbar-admin-label');
   if (btnAdmin) {
     btnAdmin.hidden = !TP_AUTH.loaded;
-    if (btnAdminLabel) btnAdminLabel.textContent = TP_AUTH.hasRole('moderator') ? 'Administration' : 'Tenant connu';
-    btnAdmin.title = TP_AUTH.hasRole('moderator') ? 'Onglet administration' : 'Tenants connus';
+    if (btnAdminLabel) btnAdminLabel.textContent = TP_AUTH.hasRole('moderator') ? 'Administration' : 'Annuaire des tenants';
+    btnAdmin.title = TP_AUTH.hasRole('moderator') ? 'Onglet administration' : 'Annuaire des tenants référencés';
   }
 
   // Alimente les badges (demandes en attente / alertes) dès le chargement
@@ -1594,7 +1594,7 @@ function openAdmin() {
 
   // Titre de la modale selon le rôle
   const titleEl = document.getElementById('adminModalTitleText');
-  if (titleEl) titleEl.textContent = TP_AUTH.hasRole('moderator') ? 'Administration' : 'Tenant connu';
+  if (titleEl) titleEl.textContent = TP_AUTH.hasRole('moderator') ? 'Administration' : 'Annuaire des tenants';
 
   // Si le sous-onglet courant n'est plus visible pour ce rôle, prendre le 1er visible
   let activeBtn = document.querySelector('.admin-subtab[data-subtab="' + currentAdminSubtab + '"]');
@@ -1944,7 +1944,7 @@ async function loadKnownTenants() {
     .sort((a, b) => (a.domain || a.tenantId).localeCompare(b.domain || b.tenantId));
 
   pane.replaceChildren();
-  const section = adminSection('Tenants connus');
+  const section = adminSection('Annuaire des tenants');
 
   const chips = buildFilterChips(() => render());
   section.appendChild(chips.el);
@@ -1969,7 +1969,7 @@ async function loadKnownTenants() {
       const labels = t.types.map(ty => resolveTagMeta(ty).label.toLowerCase()).join(' ');
       return (t.domain || '').toLowerCase().includes(f) || t.tenantId.toLowerCase().includes(f) || labels.includes(f);
     });
-    if (!filtered.length) { list.appendChild(adminEmpty('Aucun tenant connu')); return; }
+    if (!filtered.length) { list.appendChild(adminEmpty('Aucun tenant référencé')); return; }
     filtered.forEach(t => list.appendChild(buildKnownRow(t)));
   };
 
