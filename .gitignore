@@ -8,3 +8,7 @@ graphify-out/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Azure Functions - config locale (contient la connection string)
+api/local.settings.json
+api/node_modules/

@@ -1007,6 +1007,8 @@ window.addEventListener('load', () => {
   syncHistoryToggleUI();
   renderHistory();
   syncCacheIndicator();
+  initAuth();
+  bindAdminEvents();
 
   // ── Synchronisation thème clair/sombre → iframes Mhaelle & PsForge ──
   // Utilise postMessage (fonctionne même avec le protocole file://)
@@ -1031,7 +1033,1017 @@ let openCardId = null;
 let lastReport = null;
 let currentState = { domain:null, ms:null, dns:null, goog:null, health:null, others:null, host:null, fullDone:false };
 
+// ══════════════════════════════════════════════════════════════════════════
+//  AUTHENTIFICATION & RÔLES
+//  État applicatif de l'utilisateur connecté, alimenté par GET /api/me.
+//  Hiérarchie : user < moderator < manager < admin
+// ══════════════════════════════════════════════════════════════════════════
+const ROLE_HIERARCHY = { user: 0, moderator: 1, manager: 2, admin: 3 };
+
+const TP_AUTH = {
+  email: null,
+  name:  null,
+  role:  'user',
+  loaded: false,
+  /* Vrai si le rôle courant est >= au rôle requis. */
+  hasRole(required) {
+    return (ROLE_HIERARCHY[this.role] ?? 0) >= (ROLE_HIERARCHY[required] ?? 0);
+  }
+};
+
+/* Récupère l'identité + le rôle depuis l'API et met à jour l'UI.
+   En local (file:// ou pas d'API), échoue silencieusement → reste en "user". */
+async function initAuth() {
+  try {
+    const res = await fetch('/api/me', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) { applyAuthToUI(); return; }
+    const data = await res.json();
+    TP_AUTH.email  = data.email || null;
+    TP_AUTH.name   = data.name  || null;
+    TP_AUTH.role   = ROLE_HIERARCHY.hasOwnProperty(data.role) ? data.role : 'user';
+    TP_AUTH.loaded = true;
+  } catch {
+    // Pas d'API disponible (dev local) — on reste en utilisateur anonyme
+  }
+  applyAuthToUI();
+}
+
+/* Reflète l'état d'auth dans l'interface : rôle en bas à gauche + bouton Admin. */
+function applyAuthToUI() {
+  // Rôle affiché en bas à gauche
+  const footerRole = document.getElementById('footerRole');
+  const footerRoleValue = document.getElementById('footerRoleValue');
+  if (footerRole && footerRoleValue) {
+    if (TP_AUTH.loaded) {
+      footerRoleValue.textContent = roleLabel(TP_AUTH.role);
+      footerRole.hidden = false;
+    } else {
+      footerRole.hidden = true;
+    }
+  }
+
+  // Bouton Administration : visible pour modérateur, manager, admin
+  const btnAdmin = document.getElementById('btnOpenAdmin');
+  if (btnAdmin) {
+    btnAdmin.hidden = !TP_AUTH.hasRole('moderator');
+  }
+
+  // Alimente les badges (demandes en attente / alertes) dès le chargement
+  if (TP_AUTH.hasRole('moderator') && typeof refreshAdminBadges === 'function') {
+    refreshAdminBadges();
+  }
+}
+
+/* Libellé FR lisible d'un rôle. */
+function roleLabel(role) {
+  switch (role) {
+    case 'admin':     return 'Admin';
+    case 'manager':   return 'Manager';
+    case 'moderator': return 'Modérateur';
+    default:          return 'Utilisateur';
+  }
+}
+
 function panelTitle(src, cls, text) { const img = document.createElement('img'); img.src=src; img.className=cls; img.alt=''; return [img, document.createTextNode(' '+text)]; }
+// ══════════════════════════════════════════════════════════════════════════
+//  TAGS DU HERO — bouton (+) et menu contextuel selon le rôle
+//  - Utilisateur / Modérateur : proposent un tag → POST /api/request (en attente)
+//  - Manager / Admin          : appliquent directement (le backend valide seul)
+//  L'affichage des badges (validés / en attente / verrouillé) est géré à l'étape 13.
+// ══════════════════════════════════════════════════════════════════════════
+const PREDEFINED_TAGS = [
+  { type: 'direct',     label: 'Direct',     group: 'classification' },
+  { type: 'indirect',   label: 'Indirect',   group: 'classification' },
+  { type: 'gdap_actif', label: 'GDAP actif', group: 'gdap' },
+  { type: 'gdap_non',   label: 'GDAP : non', group: 'gdap' },
+];
+
+/* Cache des tags personnalisés (Manager/Admin). */
+let _customTagsCache = null;
+
+async function getCustomTags() {
+  if (_customTagsCache) return _customTagsCache;
+  try {
+    const res = await fetch('/api/tags', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    _customTagsCache = Array.isArray(data.tags) ? data.tags : [];
+    return _customTagsCache;
+  } catch {
+    return [];
+  }
+}
+
+/* Construit la zone de tags du hero : conteneur badges + bouton (+).
+   Retourne null si l'utilisateur n'est pas connecté (dev local). */
+function buildHeroTagZone(tenantId, domain) {
+  if (!TP_AUTH.loaded || !tenantId) return null;
+
+  const zone = document.createElement('div');
+  zone.className = 'hero-tags';
+  zone.dataset.tenant = tenantId;
+  zone.dataset.domain = domain || '';
+
+  const badges = document.createElement('div');
+  badges.className = 'hero-tags-badges';
+  zone.appendChild(badges);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'hero-tag-add';
+  addBtn.textContent = '+';
+  addBtn.title = TP_AUTH.hasRole('manager') ? 'Appliquer un tag' : 'Proposer une classification';
+  addBtn.setAttribute('aria-label', addBtn.title);
+  addBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleHeroTagMenu(zone, addBtn, tenantId, domain);
+  });
+  zone.appendChild(addBtn);
+
+  return zone;
+}
+
+let _openHeroMenu = null;
+
+function closeHeroTagMenu() {
+  if (_openHeroMenu) {
+    _openHeroMenu.remove();
+    _openHeroMenu = null;
+    document.removeEventListener('click', closeHeroTagMenu);
+  }
+}
+
+/* Ouvre/ferme le menu contextuel du bouton (+). */
+async function toggleHeroTagMenu(zone, anchorBtn, tenantId, domain) {
+  if (_openHeroMenu) { closeHeroTagMenu(); return; }
+
+  // Verrou : utilisateurs et modérateurs bloqués si le tenant est verrouillé
+  if (zone.dataset.locked === '1' && !TP_AUTH.hasRole('manager')) return;
+
+  const menu = document.createElement('div');
+  menu.className = 'hero-tag-menu';
+  menu.addEventListener('click', (e) => e.stopPropagation());
+
+  const title = document.createElement('div');
+  title.className = 'hero-tag-menu-title';
+  title.textContent = TP_AUTH.hasRole('manager') ? 'Appliquer un tag' : 'Proposer une classification';
+  menu.appendChild(title);
+
+  PREDEFINED_TAGS.forEach(tag => {
+    menu.appendChild(makeTagOption(tag.label, tag.type, tenantId, domain));
+  });
+
+  if (TP_AUTH.hasRole('manager')) {
+    const custom = await getCustomTags();
+    if (custom.length > 0) {
+      const sep = document.createElement('div');
+      sep.className = 'hero-tag-menu-sep';
+      sep.textContent = 'Tags personnalisés';
+      menu.appendChild(sep);
+      custom.forEach(tag => {
+        const opt = makeTagOption(tag.name, tag.tagId, tenantId, domain);
+        if (tag.color) opt.style.setProperty('--tag-color', tag.color);
+        menu.appendChild(opt);
+      });
+    }
+  }
+
+  const comment = document.createElement('input');
+  comment.type = 'text';
+  comment.className = 'hero-tag-comment';
+  comment.placeholder = 'Commentaire (optionnel)';
+  comment.maxLength = 200;
+  menu.appendChild(comment);
+  menu._commentInput = comment;
+
+  zone.appendChild(menu);
+  _openHeroMenu = menu;
+  setTimeout(() => document.addEventListener('click', closeHeroTagMenu), 0);
+}
+
+function makeTagOption(label, type, tenantId, domain) {
+  const opt = document.createElement('button');
+  opt.type = 'button';
+  opt.className = 'hero-tag-opt';
+  opt.textContent = label;
+  opt.addEventListener('click', () => {
+    const comment = _openHeroMenu && _openHeroMenu._commentInput ? _openHeroMenu._commentInput.value.trim() : '';
+    submitHeroTag(tenantId, domain, type, comment, opt);
+  });
+  return opt;
+}
+
+/* Soumet le tag via POST /api/request. Le backend décide pending vs approved. */
+async function submitHeroTag(tenantId, domain, type, comment, optEl) {
+  if (optEl) { optEl.disabled = true; optEl.classList.add('loading'); }
+  try {
+    const res = await fetch('/api/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId, domain, type, comment })
+    });
+
+    if (res.status === 403) { heroTagFeedback('Action verrouillée pour ce tenant', true); closeHeroTagMenu(); return; }
+    if (!res.ok) { heroTagFeedback('Erreur lors de l\'envoi', true); return; }
+
+    const data = await res.json();
+    closeHeroTagMenu();
+    heroTagFeedback(
+      data.status === 'approved' ? 'Tag appliqué' : 'Proposition envoyée — en attente de validation',
+      false
+    );
+
+    if (typeof refreshHeroTags === 'function') refreshHeroTags(tenantId, domain);
+    if (typeof refreshAdminBadges === 'function') refreshAdminBadges();
+  } catch {
+    heroTagFeedback('Erreur réseau', true);
+  } finally {
+    if (optEl) { optEl.disabled = false; optEl.classList.remove('loading'); }
+  }
+}
+
+/* Petit message de retour temporaire. */
+function heroTagFeedback(message, isError) {
+  let toast = document.getElementById('heroTagToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'heroTagToast';
+    toast.className = 'hero-tag-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.toggle('error', !!isError);
+  toast.classList.add('visible');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('visible'), 3200);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  AFFICHAGE DES BADGES DU HERO (étape 13)
+//  refreshHeroTags() interroge GET /api/classification et rend :
+//   - badge validé (✓)            - demandes en attente avec pourcentage (⏳)
+//   - état verrouillé (🔒)         - validation directe au clic pour modérateur+
+// ══════════════════════════════════════════════════════════════════════════
+
+/* Résout le libellé / la couleur / la description d'un type de tag. */
+function resolveTagMeta(type) {
+  const pre = PREDEFINED_TAGS.find(t => t.type === type);
+  if (pre) return { label: pre.label, color: null, group: pre.group };
+  const custom = (_customTagsCache || []).find(t => t.tagId === type || t.name === type);
+  if (custom) return { label: custom.name, color: custom.color || null, description: custom.description || '' };
+  return { label: type, color: null };
+}
+
+/* Interroge l'API et (re)dessine les badges d'un hero pour un tenant donné. */
+async function refreshHeroTags(tenantId, domain) {
+  const zone = document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(tenantId) : tenantId) + '"]');
+  if (!zone) return;
+  const badges = zone.querySelector('.hero-tags-badges');
+  if (!badges) return;
+
+  let data;
+  try {
+    const res = await fetch('/api/classification?tenantId=' + encodeURIComponent(tenantId), { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return;
+    data = await res.json();
+  } catch {
+    return;
+  }
+
+  // S'assure que les tags personnalisés sont en cache pour résoudre leurs libellés
+  if (TP_AUTH.hasRole('manager') && !_customTagsCache) {
+    try { await getCustomTags(); } catch {}
+  }
+
+  badges.replaceChildren();
+
+  // ── État de verrouillage ──
+  const locked = !!data.locked;
+  zone.dataset.locked = locked ? '1' : '0';
+  const addBtn = zone.querySelector('.hero-tag-add');
+  if (addBtn) {
+    const blocked = locked && !TP_AUTH.hasRole('manager');
+    addBtn.disabled = blocked;
+    addBtn.classList.toggle('locked', locked);
+    addBtn.title = blocked
+      ? 'Tenant verrouillé — modifications réservées aux managers'
+      : (TP_AUTH.hasRole('manager') ? 'Appliquer un tag' : 'Proposer une classification');
+  }
+  if (locked) {
+    const lockBadge = document.createElement('span');
+    lockBadge.className = 'hero-badge hero-badge-locked';
+    lockBadge.textContent = '🔒 Verrouillé';
+    badges.appendChild(lockBadge);
+  }
+
+  // ── Badges validés (plusieurs possibles) ──
+  if (Array.isArray(data.approvedTags)) {
+    data.approvedTags.forEach(t => badges.appendChild(makeApprovedBadge(t.type, t, tenantId, domain)));
+  }
+
+  // ── Badges en attente (proportionnels par groupe) ──
+  if (Array.isArray(data.pending)) {
+    data.pending.forEach(p => badges.appendChild(makePendingBadge(p, tenantId, domain)));
+  }
+}
+
+/* Badge d'un tag validé. Manager/Admin peuvent le retirer au clic. */
+function makeApprovedBadge(type, approved, tenantId, domain) {
+  const meta = resolveTagMeta(type);
+  const b = document.createElement('span');
+  b.className = 'hero-badge hero-badge-approved';
+  b.dataset.type = type;
+  if (meta.group) b.dataset.group = meta.group;
+  if (meta.color) b.style.setProperty('--tag-color', meta.color);
+
+  const txt = document.createElement('span');
+  txt.textContent = '✓ ' + meta.label;
+  b.appendChild(txt);
+
+  const tip = [];
+  if (approved.approvedBy) tip.push('Validé par ' + approved.approvedBy);
+  if (approved.approvedAt) tip.push(new Date(approved.approvedAt).toLocaleDateString('fr-FR'));
+  if (meta.description) tip.push(meta.description);
+  if (tip.length) b.title = tip.join(' · ');
+
+  return b;
+}
+
+/* Badge d'une demande en attente avec pourcentage. Modérateur+ valide au clic. */
+function makePendingBadge(p, tenantId, domain) {
+  const meta = resolveTagMeta(p.type);
+  const b = document.createElement('span');
+  b.className = 'hero-badge hero-badge-pending';
+  b.dataset.type = p.type;
+  if (meta.color) b.style.setProperty('--tag-color', meta.color);
+
+  const pct = (typeof p.percent === 'number') ? ' ' + p.percent + '%' : '';
+  b.textContent = '⏳ ' + meta.label + pct;
+
+  let tip = (p.count || 0) + ' demande(s) en attente';
+  if (TP_AUTH.hasRole('moderator')) {
+    b.classList.add('clickable');
+    tip += ' — cliquer pour valider';
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      validatePendingFromHero(tenantId, domain, p.type);
+    });
+  }
+  b.title = tip;
+  return b;
+}
+
+/* Validation directe depuis le hero (modérateur, manager, admin).
+   Récupère une demande correspondante puis l'approuve via /api/review. */
+async function validatePendingFromHero(tenantId, domain, type) {
+  if (!TP_AUTH.hasRole('moderator')) return;
+  try {
+    const res = await fetch('/api/requests', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) { heroTagFeedback('Accès refusé', true); return; }
+    const list = await res.json();
+    const match = list.find(r => r.tenantId === tenantId && r.type === type);
+    if (!match) { heroTagFeedback('Demande introuvable', true); return; }
+
+    const rev = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: match.requestId, decision: 'approved' })
+    });
+    if (!rev.ok) { heroTagFeedback('Erreur de validation', true); return; }
+
+    heroTagFeedback('Tag validé', false);
+    refreshHeroTags(tenantId, domain);
+    if (typeof refreshAdminBadges === 'function') refreshAdminBadges();
+  } catch {
+    heroTagFeedback('Erreur réseau', true);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  ONGLET ADMINISTRATION (étape 14) — shell, sous-onglets, badges
+//  Sous-onglets : Demandes (modérateur+), Tags & Utilisateurs (manager+)
+//  Badges topbar : gris = demandes en attente, rouge = alertes de rétention
+//  Le contenu des panes est rempli aux étapes 15 (Demandes), 16 (Tags), 17 (Users)
+// ══════════════════════════════════════════════════════════════════════════
+let currentAdminSubtab = 'requests';
+
+/* Câble les événements statiques de l'onglet Admin (appelé au chargement). */
+function bindAdminEvents() {
+  const btnOpen  = document.getElementById('btnOpenAdmin');
+  const btnClose = document.getElementById('btnAdminClose');
+  const overlay  = document.getElementById('adminOverlay');
+  const subtabs  = document.getElementById('adminSubtabs');
+
+  if (btnOpen)  btnOpen.addEventListener('click', openAdmin);
+  if (btnClose) btnClose.addEventListener('click', closeAdmin);
+  if (overlay)  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeAdmin(); });
+  if (subtabs) {
+    subtabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('.admin-subtab');
+      if (btn && !btn.hidden) switchAdminSubtab(btn.dataset.subtab);
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay && !overlay.hidden) closeAdmin();
+  });
+}
+
+/* Affiche/masque les sous-onglets selon le rôle. */
+function applyAdminRoleVisibility() {
+  document.querySelectorAll('.admin-subtab[data-min-role]').forEach(btn => {
+    const required = btn.dataset.minRole;
+    btn.hidden = !TP_AUTH.hasRole(required);
+  });
+}
+
+function openAdmin() {
+  if (!TP_AUTH.hasRole('moderator')) return;
+  const overlay = document.getElementById('adminOverlay');
+  if (!overlay) return;
+  applyAdminRoleVisibility();
+
+  // Si le sous-onglet courant n'est plus visible pour ce rôle, revenir à "requests"
+  const activeBtn = document.querySelector('.admin-subtab[data-subtab="' + currentAdminSubtab + '"]');
+  if (!activeBtn || activeBtn.hidden) currentAdminSubtab = 'requests';
+
+  overlay.hidden = false;
+  switchAdminSubtab(currentAdminSubtab);
+  refreshAdminBadges();
+}
+
+function closeAdmin() {
+  const overlay = document.getElementById('adminOverlay');
+  if (overlay) overlay.hidden = true;
+}
+
+/* Bascule entre les sous-onglets et charge le contenu de la pane. */
+function switchAdminSubtab(name) {
+  currentAdminSubtab = name;
+
+  document.querySelectorAll('.admin-subtab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.subtab === name);
+  });
+  const panes = { requests: 'adminPaneRequests', tags: 'adminPaneTags', users: 'adminPaneUsers' };
+  Object.entries(panes).forEach(([key, id]) => {
+    const pane = document.getElementById(id);
+    if (pane) pane.hidden = (key !== name);
+  });
+
+  // Chargement du contenu (défini aux étapes 15/16/17)
+  if (name === 'requests' && typeof loadAdminRequests === 'function') loadAdminRequests();
+  else if (name === 'tags' && typeof loadAdminTags === 'function') loadAdminTags();
+  else if (name === 'users' && typeof loadAdminUsers === 'function') loadAdminUsers();
+  else adminPanePlaceholder(panes[name]);
+}
+
+/* Placeholder temporaire tant qu'une pane n'a pas son loader (étapes ultérieures). */
+function adminPanePlaceholder(paneId) {
+  const pane = document.getElementById(paneId);
+  if (!pane) return;
+  pane.replaceChildren();
+  const p = document.createElement('div');
+  p.className = 'admin-empty';
+  p.textContent = 'Module en cours de mise en place…';
+  pane.appendChild(p);
+}
+
+/* Met à jour les badges (topbar + sous-onglets) :
+   gris = demandes en attente, rouge = alertes de rétention. */
+async function refreshAdminBadges() {
+  if (!TP_AUTH.hasRole('moderator')) return;
+
+  // Badge gris — demandes en attente
+  let pendingCount = 0;
+  try {
+    const r = await fetch('/api/requests', { headers: { 'Accept': 'application/json' } });
+    if (r.ok) { const list = await r.json(); pendingCount = Array.isArray(list) ? list.length : 0; }
+  } catch {}
+  setCountBadge('adminBadgeReq', pendingCount);
+  setCountBadge('subtabBadgeRequests', pendingCount);
+
+  // Badge rouge — alertes de rétention (manager+)
+  if (TP_AUTH.hasRole('manager')) {
+    let alertCount = 0;
+    try {
+      const r = await fetch('/api/tags', { headers: { 'Accept': 'application/json' } });
+      if (r.ok) {
+        const data = await r.json();
+        const byKey = {};
+        (data.tags || []).forEach(t => { byKey[t.tagId] = t; byKey[t.name] = t; });
+        alertCount = (data.expiredItems || []).filter(it => {
+          const t = byKey[it.type];
+          return t && t.alertOnExpiry;
+        }).length;
+      }
+    } catch {}
+    setCountBadge('adminBadgeAlert', alertCount);
+    setCountBadge('subtabBadgeTags', alertCount);
+  }
+}
+
+/* Affiche un badge numérique (max "99+") ou le masque si 0. */
+function setCountBadge(id, n) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (n > 0) {
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+// ── Helpers communs aux panes admin ──
+function adminLoading() { const d = document.createElement('div'); d.className = 'admin-empty'; d.textContent = 'Chargement…'; return d; }
+function adminEmpty(msg) { const d = document.createElement('div'); d.className = 'admin-empty'; d.textContent = msg; return d; }
+function adminError(msg) { const d = document.createElement('div'); d.className = 'admin-empty admin-error'; d.textContent = msg; return d; }
+async function safeErr(r) { try { const d = await r.json(); return d && d.error; } catch { return null; } }
+function adminSection(titleText) {
+  const s = document.createElement('div'); s.className = 'admin-section';
+  const t = document.createElement('div'); t.className = 'admin-section-title'; t.textContent = titleText;
+  s.appendChild(t); return s;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  ÉTAPE 15 — Sous-onglet DEMANDES
+//  Liste des demandes en attente (qui / quand / tenant / domaine) + valider/rejeter
+// ══════════════════════════════════════════════════════════════════════════
+async function loadAdminRequests() {
+  const pane = document.getElementById('adminPaneRequests');
+  if (!pane) return;
+  pane.replaceChildren(adminLoading());
+
+  let list;
+  try {
+    const r = await fetch('/api/requests', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) { pane.replaceChildren(adminError('Accès refusé ou erreur serveur')); return; }
+    list = await r.json();
+  } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
+
+  pane.replaceChildren();
+  if (!Array.isArray(list) || list.length === 0) {
+    pane.appendChild(adminEmpty('Aucune demande en attente'));
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'admin-req-list';
+  list.forEach(req => wrap.appendChild(buildRequestRow(req)));
+  pane.appendChild(wrap);
+}
+
+function buildRequestRow(req) {
+  const row = document.createElement('div');
+  row.className = 'admin-req-row';
+
+  const info = document.createElement('div');
+  info.className = 'admin-req-info';
+
+  const meta = resolveTagMeta(req.type);
+  const badge = document.createElement('span');
+  badge.className = 'hero-badge hero-badge-pending';
+  if (meta.color) badge.style.setProperty('--tag-color', meta.color);
+  badge.textContent = meta.label;
+  info.appendChild(badge);
+
+  const dom = document.createElement('div');
+  dom.className = 'admin-req-domain';
+  dom.textContent = req.domain || '(domaine inconnu)';
+  info.appendChild(dom);
+
+  const tenant = document.createElement('div');
+  tenant.className = 'admin-req-tenant';
+  tenant.textContent = req.tenantId;
+  info.appendChild(tenant);
+
+  const who = document.createElement('div');
+  who.className = 'admin-req-meta';
+  const when = req.requestedAt ? new Date(req.requestedAt).toLocaleString('fr-FR') : '';
+  who.textContent = (req.requestedBy || 'inconnu') + (when ? ' · ' + when : '');
+  info.appendChild(who);
+
+  if (req.comment) {
+    const c = document.createElement('div');
+    c.className = 'admin-req-comment';
+    c.textContent = '« ' + req.comment + ' »';
+    info.appendChild(c);
+  }
+  row.appendChild(info);
+
+  const actions = document.createElement('div');
+  actions.className = 'admin-req-actions';
+  const approve = document.createElement('button');
+  approve.type = 'button'; approve.className = 'admin-btn admin-btn-approve'; approve.textContent = 'Approuver';
+  approve.addEventListener('click', () => reviewRequest(req, 'approved', row));
+  const reject = document.createElement('button');
+  reject.type = 'button'; reject.className = 'admin-btn admin-btn-reject'; reject.textContent = 'Rejeter';
+  reject.addEventListener('click', () => reviewRequest(req, 'rejected', row));
+  actions.appendChild(approve); actions.appendChild(reject);
+  row.appendChild(actions);
+
+  return row;
+}
+
+async function reviewRequest(req, decision, rowEl) {
+  const btns = rowEl.querySelectorAll('button');
+  btns.forEach(b => b.disabled = true);
+  try {
+    const r = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: req.requestId, decision })
+    });
+    if (!r.ok) {
+      heroTagFeedback((await safeErr(r)) || 'Erreur lors de la décision', true);
+      btns.forEach(b => b.disabled = false);
+      return;
+    }
+    heroTagFeedback(decision === 'approved' ? 'Demande approuvée' : 'Demande rejetée', false);
+    rowEl.remove();
+    refreshAdminBadges();
+
+    // Rafraîchit le hero si le tenant concerné est affiché
+    if (currentState && currentState.ms && currentState.ms.tenantId === req.tenantId) {
+      refreshHeroTags(req.tenantId, req.domain);
+    }
+    const pane = document.getElementById('adminPaneRequests');
+    if (pane && !pane.querySelector('.admin-req-row')) {
+      pane.replaceChildren(adminEmpty('Aucune demande en attente'));
+    }
+  } catch {
+    heroTagFeedback('Erreur réseau', true);
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  ÉTAPE 16 — Sous-onglet TAGS
+//  Création / modification / suppression de tags custom + tags expirés
+// ══════════════════════════════════════════════════════════════════════════
+async function loadAdminTags() {
+  const pane = document.getElementById('adminPaneTags');
+  if (!pane) return;
+  pane.replaceChildren(adminLoading());
+
+  let data;
+  try {
+    const r = await fetch('/api/tags', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) { pane.replaceChildren(adminError('Accès refusé ou erreur serveur')); return; }
+    data = await r.json();
+  } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
+
+  _customTagsCache = Array.isArray(data.tags) ? data.tags : [];
+  pane.replaceChildren();
+
+  // Formulaire de création
+  pane.appendChild(buildTagForm(null));
+
+  // Liste des tags custom
+  const tagsSection = adminSection('Tags personnalisés');
+  if (data.tags && data.tags.length) {
+    data.tags.forEach(tag => tagsSection.appendChild(buildTagRow(tag)));
+  } else {
+    tagsSection.appendChild(adminEmpty('Aucun tag personnalisé'));
+  }
+  pane.appendChild(tagsSection);
+
+  // Tags expirés
+  const expSection = adminSection('Tags expirés');
+  if (data.expiredItems && data.expiredItems.length) {
+    data.expiredItems.forEach(it => expSection.appendChild(buildExpiredRow(it)));
+  } else {
+    expSection.appendChild(adminEmpty('Aucun tag expiré'));
+  }
+  pane.appendChild(expSection);
+}
+
+function buildTagForm(existing) {
+  const form = document.createElement('div');
+  form.className = 'admin-tag-form';
+
+  const title = document.createElement('div');
+  title.className = 'admin-section-title';
+  title.textContent = existing ? 'Modifier le tag' : 'Créer un tag personnalisé';
+  form.appendChild(title);
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text'; nameInput.className = 'admin-input'; nameInput.placeholder = 'Nom du tag'; nameInput.maxLength = 40;
+  if (existing) nameInput.value = existing.name;
+
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color'; colorInput.className = 'admin-color';
+  colorInput.value = existing && existing.color ? existing.color : '#6366f1';
+
+  const descInput = document.createElement('textarea');
+  descInput.className = 'admin-input admin-textarea';
+  descInput.placeholder = 'Description (affichée au clic sur le tag)'; descInput.maxLength = 300;
+  if (existing) descInput.value = existing.description || '';
+
+  // Rétention
+  const retRow = document.createElement('div'); retRow.className = 'admin-form-row';
+  const retCheck = document.createElement('input'); retCheck.type = 'checkbox';
+  const retInput = document.createElement('input');
+  retInput.type = 'number'; retInput.min = '1'; retInput.max = '3650';
+  retInput.className = 'admin-input admin-input-num'; retInput.placeholder = 'jours'; retInput.disabled = true;
+  if (existing && existing.retentionDays) { retCheck.checked = true; retInput.disabled = false; retInput.value = existing.retentionDays; }
+  retCheck.addEventListener('change', () => { retInput.disabled = !retCheck.checked; });
+  const retLabel = document.createElement('label'); retLabel.className = 'admin-check';
+  retLabel.appendChild(retCheck); retLabel.appendChild(document.createTextNode(' Rétention :'));
+  retRow.appendChild(retLabel); retRow.appendChild(retInput);
+  retRow.appendChild(document.createTextNode(' jours'));
+
+  // Alerte
+  const alertRow = document.createElement('div'); alertRow.className = 'admin-form-row';
+  const alertCheck = document.createElement('input'); alertCheck.type = 'checkbox';
+  if (existing && existing.alertOnExpiry) alertCheck.checked = true;
+  const alertLabel = document.createElement('label'); alertLabel.className = 'admin-check';
+  alertLabel.appendChild(alertCheck);
+  alertLabel.appendChild(document.createTextNode(" Alerte dans l'onglet admin à l'expiration"));
+  alertRow.appendChild(alertLabel);
+
+  const submit = document.createElement('button');
+  submit.type = 'button'; submit.className = 'admin-btn admin-btn-approve';
+  submit.textContent = existing ? 'Enregistrer' : 'Créer le tag';
+  submit.addEventListener('click', () => saveTag({
+    tagId: existing ? existing.tagId : undefined,
+    name: nameInput.value.trim(),
+    color: colorInput.value,
+    description: descInput.value.trim(),
+    retentionDays: retCheck.checked ? (parseInt(retInput.value, 10) || null) : null,
+    alertOnExpiry: alertCheck.checked
+  }));
+
+  form.appendChild(nameInput);
+  form.appendChild(colorInput);
+  form.appendChild(descInput);
+  form.appendChild(retRow);
+  form.appendChild(alertRow);
+  form.appendChild(submit);
+  if (existing) {
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'admin-btn admin-btn-small'; cancel.textContent = 'Annuler';
+    cancel.addEventListener('click', () => loadAdminTags());
+    form.appendChild(cancel);
+  }
+  return form;
+}
+
+async function saveTag(payload) {
+  if (!payload.name) { heroTagFeedback('Le nom est obligatoire', true); return; }
+  if (!payload.color) { heroTagFeedback('La couleur est obligatoire', true); return; }
+  try {
+    const r = await fetch('/api/tags', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || "Erreur lors de l'enregistrement", true); return; }
+    heroTagFeedback('Tag enregistré', false);
+    _customTagsCache = null;
+    loadAdminTags();
+    refreshAdminBadges();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+function buildTagRow(tag) {
+  const row = document.createElement('div'); row.className = 'admin-tag-row';
+  const swatch = document.createElement('span'); swatch.className = 'admin-tag-swatch';
+  swatch.style.background = tag.color || '#6366f1';
+  const name = document.createElement('span'); name.className = 'admin-tag-name'; name.textContent = tag.name;
+  const info = document.createElement('span'); info.className = 'admin-tag-info';
+  const bits = [];
+  if (tag.retentionDays) bits.push('rétention ' + tag.retentionDays + ' j');
+  if (tag.alertOnExpiry) bits.push('alerte');
+  info.textContent = bits.join(' · ');
+  if (tag.description) row.title = tag.description;
+
+  const edit = document.createElement('button');
+  edit.type = 'button'; edit.className = 'admin-btn admin-btn-small'; edit.textContent = 'Modifier';
+  edit.addEventListener('click', () => openTagEdit(tag));
+  const del = document.createElement('button');
+  del.type = 'button'; del.className = 'admin-btn admin-btn-small admin-btn-reject'; del.textContent = 'Supprimer';
+  del.addEventListener('click', () => deleteTag(tag, row));
+
+  row.appendChild(swatch); row.appendChild(name); row.appendChild(info);
+  row.appendChild(edit); row.appendChild(del);
+  return row;
+}
+
+function openTagEdit(tag) {
+  const pane = document.getElementById('adminPaneTags');
+  if (!pane) return;
+  const oldForm = pane.querySelector('.admin-tag-form');
+  const newForm = buildTagForm(tag);
+  if (oldForm) pane.replaceChild(newForm, oldForm);
+  else pane.insertBefore(newForm, pane.firstChild);
+  newForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function deleteTag(tag, rowEl) {
+  try {
+    const r = await fetch('/api/tags', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tagId: tag.tagId })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur lors de la suppression', true); return; }
+    heroTagFeedback('Tag supprimé', false);
+    _customTagsCache = null;
+    rowEl.remove();
+    refreshAdminBadges();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+function buildExpiredRow(it) {
+  const row = document.createElement('div'); row.className = 'admin-expired-row';
+  const meta = resolveTagMeta(it.type);
+  const badge = document.createElement('span'); badge.className = 'hero-badge hero-badge-expired';
+  if (meta.color) badge.style.setProperty('--tag-color', meta.color);
+  badge.textContent = meta.label;
+  const dom = document.createElement('span'); dom.className = 'admin-expired-domain';
+  dom.textContent = it.domain || it.tenantId;
+  const since = document.createElement('span'); since.className = 'admin-expired-since';
+  since.textContent = 'expiré depuis ' + it.expiredSinceDays + ' j';
+  const renew = document.createElement('button');
+  renew.type = 'button'; renew.className = 'admin-btn admin-btn-small'; renew.textContent = 'Renouveler';
+  renew.addEventListener('click', () => renewExpired(it, row));
+  row.appendChild(badge); row.appendChild(dom); row.appendChild(since); row.appendChild(renew);
+  return row;
+}
+
+async function renewExpired(it, rowEl) {
+  try {
+    const r = await fetch('/api/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId: it.tenantId, domain: it.domain, type: it.type })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback('Tag renouvelé', false);
+    rowEl.remove();
+    refreshAdminBadges();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  ÉTAPE 17 — Sous-onglet UTILISATEURS + verrouillage
+//  Gestion des rôles (selon hiérarchie) + verrou global / par tenant
+// ══════════════════════════════════════════════════════════════════════════
+async function loadAdminUsers() {
+  const pane = document.getElementById('adminPaneUsers');
+  if (!pane) return;
+  pane.replaceChildren(adminLoading());
+
+  let roles;
+  try {
+    const r = await fetch('/api/roles', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) { pane.replaceChildren(adminError('Accès refusé ou erreur serveur')); return; }
+    roles = await r.json();
+  } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
+
+  pane.replaceChildren();
+  pane.appendChild(await buildLockSection());
+  pane.appendChild(buildAddRoleForm());
+
+  const section = adminSection('Rôles attribués');
+  if (Array.isArray(roles) && roles.length) {
+    roles.forEach(u => section.appendChild(buildRoleRow(u)));
+  } else {
+    section.appendChild(adminEmpty('Aucun rôle attribué'));
+  }
+  pane.appendChild(section);
+}
+
+function buildAddRoleForm() {
+  const form = document.createElement('div'); form.className = 'admin-tag-form';
+  const title = document.createElement('div'); title.className = 'admin-section-title'; title.textContent = 'Ajouter un rôle';
+  form.appendChild(title);
+
+  const email = document.createElement('input');
+  email.type = 'email'; email.className = 'admin-input'; email.placeholder = 'adresse@be-cloud.fr';
+
+  const select = document.createElement('select'); select.className = 'admin-input';
+  const optMod = document.createElement('option'); optMod.value = 'moderator'; optMod.textContent = 'Modérateur';
+  select.appendChild(optMod);
+  if (TP_AUTH.role === 'admin') {
+    const optMan = document.createElement('option'); optMan.value = 'manager'; optMan.textContent = 'Manager';
+    select.appendChild(optMan);
+  }
+
+  const submit = document.createElement('button');
+  submit.type = 'button'; submit.className = 'admin-btn admin-btn-approve'; submit.textContent = 'Ajouter';
+  submit.addEventListener('click', () => addRole(email.value.trim(), select.value));
+
+  form.appendChild(email); form.appendChild(select); form.appendChild(submit);
+  return form;
+}
+
+async function addRole(email, role) {
+  if (!email) { heroTagFeedback('Email obligatoire', true); return; }
+  try {
+    const r = await fetch('/api/roles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback('Rôle attribué', false);
+    loadAdminUsers();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+function buildRoleRow(u) {
+  const row = document.createElement('div'); row.className = 'admin-role-row';
+  const email = document.createElement('span'); email.className = 'admin-role-email'; email.textContent = u.email;
+  const role = document.createElement('span'); role.className = 'admin-role-badge admin-role-' + u.role; role.textContent = roleLabel(u.role);
+  row.appendChild(email); row.appendChild(role);
+
+  const canDelete = (TP_AUTH.role === 'admin') || (TP_AUTH.role === 'manager' && u.role === 'moderator');
+  if (canDelete) {
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'admin-btn admin-btn-small admin-btn-reject'; del.textContent = 'Retirer';
+    del.addEventListener('click', () => removeRole(u, row));
+    row.appendChild(del);
+  }
+  return row;
+}
+
+async function removeRole(u, rowEl) {
+  try {
+    const r = await fetch('/api/roles', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: u.email })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback('Rôle retiré', false);
+    rowEl.remove();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+async function buildLockSection() {
+  const section = adminSection('Verrouillage des requêtes');
+
+  let globalLocked = false;
+  try {
+    const r = await fetch('/api/lock', { headers: { 'Accept': 'application/json' } });
+    if (r.ok) { const d = await r.json(); globalLocked = !!d.globalLock; }
+  } catch {}
+
+  const row = document.createElement('div'); row.className = 'admin-form-row';
+  const label = document.createElement('span');
+  label.textContent = globalLocked
+    ? 'Verrouillage global ACTIF — seuls managers/admins peuvent taguer'
+    : 'Verrouillage global inactif';
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'admin-btn ' + (globalLocked ? 'admin-btn-reject' : 'admin-btn-approve');
+  toggle.textContent = globalLocked ? 'Déverrouiller globalement' : 'Verrouiller globalement';
+  toggle.addEventListener('click', () => toggleGlobalLock(!globalLocked));
+  row.appendChild(label); row.appendChild(toggle);
+  section.appendChild(row);
+
+  if (currentState && currentState.ms && currentState.ms.tenantId) {
+    const tId = currentState.ms.tenantId;
+    const tRow = document.createElement('div'); tRow.className = 'admin-form-row';
+    const tLabel = document.createElement('span');
+    tLabel.textContent = 'Tenant affiché : ' + (currentState.domain || tId);
+    const lockBtn = document.createElement('button');
+    lockBtn.type = 'button'; lockBtn.className = 'admin-btn admin-btn-small'; lockBtn.textContent = 'Verrouiller ce tenant';
+    lockBtn.addEventListener('click', () => setTenantLock(tId, currentState.domain, true));
+    const unlockBtn = document.createElement('button');
+    unlockBtn.type = 'button'; unlockBtn.className = 'admin-btn admin-btn-small'; unlockBtn.textContent = 'Déverrouiller ce tenant';
+    unlockBtn.addEventListener('click', () => setTenantLock(tId, currentState.domain, false));
+    tRow.appendChild(tLabel); tRow.appendChild(lockBtn); tRow.appendChild(unlockBtn);
+    section.appendChild(tRow);
+  }
+  return section;
+}
+
+async function toggleGlobalLock(lock) {
+  try {
+    const r = await fetch('/api/lock', {
+      method: lock ? 'POST' : 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback(lock ? 'Verrouillage global activé' : 'Verrouillage global retiré', false);
+    loadAdminUsers();
+    if (currentState && currentState.ms && currentState.ms.tenantId) {
+      refreshHeroTags(currentState.ms.tenantId, currentState.domain);
+    }
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+async function setTenantLock(tenantId, domain, lock) {
+  try {
+    const r = await fetch('/api/lock', {
+      method: lock ? 'POST' : 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback(lock ? 'Tenant verrouillé' : 'Tenant déverrouillé', false);
+    refreshHeroTags(tenantId, domain);
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
 function openPanel(id, title, buildFn) {
   const panel   = document.getElementById('detailPanel');
   const body    = document.getElementById('panelBody');
@@ -1798,6 +2810,12 @@ function renderHero(ms, domain, confidence) {
     }
     hero.appendChild(mkDomain());
     if (ms.tenantId && ms.tenantValid) {
+      // Zone de tags (badges + bouton +) — alimentée par refreshHeroTags (étape 13)
+      const tagZone = buildHeroTagZone(ms.tenantId, domain);
+      if (tagZone) {
+        hero.appendChild(tagZone);
+        if (typeof refreshHeroTags === 'function') refreshHeroTags(ms.tenantId, domain);
+      }
       const profile = loadProfile();
       const enabled = orderedRedirectButtons(profile).filter(b => profile[b.key] !== false);
       if (enabled.length > 0) {

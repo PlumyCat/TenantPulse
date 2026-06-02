@@ -1,0 +1,189 @@
+const { getAuthContext, hasRole } = require("../shared/auth");
+const { rolesClient } = require("../shared/tableClient");
+
+/**
+ * GET /api/roles
+ * Liste tous les rôles (moderator, manager, admin).
+ * Accessible : manager, admin.
+ *
+ * POST /api/roles
+ * Ajoute ou modifie le rôle d'un utilisateur.
+ * Body : { email, role }
+ * Règles :
+ *   - Manager  → peut ajouter/modifier uniquement des moderators
+ *   - Admin    → peut ajouter/modifier managers et moderators
+ *
+ * DELETE /api/roles
+ * Supprime le rôle d'un utilisateur (repasse en "user").
+ * Body : { email }
+ * Règles identiques + protection : impossible de supprimer le dernier admin.
+ */
+module.exports = async function (context, req) {
+  try {
+    const auth = await getAuthContext(req);
+    if (!auth) {
+      context.res = {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Non authentifié" })
+      };
+      return;
+    }
+
+    if (!hasRole(auth.role, "manager")) {
+      context.res = {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Accès refusé — manager minimum requis" })
+      };
+      return;
+    }
+
+    // ── GET ──────────────────────────────────────────────────────────────────
+    if (req.method === "GET") {
+      const results = [];
+      const queryResults = rolesClient.listEntities({
+        queryOptions: { filter: `PartitionKey eq 'role'` }
+      });
+
+      for await (const entity of queryResults) {
+        results.push({
+          email: entity.rowKey,
+          role:  entity.role
+        });
+      }
+
+      results.sort((a, b) => {
+        const order = { admin: 0, manager: 1, moderator: 2 };
+        return (order[a.role] ?? 3) - (order[b.role] ?? 3);
+      });
+
+      context.res = {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(results)
+      };
+      return;
+    }
+
+    // ── POST ─────────────────────────────────────────────────────────────────
+    if (req.method === "POST") {
+      const { email, role } = req.body || {};
+
+      if (!email || !role) {
+        context.res = {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "email et role sont obligatoires" })
+        };
+        return;
+      }
+
+      if (!["moderator", "manager", "admin"].includes(role)) {
+        context.res = {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Rôle invalide. Valeurs acceptées : moderator, manager, admin" })
+        };
+        return;
+      }
+
+      // Manager ne peut attribuer que le rôle moderator
+      if (auth.role === "manager" && role !== "moderator") {
+        context.res = {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Un manager ne peut attribuer que le rôle moderator" })
+        };
+        return;
+      }
+
+      await rolesClient.upsertEntity({
+        partitionKey: "role",
+        rowKey:       email.toLowerCase(),
+        role,
+        assignedBy:   auth.email,
+        assignedAt:   new Date().toISOString()
+      }, "Replace");
+
+      context.res = {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ success: true, email, role })
+      };
+      return;
+    }
+
+    // ── DELETE ───────────────────────────────────────────────────────────────
+    if (req.method === "DELETE") {
+      const { email } = req.body || {};
+
+      if (!email) {
+        context.res = {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "email est obligatoire" })
+        };
+        return;
+      }
+
+      // Récupérer le rôle actuel de l'utilisateur ciblé
+      let targetEntity;
+      try {
+        targetEntity = await rolesClient.getEntity("role", email.toLowerCase());
+      } catch {
+        context.res = {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Utilisateur introuvable dans les rôles" })
+        };
+        return;
+      }
+
+      // Manager ne peut supprimer que des moderators
+      if (auth.role === "manager" && targetEntity.role !== "moderator") {
+        context.res = {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Un manager ne peut supprimer que des moderators" })
+        };
+        return;
+      }
+
+      // Protection : impossible de supprimer le dernier admin
+      if (targetEntity.role === "admin") {
+        const admins = [];
+        const adminQuery = rolesClient.listEntities({
+          queryOptions: { filter: `PartitionKey eq 'role' and role eq 'admin'` }
+        });
+        for await (const e of adminQuery) admins.push(e);
+
+        if (admins.length <= 1) {
+          context.res = {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: "Impossible de supprimer le dernier admin" })
+          };
+          return;
+        }
+      }
+
+      await rolesClient.deleteEntity("role", email.toLowerCase());
+
+      context.res = {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ success: true, email, removed: true })
+      };
+      return;
+    }
+
+  } catch (err) {
+    context.log.error("Erreur /api/roles :", err.message);
+    context.res = {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Erreur serveur" })
+    };
+  }
+};

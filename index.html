@@ -186,7 +186,14 @@
 <div class="topbar">
   <a class="topbar-bug" href="mailto:aribeiropereira@be-cloud.fr?subject=Bug%20report%20-%20TenantPulse" title="Signaler un bug par email">Report Bug(s)</a>
   <span class="topbar-tagline">Analyse instantanée &nbsp;|&nbsp; Décisions immédiates</span>
-  <a class="topbar-logout" href="/logout" title="Se déconnecter">Déconnexion</a>
+  <div class="topbar-right">
+    <button class="topbar-admin" id="btnOpenAdmin" type="button" title="Onglet administration" hidden>
+      <span class="topbar-admin-label">Administration</span>
+      <span class="admin-badge admin-badge-req" id="adminBadgeReq" title="Demandes en attente" hidden>0</span>
+      <span class="admin-badge admin-badge-alert" id="adminBadgeAlert" title="Alertes de rétention" hidden>0</span>
+    </button>
+    <a class="topbar-logout" href="/logout" title="Se déconnecter">Déconnexion</a>
+  </div>
 </div>
 
 <nav>
@@ -324,6 +331,34 @@
   </div>
 </div>
 
+<!-- Onglet Administration (modal plein écran) -->
+<div class="admin-overlay" id="adminOverlay" hidden>
+  <div class="admin-modal" id="adminModalInner">
+    <div class="admin-modal-head">
+      <div class="admin-modal-title"><img src="assets/option.png" class="icon-adaptive" alt=""> Administration</div>
+      <button class="admin-modal-close" id="btnAdminClose" aria-label="Fermer">✕</button>
+    </div>
+    <div class="admin-subtabs" id="adminSubtabs" role="tablist">
+      <button class="admin-subtab active" data-subtab="requests" role="tab" type="button">
+        Demandes
+        <span class="admin-subtab-badge admin-subtab-badge-req" id="subtabBadgeRequests" hidden>0</span>
+      </button>
+      <button class="admin-subtab" data-subtab="tags" data-min-role="manager" role="tab" type="button" hidden>
+        Tags
+        <span class="admin-subtab-badge admin-subtab-badge-alert" id="subtabBadgeTags" hidden>0</span>
+      </button>
+      <button class="admin-subtab" data-subtab="users" data-min-role="manager" role="tab" type="button" hidden>
+        Utilisateurs
+      </button>
+    </div>
+    <div class="admin-body">
+      <div class="admin-pane" id="adminPaneRequests"></div>
+      <div class="admin-pane" id="adminPaneTags" hidden></div>
+      <div class="admin-pane" id="adminPaneUsers" hidden></div>
+    </div>
+  </div>
+</div>
+
 <div class="app">
   <aside class="sidebar">
     <div class="sb-head">
@@ -434,7 +469,10 @@
 <iframe id="mhaelleFrame" class="mhaelle-frame" title="Mhaelle — Analyseur Header Email" loading="lazy"></iframe>
 <iframe id="psforgeFrame" class="psforge-frame" title="PsForge — Commandes PowerShell IT MW" loading="lazy"></iframe>
 
-<footer><div class="powered">Prototype <span> Interne</span> RUNMW N1</div></footer>
+<footer>
+  <div class="footer-role" id="footerRole" hidden>Rôle&nbsp;: <span id="footerRoleValue">—</span></div>
+  <div class="powered">Prototype <span> Interne</span> RUNMW N1</div>
+</footer>
 
 <!--
   Le JS est externalisé dans tenantpulse.js — script-src 'self' est actif.
