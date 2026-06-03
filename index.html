@@ -378,9 +378,6 @@
       <div class="input-wrap">
         <input type="text" id="emailInput" placeholder="user@domaine.com ou domaine.com" autocomplete="off"/>
       </div>
-      <p class="sb-privacy-note">Seuls le domaine ou l'adresse saisis sont utilisés pour interroger des endpoints publics.*</p>
-      <label class="flabel">Endpoint OpenID Microsoft 365</label>
-      <div class="ep-preview" id="endpointPreview">https://login.microsoftonline.com/<span class="domain">domaine.com</span>/.well-known/openid-configuration</div>
       <div class="btn-row">
         <button class="btn-go" id="checkBtnFast">
           <span id="btnFastText"><img src="assets/LOUPE.png" width="14" height="14" alt="">Tenant ID</span>
@@ -424,7 +421,12 @@
         </button>
         <div class="collapsible-body" id="privacyBody">
           <div class="privacy-body">
-            <p class="privacy-intro">Cet outil effectue des requêtes <strong>directement depuis votre navigateur</strong> vers des APIs publiques. Aucun serveur intermédiaire ne reçoit ou ne conserve vos données.</p>
+            <p class="privacy-intro">Les analyses (Tenant ID, DNS, WHOIS) sont effectuées <strong>directement depuis votre navigateur</strong> vers des APIs publiques. Aucun serveur intermédiaire ne reçoit ces requêtes.</p>
+            <div>
+              <div class="privacy-section-lbl">Endpoint OpenID Microsoft 365 interrogé</div>
+              <p class="sb-privacy-note">Seuls le domaine ou l'adresse saisis servent à interroger les endpoints publics.</p>
+              <div class="ep-preview" id="endpointPreview">https://login.microsoftonline.com/<span class="domain">domaine.com</span>/.well-known/openid-configuration</div>
+            </div>
             <div>
               <div class="privacy-section-lbl">APIs contactées lors d'une analyse</div>
               <div class="privacy-api-list">
@@ -442,7 +444,11 @@
             </div>
             <div class="privacy-storage-row">
               <span class="privacy-storage-icon"><img src="assets/save.png" class="icon-adaptive" alt=""></span>
-              <span>Aucun stockage par défaut. L'historique (optionnel) utilise uniquement le <strong>localStorage</strong> de votre navigateur — jamais transmis.</span>
+              <span>L'historique des Tenant ID (optionnel) reste dans le <strong>localStorage</strong> de votre navigateur, jamais transmis.</span>
+            </div>
+            <div class="privacy-storage-row">
+              <span class="privacy-storage-icon"><img src="assets/MicrosoftAzure.png" class="icon-plain" alt=""></span>
+              <span>Les <strong>classifications</strong> (balises Direct, Indirect, GDAP, personnalisées), les rôles et les demandes sont enregistrés sur <strong>Azure Table Storage</strong>, dans le tenant be-cloud. Chaque entrée conserve le Tenant ID concerné et l'adresse de l'auteur de l'action, afin de partager l'annuaire entre utilisateurs autorisés.</span>
             </div>
             <button class="privacy-cta" id="btnPrivacyCta">
               <img src="assets/option.png" class="icon-adaptive" alt=""> Détail de chaque connexion dans Paramètres & Confidentialité
