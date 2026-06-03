@@ -1,6 +1,28 @@
 const { v4: uuidv4 } = require("uuid");
 const { getAuthContext, hasRole } = require("../shared/auth");
 const { tagsClient, classificationsClient, requestsClient } = require("../shared/tableClient");
+const { getDefaults } = require("../shared/defaults");
+
+/* Cascade : supprime toutes les assignations + demandes en attente d'un type. */
+async function cascadeDeleteType(type) {
+  let removed = 0;
+  try {
+    for await (const c of classificationsClient.listEntities()) {
+      if (c.rowKey === type) {
+        try { await classificationsClient.deleteEntity(c.partitionKey, c.rowKey); removed++; } catch {}
+      }
+    }
+  } catch {}
+  try {
+    const pending = requestsClient.listEntities({
+      queryOptions: { filter: `PartitionKey eq 'request' and type eq '${String(type).replace(/'/g, "''")}'` }
+    });
+    for await (const e of pending) {
+      try { await requestsClient.deleteEntity(e.partitionKey, e.rowKey); } catch {}
+    }
+  } catch {}
+  return removed;
+}
 
 /**
  * GET /api/tags
@@ -88,16 +110,48 @@ module.exports = async function (context, req) {
         }
       }
 
+      // Balises par défaut (proposables par tous) — amorçage inclus
+      let defaults = [];
+      try { defaults = await getDefaults(); } catch {}
+
       context.res = {
         status: 200,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags, expiredItems })
+        body: JSON.stringify({ tags, defaults, expiredItems })
       };
       return;
     }
 
     // ── POST ─────────────────────────────────────────────────────────────────
     if (req.method === "POST") {
+      // Gestion des BALISES PAR DÉFAUT — réservé aux admins
+      if (req.body && req.body.scope === "default") {
+        if (!hasRole(auth.role, "admin")) {
+          context.res = { status: 403, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Accès refusé — admin requis" }) };
+          return;
+        }
+        const { key, name, color, description } = req.body;
+        if (!name || !color) {
+          context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "name et color sont obligatoires" }) };
+          return;
+        }
+        const id = key || uuidv4();
+        // Préserver groupe/ordre si la balise existe déjà (édition)
+        let group, order;
+        try { const ex = await tagsClient.getEntity("default", id); group = ex.group; order = ex.order; } catch {}
+        await tagsClient.upsertEntity({
+          partitionKey: "default",
+          rowKey:       id,
+          name,
+          color,
+          description:  description || "",
+          group:        group || ("indep:" + id),
+          order:        (typeof order === "number") ? order : 99
+        }, "Replace");
+        context.res = { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ success: true, key: id }) };
+        return;
+      }
+
       if (!hasRole(auth.role, "manager")) {
         context.res = {
           status: 403,
@@ -144,6 +198,24 @@ module.exports = async function (context, req) {
 
     // ── DELETE ───────────────────────────────────────────────────────────────
     if (req.method === "DELETE") {
+      // Suppression d'une BALISE PAR DÉFAUT — réservé aux admins
+      if (req.body && req.body.scope === "default") {
+        if (!hasRole(auth.role, "admin")) {
+          context.res = { status: 403, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Accès refusé — admin requis" }) };
+          return;
+        }
+        const { key } = req.body;
+        if (!key) {
+          context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "key est obligatoire" }) };
+          return;
+        }
+        try { await tagsClient.deleteEntity("default", key); }
+        catch { context.res = { status: 404, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Balise introuvable" }) }; return; }
+        const removed = await cascadeDeleteType(key);
+        context.res = { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ success: true, key, removedAssignments: removed }) };
+        return;
+      }
+
       if (!hasRole(auth.role, "manager")) {
         context.res = {
           status: 403,
@@ -175,26 +247,7 @@ module.exports = async function (context, req) {
         return;
       }
 
-      // Cascade : retirer toutes les assignations de ce tag (Classifications)
-      // rowKey = type = tagId, partitionKey = tenantId
-      let removedAssignments = 0;
-      try {
-        for await (const c of classificationsClient.listEntities()) {
-          if (c.rowKey === tagId) {
-            try { await classificationsClient.deleteEntity(c.partitionKey, c.rowKey); removedAssignments++; } catch {}
-          }
-        }
-      } catch {}
-
-      // Cascade : retirer les demandes en attente de ce tag
-      try {
-        const pending = requestsClient.listEntities({
-          queryOptions: { filter: `PartitionKey eq 'request' and type eq '${String(tagId).replace(/'/g, "''")}'` }
-        });
-        for await (const e of pending) {
-          try { await requestsClient.deleteEntity(e.partitionKey, e.rowKey); } catch {}
-        }
-      } catch {}
+      const removedAssignments = await cascadeDeleteType(tagId);
 
       context.res = {
         status: 200,

@@ -1142,6 +1142,7 @@ function panelTitle(src, cls, text) { const img = document.createElement('img');
 //  - Manager / Admin          : appliquent directement (le backend valide seul)
 //  L'affichage des badges (validés / en attente / verrouillé) est géré à l'étape 13.
 // ══════════════════════════════════════════════════════════════════════════
+/* Repli si les balises par défaut ne sont pas encore chargées depuis l'API. */
 const PREDEFINED_TAGS = [
   { type: 'direct',     label: 'Direct',     group: 'classification' },
   { type: 'indirect',   label: 'Indirect',   group: 'classification' },
@@ -1149,20 +1150,40 @@ const PREDEFINED_TAGS = [
   { type: 'gdap_non',   label: 'GDAP : non', group: 'gdap' },
 ];
 
-/* Cache des tags personnalisés (Manager/Admin). */
+/* Caches alimentés par /api/tags (un seul appel pour les deux). */
 let _customTagsCache = null;
+let _defaultTagsCache = null;
 
-async function getCustomTags() {
-  if (_customTagsCache) return _customTagsCache;
+async function loadTagDefs() {
   try {
     const res = await fetch('/api/tags', { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) return [];
+    if (!res.ok) { _customTagsCache = _customTagsCache || []; _defaultTagsCache = _defaultTagsCache || []; return; }
     const data = await res.json();
-    _customTagsCache = Array.isArray(data.tags) ? data.tags : [];
-    return _customTagsCache;
+    _customTagsCache  = Array.isArray(data.tags) ? data.tags : [];
+    _defaultTagsCache = Array.isArray(data.defaults) ? data.defaults : [];
   } catch {
-    return [];
+    _customTagsCache  = _customTagsCache || [];
+    _defaultTagsCache = _defaultTagsCache || [];
   }
+}
+
+async function getCustomTags() {
+  if (!_customTagsCache) await loadTagDefs();
+  return _customTagsCache || [];
+}
+
+/* Balises par défaut (depuis l'API), avec repli sur PREDEFINED_TAGS.
+   Retourne [{ key, name, color, description, group }]. */
+async function getDefaultTags() {
+  if (!_defaultTagsCache) await loadTagDefs();
+  if (_defaultTagsCache && _defaultTagsCache.length) return _defaultTagsCache;
+  return PREDEFINED_TAGS.map(t => ({ key: t.type, name: t.label, color: null, description: '', group: t.group }));
+}
+
+/* Liste synchrone des balises par défaut connues (cache ou repli). */
+function defaultTagsSync() {
+  if (_defaultTagsCache && _defaultTagsCache.length) return _defaultTagsCache;
+  return PREDEFINED_TAGS.map(t => ({ key: t.type, name: t.label, color: null, description: '', group: t.group }));
 }
 
 /* Construit la zone de tags du hero : conteneur badges + bouton (+).
@@ -1224,8 +1245,11 @@ async function toggleHeroTagMenu(zone, anchorBtn, tenantId, domain) {
   title.textContent = TP_AUTH.hasRole('manager') ? 'Appliquer un tag' : 'Proposer une classification';
   menu.appendChild(title);
 
-  PREDEFINED_TAGS.forEach(tag => {
-    menu.appendChild(makeTagOption(tag.label, tag.type, tenantId, domain));
+  const defaults = await getDefaultTags();
+  defaults.forEach(tag => {
+    const opt = makeTagOption(tag.name, tag.key, tenantId, domain);
+    if (tag.color) opt.style.setProperty('--tag-color', tag.color);
+    menu.appendChild(opt);
   });
 
   if (TP_AUTH.hasRole('manager')) {
@@ -1335,8 +1359,10 @@ function heroTagFeedback(message, isError) {
 
 /* Résout le libellé / la couleur / la description d'un type de tag. */
 function resolveTagMeta(type) {
-  const pre = PREDEFINED_TAGS.find(t => t.type === type);
-  if (pre) return { label: pre.label, color: null, group: pre.group };
+  // 1. Balise par défaut (depuis l'API, sinon repli)
+  const def = defaultTagsSync().find(d => d.key === type);
+  if (def) return { label: def.name, color: def.color || null, group: def.group, description: def.description || '' };
+  // 2. Tag personnalisé
   const custom = (_customTagsCache || []).find(t => t.tagId === type || t.name === type);
   if (custom) return { label: custom.name, color: custom.color || null, description: custom.description || '' };
   return { label: type, color: null };
@@ -1881,10 +1907,23 @@ async function loadAdminTags() {
     data = await r.json();
   } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
 
-  _customTagsCache = Array.isArray(data.tags) ? data.tags : [];
+  _customTagsCache  = Array.isArray(data.tags) ? data.tags : [];
+  _defaultTagsCache = Array.isArray(data.defaults) ? data.defaults : [];
   pane.replaceChildren();
 
-  // Formulaire de création
+  // Balises par défaut — gestion réservée aux admins
+  if (TP_AUTH.role === 'admin') {
+    pane.appendChild(buildDefaultTagForm(null));
+    const defSection = adminSection('Balises par défaut');
+    if (_defaultTagsCache.length) {
+      _defaultTagsCache.forEach(d => defSection.appendChild(buildDefaultTagRow(d)));
+    } else {
+      defSection.appendChild(adminEmpty('Aucune balise par défaut'));
+    }
+    pane.appendChild(defSection);
+  }
+
+  // Formulaire de création (tag personnalisé)
   pane.appendChild(buildTagForm(null));
 
   // Liste des tags custom
@@ -1909,28 +1948,134 @@ async function loadAdminTags() {
   pane.appendChild(await buildAssignedTagsSection());
 }
 
-// ── Helpers partagés : type de tag, chips de filtre, copie ──
-const TAG_KINDS = [
-  { key: 'all',      label: 'Tous' },
-  { key: 'direct',   label: 'Direct' },
-  { key: 'indirect', label: 'Indirect' },
-  { key: 'gdap',     label: 'GDAP' },
-  { key: 'custom',   label: 'Custom' }
-];
+// ── Balises par défaut (admin) : création / édition / suppression ──
+function buildDefaultTagForm(existing) {
+  const form = document.createElement('div'); form.className = 'admin-tag-form admin-default-form';
+  const title = document.createElement('div'); title.className = 'admin-section-title';
+  title.textContent = existing ? 'Modifier la balise par défaut' : 'Créer une balise par défaut';
+  form.appendChild(title);
 
-function tagKind(type) {
-  if (type === 'direct') return 'direct';
-  if (type === 'indirect') return 'indirect';
-  if (type === 'gdap_actif' || type === 'gdap_non') return 'gdap';
-  return 'custom';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text'; nameInput.className = 'admin-input'; nameInput.placeholder = 'Nom de la balise'; nameInput.maxLength = 40;
+  if (existing) nameInput.value = existing.name;
+
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color'; colorInput.className = 'admin-color';
+  colorInput.value = existing && existing.color ? existing.color : '#4B3FBE';
+
+  const descInput = document.createElement('textarea');
+  descInput.className = 'admin-input admin-textarea';
+  descInput.placeholder = 'Description (affichée au clic sur la balise)'; descInput.maxLength = 300;
+  if (existing) descInput.value = existing.description || '';
+
+  const submit = document.createElement('button');
+  submit.type = 'button'; submit.className = 'admin-btn admin-btn-approve';
+  submit.textContent = existing ? 'Enregistrer' : 'Créer la balise';
+  submit.addEventListener('click', () => saveDefaultTag({
+    key: existing ? existing.key : undefined,
+    name: nameInput.value.trim(),
+    color: colorInput.value,
+    description: descInput.value.trim()
+  }));
+
+  form.appendChild(nameInput); form.appendChild(colorInput); form.appendChild(descInput); form.appendChild(submit);
+  if (existing) {
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'admin-btn admin-btn-small'; cancel.textContent = 'Annuler';
+    cancel.addEventListener('click', () => loadAdminTags());
+    form.appendChild(cancel);
+  }
+  return form;
 }
 
-/* Construit une barre de chips de filtre. onChange(activeKey) appelé au clic. */
+function buildDefaultTagRow(d) {
+  const row = document.createElement('div'); row.className = 'admin-tag-row';
+  const swatch = document.createElement('span'); swatch.className = 'admin-tag-swatch'; swatch.style.background = d.color || '#4B3FBE';
+  const name = document.createElement('span'); name.className = 'admin-tag-name'; name.textContent = d.name;
+  const info = document.createElement('span'); info.className = 'admin-tag-info';
+  const exclusive = d.group === 'classification' || d.group === 'gdap';
+  info.textContent = exclusive ? 'exclusif (' + d.group + ')' : 'cumulable';
+  if (d.description) row.title = d.description;
+
+  const edit = document.createElement('button');
+  edit.type = 'button'; edit.className = 'admin-btn admin-btn-small'; edit.textContent = 'Modifier';
+  edit.addEventListener('click', () => openDefaultTagEdit(d));
+  const del = document.createElement('button');
+  del.type = 'button'; del.className = 'admin-btn admin-btn-small admin-btn-reject'; del.textContent = 'Supprimer';
+  del.addEventListener('click', () => deleteDefaultTag(d, row));
+
+  row.appendChild(swatch); row.appendChild(name); row.appendChild(info); row.appendChild(edit); row.appendChild(del);
+  return row;
+}
+
+function openDefaultTagEdit(d) {
+  const pane = document.getElementById('adminPaneTags');
+  if (!pane) return;
+  const oldForm = pane.querySelector('.admin-default-form');
+  const newForm = buildDefaultTagForm(d);
+  if (oldForm) pane.replaceChild(newForm, oldForm);
+  else pane.insertBefore(newForm, pane.firstChild);
+  newForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function saveDefaultTag(payload) {
+  if (!payload.name) { heroTagFeedback('Le nom est obligatoire', true); return; }
+  if (!payload.color) { heroTagFeedback('La couleur est obligatoire', true); return; }
+  try {
+    const r = await fetch('/api/tags', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'default', key: payload.key, name: payload.name, color: payload.color, description: payload.description })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || "Erreur lors de l'enregistrement", true); return; }
+    heroTagFeedback('Balise enregistrée', false);
+    _defaultTagsCache = null;
+    loadAdminTags();
+    refreshCurrentHero();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+async function deleteDefaultTag(d, rowEl) {
+  if (!window.confirm('Supprimer la balise « ' + d.name + ' » ? Toutes ses assignations sur les tenants seront retirées.')) return;
+  try {
+    const r = await fetch('/api/tags', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'default', key: d.key })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur lors de la suppression', true); return; }
+    heroTagFeedback('Balise supprimée', false);
+    _defaultTagsCache = null;
+    if (rowEl) rowEl.remove();
+    refreshCurrentHero();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+/* Rafraîchit les badges du hero actuellement affiché (si présent). */
+function refreshCurrentHero() {
+  if (currentState && currentState.ms && currentState.ms.tenantId) {
+    const zone = document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(currentState.ms.tenantId) : currentState.ms.tenantId) + '"]');
+    if (zone) refreshHeroTags(currentState.ms.tenantId, currentState.domain, zone);
+  }
+}
+
+// ── Helpers partagés : filtre dynamique, copie ──
+
+/* Vrai si un type de tag correspond au filtre actif. */
+function filterMatchType(type, activeKey) {
+  if (activeKey === 'all') return true;
+  if (activeKey === '__custom') return !defaultTagsSync().some(d => d.key === type);
+  return type === activeKey;
+}
+
+/* Construit une barre de chips de filtre dynamique :
+   Tous + une puce par balise par défaut + Custom. onChange(activeKey) au clic. */
 function buildFilterChips(onChange) {
   const wrap = document.createElement('div');
   wrap.className = 'admin-chips';
   const state = { active: 'all' };
-  TAG_KINDS.forEach(k => {
+  const chips = [{ key: 'all', label: 'Tous' }];
+  defaultTagsSync().forEach(d => chips.push({ key: d.key, label: d.name }));
+  chips.push({ key: '__custom', label: 'Custom' });
+  chips.forEach(k => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'admin-chip' + (k.key === 'all' ? ' active' : '');
@@ -2010,7 +2155,7 @@ async function loadKnownTenants() {
     const f = search.value.trim().toLowerCase();
     const kind = chips.state.active;
     const filtered = tenants.filter(t => {
-      const kindOk = kind === 'all' || t.types.some(ty => tagKind(ty) === kind);
+      const kindOk = kind === 'all' || t.types.some(ty => filterMatchType(ty, kind));
       if (!kindOk) return false;
       if (!f) return true;
       const labels = t.types.map(ty => resolveTagMeta(ty).label.toLowerCase()).join(' ');
@@ -2079,7 +2224,7 @@ async function buildAssignedTagsSection() {
     const f = search.value.trim().toLowerCase();
     const kind = chips.state.active;
     const filtered = items.filter(it => {
-      if (kind !== 'all' && tagKind(it.type) !== kind) return false;
+      if (!filterMatchType(it.type, kind)) return false;
       const meta = resolveTagMeta(it.type);
       return !f
         || meta.label.toLowerCase().includes(f)
@@ -2258,7 +2403,7 @@ function buildTagRow(tag) {
 function openTagEdit(tag) {
   const pane = document.getElementById('adminPaneTags');
   if (!pane) return;
-  const oldForm = pane.querySelector('.admin-tag-form');
+  const oldForm = pane.querySelector('.admin-tag-form:not(.admin-default-form)');
   const newForm = buildTagForm(tag);
   if (oldForm) pane.replaceChild(newForm, oldForm);
   else pane.insertBefore(newForm, pane.firstChild);
