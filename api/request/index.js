@@ -30,6 +30,17 @@ module.exports = async function (context, req) {
       return;
     }
 
+    // Utilisateur bloqué : on ignore silencieusement (réponse neutre).
+    // Les managers+ ne sont jamais bloqués.
+    if (auth.blocked && !hasRole(auth.role, "manager")) {
+      context.res = {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: null, status: "ignored" })
+      };
+      return;
+    }
+
     const { tenantId, domain, type, comment } = req.body || {};
 
     if (!tenantId || !type) {

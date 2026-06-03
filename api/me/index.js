@@ -23,9 +23,10 @@ module.exports = async function (context, req) {
       status: 200,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: auth.email,
-        name:  auth.name,
-        role:  auth.role
+        email:   auth.email,
+        name:    auth.name,
+        role:    auth.role,
+        blocked: auth.blocked === true
       })
     };
 

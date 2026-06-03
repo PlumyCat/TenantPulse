@@ -71,17 +71,34 @@ async function getUserRole(email) {
 }
 
 /**
- * Helper complet : retourne { email, name, role } ou null si non connecté.
+ * Indique si l'email est marqué "blocked" dans la table Roles
+ * (utilisateur dont les requêtes de tag sont coupées discrètement).
+ */
+async function isBlocked(email) {
+  if (!email) return false;
+  const target = email.trim().toLowerCase();
+  try {
+    const e = await rolesClient.getEntity("role", target);
+    return String(e.role || "").trim().toLowerCase() === "blocked";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Helper complet : retourne { email, name, role, blocked } ou null si non connecté.
  */
 async function getAuthContext(req) {
   const principal = getClientPrincipal(req);
   if (!principal || !principal.email) return null;
 
   const role = await getUserRole(principal.email);
+  const blocked = await isBlocked(principal.email);
   return {
     email: principal.email,
     name:  principal.name,
-    role
+    role,
+    blocked
   };
 }
 
@@ -94,4 +111,4 @@ function hasRole(userRole, requiredRole) {
   return (hierarchy[userRole] ?? 0) >= (hierarchy[requiredRole] ?? 0);
 }
 
-module.exports = { getClientPrincipal, getUserRole, getAuthContext, hasRole };
+module.exports = { getClientPrincipal, getUserRole, isBlocked, getAuthContext, hasRole };

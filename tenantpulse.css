@@ -1016,6 +1016,8 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 [data-theme="dark"] .msa-result-row.err{background:#2d1515;border-color:#7f1d1d;color:#fca5a5}
 
 .history-empty{font-size:var(--text-xs);font-weight:400;color:var(--muted);text-align:center;padding:10px 0;font-style:italic}
+.history-enable-link{color:var(--blue);text-decoration:underline;cursor:pointer;font-style:normal;font-weight:600}
+.history-enable-link:hover{filter:brightness(1.15)}
 .history-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;border:1.5px solid var(--border);background:var(--row);margin-bottom:5px;cursor:pointer;transition:all .15s;position:relative}
 .history-item:hover{border-color:#c7d2fe;background:var(--acc-hover)}
 .history-item-domain{font-size:var(--text-sm);font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1409,7 +1411,9 @@ html:not([data-theme="dark"]) .admin-req-row,html:not([data-theme="dark"]) .admi
 .admin-form-row:last-child{margin-bottom:0}
 .admin-section + .admin-section{margin-top:22px}
 .admin-check{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
-select.admin-input{cursor:pointer}
+select.admin-input{cursor:pointer;color-scheme:light}
+[data-theme="dark"] select.admin-input{color-scheme:dark}
+.admin-input option{background:var(--surface);color:var(--text)}
 
 /* ── Lignes tags / expirés / rôles ── */
 .admin-tag-row,.admin-expired-row,.admin-role-row,.admin-assigned-row{display:flex;align-items:center;gap:10px;padding:9px 12px;margin-bottom:6px}
@@ -1426,6 +1430,7 @@ select.admin-input{cursor:pointer}
 .admin-role-admin{background:linear-gradient(180deg,#8b5cf6,#7c3aed)}
 .admin-role-manager{background:linear-gradient(180deg,#3b82f6,#2563eb)}
 .admin-role-moderator{background:linear-gradient(180deg,#14b8a6,#0d9488)}
+.admin-role-blocked{background:linear-gradient(180deg,#9ca3af,#6b7280)}
 
 /* ── Chips de filtre rapide ── */
 .admin-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}

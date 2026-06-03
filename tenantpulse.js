@@ -129,6 +129,20 @@ function toggleDropSection(btn) {
 function toggleDropdown() {
   document.getElementById('mainDropdown').classList.toggle('open');
 }
+
+/* Ouvre le menu Paramètres & Confidentialité et déploie la section
+   « Gestion d'historique » (appelé depuis le lien « ici » de l'historique). */
+function openHistorySettings() {
+  const d = document.getElementById('mainDropdown');
+  if (d) d.classList.add('open');
+  const sections = document.querySelectorAll('#dropMenu [data-drop-section]');
+  sections.forEach(btn => {
+    if ((btn.textContent || '').includes("Gestion d'historique")) {
+      if (!btn.classList.contains('open')) toggleDropSection(btn);
+      try { btn.scrollIntoView({ block: 'nearest' }); } catch {}
+    }
+  });
+}
 document.addEventListener('click', e => {
   const d  = document.getElementById('mainDropdown');
   const ov = document.getElementById('proxyOverlay');
@@ -367,7 +381,17 @@ function renderHistory() {
   const list = document.getElementById('historyList'); if (!list) return;
   list.textContent = '';
   if (!isHistoryEnabled()) {
-    const empty = document.createElement('div'); empty.className = 'history-empty'; empty.textContent = 'Historique désactivé — activez-le dans Options'; list.appendChild(empty); return;
+    const empty = document.createElement('div'); empty.className = 'history-empty';
+    empty.appendChild(document.createTextNode('Historique désactivé, activez-le '));
+    const link = document.createElement('span');
+    link.className = 'history-enable-link';
+    link.textContent = 'ici';
+    link.setAttribute('role', 'button');
+    link.tabIndex = 0;
+    link.addEventListener('click', (e) => { e.stopPropagation(); openHistorySettings(); });
+    link.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHistorySettings(); } });
+    empty.appendChild(link);
+    list.appendChild(empty); return;
   }
   pruneExpiredHistory();
   const items = loadHistory();
@@ -1044,6 +1068,7 @@ const TP_AUTH = {
   email: null,
   name:  null,
   role:  'user',
+  blocked: false,
   loaded: false,
   /* Vrai si le rôle courant est >= au rôle requis. */
   hasRole(required) {
@@ -1061,6 +1086,7 @@ async function initAuth() {
     TP_AUTH.email  = data.email || null;
     TP_AUTH.name   = data.name  || null;
     TP_AUTH.role   = ROLE_HIERARCHY.hasOwnProperty(data.role) ? data.role : 'user';
+    TP_AUTH.blocked = data.blocked === true;
     TP_AUTH.loaded = true;
   } catch {
     // Pas d'API disponible (dev local) — on reste en utilisateur anonyme
@@ -1182,6 +1208,9 @@ function closeHeroTagMenu() {
 /* Ouvre/ferme le menu contextuel du bouton (+). */
 async function toggleHeroTagMenu(zone, anchorBtn, tenantId, domain) {
   if (_openHeroMenu) { closeHeroTagMenu(); return; }
+
+  // Utilisateur dont les requêtes sont coupées : le (+) ne fait rien (discret)
+  if (TP_AUTH.blocked && !TP_AUTH.hasRole('manager')) return;
 
   // Verrou : utilisateurs et modérateurs bloqués si le tenant est verrouillé
   if (zone.dataset.locked === '1' && !TP_AUTH.hasRole('manager')) return;
@@ -1781,6 +1810,16 @@ function buildRequestRow(req) {
   reject.type = 'button'; reject.className = 'admin-btn admin-btn-reject'; reject.textContent = 'Rejeter';
   reject.addEventListener('click', () => reviewRequest(req, 'rejected', row));
   actions.appendChild(approve); actions.appendChild(reject);
+
+  // Manager+ : couper discrètement les requêtes de cet utilisateur
+  if (TP_AUTH.hasRole('manager') && req.requestedBy) {
+    const block = document.createElement('button');
+    block.type = 'button'; block.className = 'admin-btn admin-btn-small';
+    block.textContent = 'Bloquer l\'auteur';
+    block.title = 'Couper les requêtes de ' + req.requestedBy;
+    block.addEventListener('click', () => blockUser(req.requestedBy));
+    actions.appendChild(block);
+  }
   row.appendChild(actions);
 
   return row;
@@ -2286,17 +2325,86 @@ async function loadAdminUsers() {
     roles = await r.json();
   } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
 
+  const all = Array.isArray(roles) ? roles : [];
+  const privileged = all.filter(u => ['admin', 'manager', 'moderator'].includes(u.role));
+  const blocked = all.filter(u => u.role === 'blocked');
+
   pane.replaceChildren();
   pane.appendChild(await buildLockSection());
   pane.appendChild(buildAddRoleForm());
 
+  // Rôles attribués
   const section = adminSection('Rôles attribués');
-  if (Array.isArray(roles) && roles.length) {
-    roles.forEach(u => section.appendChild(buildRoleRow(u)));
+  if (privileged.length) {
+    privileged.forEach(u => section.appendChild(buildRoleRow(u)));
   } else {
     section.appendChild(adminEmpty('Aucun rôle attribué'));
   }
   pane.appendChild(section);
+
+  // Blocage de requêtes
+  pane.appendChild(buildBlockForm());
+
+  const blockSection = adminSection('Requêtes bloquées');
+  if (blocked.length) {
+    blocked.forEach(u => blockSection.appendChild(buildBlockedRow(u)));
+  } else {
+    blockSection.appendChild(adminEmpty('Aucun utilisateur bloqué'));
+  }
+  pane.appendChild(blockSection);
+}
+
+/* Formulaire : couper les requêtes d'un utilisateur (manager+). */
+function buildBlockForm() {
+  const form = document.createElement('div'); form.className = 'admin-tag-form';
+  const title = document.createElement('div'); title.className = 'admin-section-title'; title.textContent = 'Couper les requêtes d\'un utilisateur';
+  form.appendChild(title);
+
+  const email = document.createElement('input');
+  email.type = 'email'; email.className = 'admin-input'; email.placeholder = 'adresse@be-cloud.fr';
+
+  const submit = document.createElement('button');
+  submit.type = 'button'; submit.className = 'admin-btn admin-btn-reject'; submit.textContent = 'Bloquer les requêtes';
+  submit.addEventListener('click', () => blockUser(email.value.trim()));
+
+  form.appendChild(email); form.appendChild(submit);
+  return form;
+}
+
+function buildBlockedRow(u) {
+  const row = document.createElement('div'); row.className = 'admin-role-row';
+  const email = document.createElement('span'); email.className = 'admin-role-email'; email.textContent = u.email;
+  const badge = document.createElement('span'); badge.className = 'admin-role-badge admin-role-blocked'; badge.textContent = 'Bloqué';
+  const unblock = document.createElement('button');
+  unblock.type = 'button'; unblock.className = 'admin-btn admin-btn-small'; unblock.textContent = 'Débloquer';
+  unblock.addEventListener('click', () => unblockUser(u.email, row));
+  row.appendChild(email); row.appendChild(badge); row.appendChild(unblock);
+  return row;
+}
+
+async function blockUser(email) {
+  if (!email) { heroTagFeedback('Email obligatoire', true); return; }
+  try {
+    const r = await fetch('/api/roles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role: 'blocked' })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback('Requêtes coupées pour ' + email, false);
+    loadAdminUsers();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+async function unblockUser(email, rowEl) {
+  try {
+    const r = await fetch('/api/roles', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    if (!r.ok) { heroTagFeedback((await safeErr(r)) || 'Erreur', true); return; }
+    heroTagFeedback('Utilisateur débloqué', false);
+    if (rowEl) rowEl.remove();
+  } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
 function buildAddRoleForm() {

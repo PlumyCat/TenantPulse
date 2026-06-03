@@ -79,6 +79,38 @@ module.exports = async function (context, req) {
         return;
       }
 
+      // ── Blocage des requêtes d'un utilisateur (manager+) ──
+      if (role === "blocked") {
+        // On ne bloque que de simples utilisateurs (jamais un rôle privilégié)
+        try {
+          const existing = await rolesClient.getEntity("role", email.toLowerCase());
+          const cur = String(existing.role || "").trim().toLowerCase();
+          if (["moderator", "manager", "admin"].includes(cur)) {
+            context.res = {
+              status: 403,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ error: "Impossible de bloquer un utilisateur ayant un rôle" })
+            };
+            return;
+          }
+        } catch { /* pas dans la table = simple utilisateur, blocable */ }
+
+        await rolesClient.upsertEntity({
+          partitionKey: "role",
+          rowKey:       email.toLowerCase(),
+          role:         "blocked",
+          assignedBy:   auth.email,
+          assignedAt:   new Date().toISOString()
+        }, "Replace");
+
+        context.res = {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ success: true, email, role: "blocked" })
+        };
+        return;
+      }
+
       if (!["moderator", "manager", "admin"].includes(role)) {
         context.res = {
           status: 400,
@@ -140,12 +172,12 @@ module.exports = async function (context, req) {
         return;
       }
 
-      // Manager ne peut supprimer que des moderators
-      if (auth.role === "manager" && targetEntity.role !== "moderator") {
+      // Manager ne peut supprimer que des moderators ou débloquer des utilisateurs
+      if (auth.role === "manager" && !["moderator", "blocked"].includes(targetEntity.role)) {
         context.res = {
           status: 403,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Un manager ne peut supprimer que des moderators" })
+          body: JSON.stringify({ error: "Un manager ne peut supprimer que des moderators ou débloquer des utilisateurs" })
         };
         return;
       }
