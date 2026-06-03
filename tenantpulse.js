@@ -1470,8 +1470,16 @@ function showBadgePopover(anchorEl, meta, approved) {
 
   const title = document.createElement('div');
   title.className = 'badge-popover-title';
-  if (meta.color) title.style.color = meta.color;
-  title.textContent = meta.label;
+  // Pastille colorée (contraste sûr) au lieu de colorer le texte
+  if (meta.color) {
+    const dot = document.createElement('span');
+    dot.className = 'badge-popover-dot';
+    dot.style.background = meta.color;
+    title.appendChild(dot);
+  }
+  const titleText = document.createElement('span');
+  titleText.textContent = meta.label;
+  title.appendChild(titleText);
   pop.appendChild(title);
 
   if (meta.description) {
