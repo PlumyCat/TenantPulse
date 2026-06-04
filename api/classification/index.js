@@ -82,7 +82,14 @@ module.exports = async function (context, req) {
     const countByType = {};
     const totalByGroup = {};
     const distinctTypesByGroup = {};
+    const removalByType = {};
     for (const e of pendingEntities) {
+      // Les demandes de suppression sont comptées à part : elles concernent un
+      // tag déjà validé, pas une proposition d'ajout.
+      if ((e.action || "add") === "remove") {
+        removalByType[e.type] = (removalByType[e.type] || 0) + 1;
+        continue;
+      }
       countByType[e.type] = (countByType[e.type] || 0) + 1;
       const g = tagGroup(e.type);
       totalByGroup[g] = (totalByGroup[g] || 0) + 1;
@@ -95,6 +102,9 @@ module.exports = async function (context, req) {
       return { type, count, group: g, percent: multiple ? Math.round((count / totalByGroup[g]) * 100) : null };
     });
 
+    // Demandes de suppression en attente, par type (pour marquer les badges validés)
+    const pendingRemovals = Object.entries(removalByType).map(([type, count]) => ({ type, count }));
+
     // 3. Verrou
     let locked = false;
     try {
@@ -106,7 +116,7 @@ module.exports = async function (context, req) {
 
     // Tags custom visibles par tous (lecture seule) — pas de filtrage ici.
     // La proposition/création de tags custom reste réservée aux managers/admins.
-    context.res = json(200, { approvedTags, pending, locked });
+    context.res = json(200, { approvedTags, pending, pendingRemovals, locked });
 
   } catch (err) {
     context.log.error("Erreur /api/classification :", err.message);

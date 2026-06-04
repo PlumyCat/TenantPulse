@@ -1,6 +1,6 @@
 const { getAuthContext, hasRole } = require("../shared/auth");
 const { requestsClient } = require("../shared/tableClient");
-const { applyApprovedTag } = require("../shared/classify");
+const { applyApprovedTag, removeApprovedTag } = require("../shared/classify");
 
 /**
  * POST /api/review
@@ -72,7 +72,17 @@ module.exports = async function (context, req) {
 
     const now = new Date().toISOString();
 
-    if (decision === "approved") {
+    const action = requestEntity.action || "add";
+
+    if (decision === "approved" && action === "remove") {
+      // Demande de suppression validée : retire le tag (idempotent) et nettoie
+      // les demandes de suppression en attente pour ce tenant + type.
+      await removeApprovedTag({
+        tenantId: requestEntity.tenantId,
+        type:     requestEntity.type
+      });
+
+    } else if (decision === "approved") {
       // Applique le tag validé (gère exclusivité de groupe + limite + nettoyage
       // des demandes en attente du même groupe pour ce tenant)
       const result = await applyApprovedTag({

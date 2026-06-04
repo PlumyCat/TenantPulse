@@ -64,8 +64,44 @@ async function applyApprovedTag({ tenantId, type, domain, approvedBy, comment })
   return { ok: true };
 }
 
+/**
+ * Retire un tag validé d'un tenant (opération idempotente).
+ * Classifications : partitionKey = tenantId, rowKey = type.
+ *
+ * Gère :
+ *  - la suppression de la classification si elle existe
+ *  - le nettoyage des demandes de suppression (action "remove") en attente
+ *    pour ce tenant + ce type
+ *
+ * Retourne { ok: true, existed: <bool> }.
+ */
+async function removeApprovedTag({ tenantId, type }) {
+  // 1. Suppression de la classification (idempotent : absente = succès)
+  let existed = false;
+  try {
+    await classificationsClient.deleteEntity(tenantId, type);
+    existed = true;
+  } catch {
+    existed = false;
+  }
+
+  // 2. Nettoyer les demandes de suppression en attente pour ce tenant + type
+  const pending = requestsClient.listEntities({
+    queryOptions: {
+      filter: `PartitionKey eq 'request' and tenantId eq '${escapeOData(tenantId)}' and type eq '${escapeOData(type)}' and status eq 'pending'`
+    }
+  });
+  for await (const e of pending) {
+    if ((e.action || "add") === "remove") {
+      try { await requestsClient.deleteEntity(e.partitionKey, e.rowKey); } catch {}
+    }
+  }
+
+  return { ok: true, existed };
+}
+
 function escapeOData(v) {
   return String(v).replace(/'/g, "''");
 }
 
-module.exports = { applyApprovedTag, escapeOData };
+module.exports = { applyApprovedTag, removeApprovedTag, escapeOData };

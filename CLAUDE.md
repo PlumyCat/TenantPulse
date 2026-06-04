@@ -152,8 +152,8 @@ user < moderator < manager < admin
 | GET | `/api/classification?tenantId=` | any auth | Approved tags + pending count + lock status |
 | GET | `/api/classification?all=1` | manager | All assigned tags across tenants |
 | DELETE | `/api/classification` | moderator | Remove an approved tag |
-| POST | `/api/request` | any auth | Propose a tag for a tenant |
-| GET | `/api/requests` | moderator | List pending proposals |
+| POST | `/api/request` | any auth | Propose a tag (`action:"add"`) **or request its removal** (`action:"remove"`) |
+| GET | `/api/requests` | moderator | List pending proposals (each carries `action`: `add`/`remove`) |
 | POST | `/api/review` | moderator | Approve a proposal |
 | DELETE | `/api/review` | moderator | Reject a proposal |
 | POST | `/api/tags` | manager | Create/update a tag definition |
@@ -164,10 +164,20 @@ user < moderator < manager < admin
 | POST | `/api/roles` | admin | Assign/update user role |
 
 **Tag workflow:**
-1. User/moderator calls `POST /api/request` to propose a tag (`direct`, `indirect`, `gdap_actif`).
+1. User/moderator calls `POST /api/request` (`action:"add"`, default) to propose a tag
+   (`direct`, `indirect`, `gdap_actif`).
 2. Moderator/admin calls `POST /api/review` to approve → entry written to Classifications table.
 3. Manager/admin can apply tags directly (skips the proposal step).
-4. `DELETE /api/review` rejects; `DELETE /api/classification` removes an approved tag.
+4. `DELETE /api/review` rejects; `DELETE /api/classification` removes an approved tag (moderator+).
+
+**Tag removal-request workflow** (lets a plain `user` ask for a tag to be removed):
+1. User calls `POST /api/request` with `action:"remove"` on an already-approved tag → creates a
+   pending request (the tag must exist; idempotency/anti-dup enforced server-side).
+2. Moderator/admin approves via `POST /api/review` → `removeApprovedTag()` deletes the
+   classification (idempotent) and clears the pending removal request(s).
+3. Manager/admin calling `POST /api/request action:"remove"` removes the tag directly.
+4. `GET /api/classification?tenantId=` returns `pendingRemovals` (per-type) so the UI can mark
+   approved badges awaiting removal; pending *add* aggregation excludes removal requests.
 
 ---
 

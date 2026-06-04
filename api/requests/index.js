@@ -47,6 +47,7 @@ module.exports = async function (context, req) {
         tenantId:    entity.tenantId,
         domain:      entity.domain || "",
         type:        entity.type,
+        action:      entity.action || "add",
         requestedBy: entity.requestedBy,
         requestedAt: entity.requestedAt,
         comment:     entity.comment || "",

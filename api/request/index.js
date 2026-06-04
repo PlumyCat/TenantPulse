@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const { getAuthContext, hasRole } = require("../shared/auth");
 const { requestsClient, locksClient, classificationsClient } = require("../shared/tableClient");
-const { applyApprovedTag } = require("../shared/classify");
+const { applyApprovedTag, removeApprovedTag } = require("../shared/classify");
 
 function esc(v) { return String(v).replace(/'/g, "''"); }
 
@@ -9,12 +9,13 @@ function esc(v) { return String(v).replace(/'/g, "''"); }
  * POST /api/request
  * Soumet une demande de tag sur un tenant.
  *
- * Body : { tenantId, domain, type, comment }
- * - type : "direct" | "indirect" | "gdap_actif" | "gdap_non" | <tag custom>
+ * Body : { tenantId, domain, type, comment, action }
+ * - type   : "direct" | "indirect" | "gdap_actif" | "gdap_non" | <tag custom>
+ * - action : "add" (défaut, ajout/proposition) | "remove" (demande de suppression)
  *
  * Comportement selon le rôle :
  * - user / moderator : crée une demande en statut "pending"
- * - manager / admin  : applique directement en statut "approved"
+ * - manager / admin  : applique directement (status "approved" pour add, "removed" pour remove)
  *
  * Retourne : { requestId, status }
  */
@@ -42,6 +43,7 @@ module.exports = async function (context, req) {
     }
 
     const { tenantId, domain, type, comment } = req.body || {};
+    const action = (req.body && req.body.action) === "remove" ? "remove" : "add";
 
     if (!tenantId || !type) {
       context.res = {
@@ -82,6 +84,24 @@ module.exports = async function (context, req) {
 
     // Manager / Admin → application directe sans validation
     if (hasRole(auth.role, "manager")) {
+      if (action === "remove") {
+        const result = await removeApprovedTag({ tenantId, type });
+        if (!result.existed) {
+          context.res = {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: "Tag introuvable" })
+          };
+          return;
+        }
+        context.res = {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: null, status: "removed" })
+        };
+        return;
+      }
+
       const result = await applyApprovedTag({
         tenantId, type, domain, approvedBy: auth.email, comment
       });
@@ -103,30 +123,49 @@ module.exports = async function (context, req) {
     }
 
     // ── Garde-fous anti-doublon (user / modérateur) ──
-    // 1. Tag déjà validé sur ce tenant → inutile de le proposer
-    try {
-      await classificationsClient.getEntity(tenantId, type);
-      context.res = {
-        status: 409,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Ce tag est déjà appliqué à ce tenant" })
-      };
-      return;
-    } catch {
-      // non trouvé → OK, on continue
+    if (action === "remove") {
+      // Pour une demande de suppression : le tag DOIT déjà être appliqué
+      try {
+        await classificationsClient.getEntity(tenantId, type);
+      } catch {
+        context.res = {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Ce tag n'est pas appliqué à ce tenant" })
+        };
+        return;
+      }
+    } else {
+      // Pour un ajout : le tag ne doit PAS déjà être validé sur ce tenant
+      try {
+        await classificationsClient.getEntity(tenantId, type);
+        context.res = {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Ce tag est déjà appliqué à ce tenant" })
+        };
+        return;
+      } catch {
+        // non trouvé → OK, on continue
+      }
     }
 
-    // 2. Demande identique déjà en attente du même utilisateur
+    // Demande identique déjà en attente du même utilisateur (même action)
     const dupQuery = requestsClient.listEntities({
       queryOptions: {
         filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and type eq '${esc(type)}' and status eq 'pending' and requestedBy eq '${esc(auth.email)}'`
       }
     });
     for await (const _dup of dupQuery) {
+      if ((_dup.action || "add") !== action) continue;
       context.res = {
         status: 409,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Vous avez déjà proposé ce tag pour ce tenant" })
+        body: JSON.stringify({
+          error: action === "remove"
+            ? "Vous avez déjà demandé la suppression de ce tag"
+            : "Vous avez déjà proposé ce tag pour ce tenant"
+        })
       };
       return;
     }
@@ -138,6 +177,7 @@ module.exports = async function (context, req) {
       tenantId,
       domain:       domain || "",
       type,
+      action,
       comment:      comment || "",
       requestedBy:  auth.email,
       requestedAt:  now,

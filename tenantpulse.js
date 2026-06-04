@@ -1140,6 +1140,8 @@ function panelTitle(src, cls, text) { const img = document.createElement('img');
 //  TAGS DU HERO — bouton (+) et menu contextuel selon le rôle
 //  - Utilisateur / Modérateur : proposent un tag → POST /api/request (en attente)
 //  - Manager / Admin          : appliquent directement (le backend valide seul)
+//  L'utilisateur peut aussi DEMANDER la suppression d'un tag validé (action "remove",
+//  bouton « − » sur le badge) → demande en attente, validée par un modérateur+.
 //  L'affichage des badges (validés / en attente / verrouillé) est géré à l'étape 13.
 // ══════════════════════════════════════════════════════════════════════════
 /* Repli si les balises par défaut ne sont pas encore chargées depuis l'API. */
@@ -1417,9 +1419,16 @@ async function refreshHeroTags(tenantId, domain, zoneEl) {
     badges.appendChild(lockBadge);
   }
 
+  // ── Suppressions en attente (par type) → marquage des badges validés ──
+  const removalPending = new Set(
+    Array.isArray(data.pendingRemovals) ? data.pendingRemovals.map(r => r.type) : []
+  );
+
   // ── Badges validés (plusieurs possibles) ──
   if (Array.isArray(data.approvedTags)) {
-    data.approvedTags.forEach(t => badges.appendChild(makeApprovedBadge(t.type, t, tenantId, domain)));
+    data.approvedTags.forEach(t => badges.appendChild(
+      makeApprovedBadge(t.type, t, tenantId, domain, removalPending.has(t.type), locked)
+    ));
   }
 
   // ── Badges en attente (proportionnels par groupe) ──
@@ -1435,8 +1444,12 @@ function badgeIcon(src) {
   return i;
 }
 
-/* Badge d'un tag validé. Manager/Admin peuvent le retirer au clic. */
-function makeApprovedBadge(type, approved, tenantId, domain) {
+/* Badge d'un tag validé.
+   - Modérateur+ : suppression directe au clic sur « × ».
+   - Utilisateur  : bouton « − » pour DEMANDER la suppression (validation modérateur).
+   removalPending : true si une demande de suppression est déjà en attente pour ce type.
+   locked         : true si le tenant est verrouillé. */
+function makeApprovedBadge(type, approved, tenantId, domain, removalPending, locked) {
   const meta = resolveTagMeta(type);
   const b = document.createElement('span');
   b.className = 'hero-badge hero-badge-approved';
@@ -1456,8 +1469,18 @@ function makeApprovedBadge(type, approved, tenantId, domain) {
     showBadgePopover(b, meta, approved);
   });
 
-  // Suppression d'un tag validé — modérateur, manager, admin
-  if (TP_AUTH.hasRole('moderator')) {
+  const isMod = TP_AUTH.hasRole('moderator');
+
+  if (removalPending) {
+    // Une demande de suppression est en attente : on marque visuellement le badge.
+    b.classList.add('removal-pending');
+    b.title = isMod
+      ? 'Suppression demandée par un utilisateur — à valider dans Administration'
+      : 'Suppression demandée — en attente de validation';
+  }
+
+  if (isMod) {
+    // Suppression directe d'un tag validé — modérateur, manager, admin
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'hero-badge-remove';
@@ -1469,9 +1492,52 @@ function makeApprovedBadge(type, approved, tenantId, domain) {
       deleteApprovedTag(tenantId, type, domain);
     });
     b.appendChild(rm);
+  } else if (!removalPending) {
+    // Utilisateur : demande de suppression (désactivée si tenant verrouillé)
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'hero-badge-remove';
+    rm.textContent = '−';
+    rm.disabled = !!locked;
+    rm.title = locked ? 'Tenant verrouillé' : 'Demander la suppression de ce tag';
+    rm.setAttribute('aria-label', 'Demander la suppression de ce tag');
+    rm.addEventListener('click', (e) => {
+      e.stopPropagation();
+      requestRemoveTag(tenantId, type, domain, rm);
+    });
+    b.appendChild(rm);
   }
 
   return b;
+}
+
+/* Soumet une demande de suppression d'un tag validé via POST /api/request
+   (action "remove"). Le backend applique directement pour manager+, sinon
+   crée une demande en attente de validation. */
+async function requestRemoveTag(tenantId, type, domain, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId, domain, type, action: 'remove' })
+    });
+    if (res.status === 403) { heroTagFeedback('Action verrouillée pour ce tenant', true); return; }
+    if (!res.ok) { heroTagFeedback((await safeErr(res)) || 'Erreur lors de l\'envoi', true); return; }
+
+    const data = await res.json();
+    heroTagFeedback(
+      data.status === 'removed' ? 'Tag supprimé' : 'Demande de suppression envoyée — en attente de validation',
+      false
+    );
+
+    if (typeof refreshHeroTags === 'function') refreshHeroTags(tenantId, domain);
+    if (typeof refreshAdminBadges === 'function') refreshAdminBadges();
+  } catch {
+    heroTagFeedback('Erreur réseau', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 let _openBadgePopover = null;
@@ -1594,7 +1660,7 @@ async function validatePendingFromHero(tenantId, domain, type) {
     const res = await fetch('/api/requests', { headers: { 'Accept': 'application/json' } });
     if (!res.ok) { heroTagFeedback('Accès refusé', true); return; }
     const list = await res.json();
-    const match = list.find(r => r.tenantId === tenantId && r.type === type);
+    const match = list.find(r => r.tenantId === tenantId && r.type === type && (r.action || 'add') === 'add');
     if (!match) { heroTagFeedback('Demande introuvable', true); return; }
 
     const rev = await fetch('/api/review', {
@@ -1797,8 +1863,17 @@ function buildRequestRow(req) {
   const row = document.createElement('div');
   row.className = 'admin-req-row';
 
+  const isRemoval = (req.action || 'add') === 'remove';
+  if (isRemoval) row.classList.add('admin-req-removal');
+
   const info = document.createElement('div');
   info.className = 'admin-req-info';
+
+  // Étiquette du type de demande (suppression vs ajout)
+  const actionTag = document.createElement('div');
+  actionTag.className = 'admin-req-action-tag' + (isRemoval ? ' is-removal' : '');
+  actionTag.textContent = isRemoval ? 'Demande de suppression' : 'Demande d\'ajout';
+  info.appendChild(actionTag);
 
   const meta = resolveTagMeta(req.type);
   const badge = document.createElement('span');
@@ -1838,7 +1913,7 @@ function buildRequestRow(req) {
   const approve = document.createElement('button');
   approve.type = 'button'; approve.className = 'admin-btn admin-btn-approve';
   approve.appendChild(badgeIcon('assets/checked.png'));
-  approve.appendChild(document.createTextNode(' Approuver'));
+  approve.appendChild(document.createTextNode(isRemoval ? ' Valider la suppression' : ' Approuver'));
   approve.addEventListener('click', () => reviewRequest(req, 'approved', row));
   const reject = document.createElement('button');
   reject.type = 'button'; reject.className = 'admin-btn admin-btn-reject'; reject.textContent = 'Rejeter';
