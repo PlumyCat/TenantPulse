@@ -105,6 +105,23 @@ module.exports = async function (context, req) {
     // Demandes de suppression en attente, par type (pour marquer les badges validés)
     const pendingRemovals = Object.entries(removalByType).map(([type, count]) => ({ type, count }));
 
+    // Délai de carence : demandes de suppression refusées il y a moins de 24 h.
+    // Permet à l'UI de désactiver le bouton « demander la suppression ».
+    const REMOVAL_REJECT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const cooldownByType = {};
+    const rejectedQuery = requestsClient.listEntities({
+      queryOptions: {
+        filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and action eq 'remove' and status eq 'rejected'`
+      }
+    });
+    for await (const e of rejectedQuery) {
+      if (!e.reviewedAt) continue;
+      const until = new Date(e.reviewedAt).getTime() + REMOVAL_REJECT_COOLDOWN_MS;
+      if (until > nowMs && until > (cooldownByType[e.type] || 0)) cooldownByType[e.type] = until;
+    }
+    const removalCooldowns = Object.entries(cooldownByType).map(([type, until]) => ({ type, until: new Date(until).toISOString() }));
+
     // 3. Verrou
     let locked = false;
     try {
@@ -116,7 +133,7 @@ module.exports = async function (context, req) {
 
     // Tags custom visibles par tous (lecture seule) — pas de filtrage ici.
     // La proposition/création de tags custom reste réservée aux managers/admins.
-    context.res = json(200, { approvedTags, pending, pendingRemovals, locked });
+    context.res = json(200, { approvedTags, pending, pendingRemovals, removalCooldowns, locked });
 
   } catch (err) {
     context.log.error("Erreur /api/classification :", err.message);

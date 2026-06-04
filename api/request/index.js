@@ -150,6 +150,34 @@ module.exports = async function (context, req) {
       }
     }
 
+    // Délai de carence : une demande de suppression REFUSÉE pour ce tenant + type
+    // bloque toute nouvelle demande de suppression pendant 24 h (anti-spam).
+    if (action === "remove") {
+      const REMOVAL_REJECT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+      let lastRejectedAt = 0;
+      const rejectedQuery = requestsClient.listEntities({
+        queryOptions: {
+          filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and type eq '${esc(type)}' and action eq 'remove' and status eq 'rejected'`
+        }
+      });
+      for await (const r of rejectedQuery) {
+        const t = r.reviewedAt ? new Date(r.reviewedAt).getTime() : 0;
+        if (t > lastRejectedAt) lastRejectedAt = t;
+      }
+      if (lastRejectedAt) {
+        const elapsed = Date.now() - lastRejectedAt;
+        if (elapsed < REMOVAL_REJECT_COOLDOWN_MS) {
+          const remainingH = Math.ceil((REMOVAL_REJECT_COOLDOWN_MS - elapsed) / (60 * 60 * 1000));
+          context.res = {
+            status: 429,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: `Cette suppression a été refusée récemment. Réessayez dans ${remainingH} h.` })
+          };
+          return;
+        }
+      }
+    }
+
     // Demande identique déjà en attente du même utilisateur (même action)
     const dupQuery = requestsClient.listEntities({
       queryOptions: {

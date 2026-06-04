@@ -178,6 +178,10 @@ user < moderator < manager < admin
 3. Manager/admin calling `POST /api/request action:"remove"` removes the tag directly.
 4. `GET /api/classification?tenantId=` returns `pendingRemovals` (per-type) so the UI can mark
    approved badges awaiting removal; pending *add* aggregation excludes removal requests.
+5. **24 h cooldown**: once a removal request is *rejected*, any new removal request for the same
+   `tenantId`+`type` is blocked for 24 h (`POST /api/request` returns 429). The cooldown is
+   tracked from the rejected request's `reviewedAt`; `GET /api/classification?tenantId=` also
+   returns `removalCooldowns` (`[{type, until}]`) so the UI disables the removal button.
 
 ---
 

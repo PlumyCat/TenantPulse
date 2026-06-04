@@ -1424,10 +1424,16 @@ async function refreshHeroTags(tenantId, domain, zoneEl) {
     Array.isArray(data.pendingRemovals) ? data.pendingRemovals.map(r => r.type) : []
   );
 
+  // ── Délai de carence après un rejet de suppression (par type) ──
+  const removalCooldown = {};
+  if (Array.isArray(data.removalCooldowns)) {
+    data.removalCooldowns.forEach(c => { removalCooldown[c.type] = c.until; });
+  }
+
   // ── Badges validés (plusieurs possibles) ──
   if (Array.isArray(data.approvedTags)) {
     data.approvedTags.forEach(t => badges.appendChild(
-      makeApprovedBadge(t.type, t, tenantId, domain, removalPending.has(t.type), locked)
+      makeApprovedBadge(t.type, t, tenantId, domain, removalPending.has(t.type), locked, removalCooldown[t.type])
     ));
   }
 
@@ -1448,8 +1454,10 @@ function badgeIcon(src) {
    - Modérateur+ : suppression directe au clic sur « × ».
    - Utilisateur  : bouton « − » pour DEMANDER la suppression (validation modérateur).
    removalPending : true si une demande de suppression est déjà en attente pour ce type.
-   locked         : true si le tenant est verrouillé. */
-function makeApprovedBadge(type, approved, tenantId, domain, removalPending, locked) {
+   locked         : true si le tenant est verrouillé.
+   cooldownUntil  : date ISO jusqu'à laquelle toute nouvelle demande de suppression est
+                    bloquée (suite à un rejet récent), ou falsy. */
+function makeApprovedBadge(type, approved, tenantId, domain, removalPending, locked, cooldownUntil) {
   const meta = resolveTagMeta(type);
   const b = document.createElement('span');
   b.className = 'hero-badge hero-badge-approved';
@@ -1493,13 +1501,17 @@ function makeApprovedBadge(type, approved, tenantId, domain, removalPending, loc
     });
     b.appendChild(rm);
   } else if (!removalPending) {
-    // Utilisateur : demande de suppression (désactivée si tenant verrouillé)
+    // Utilisateur : demande de suppression (désactivée si tenant verrouillé
+    // ou si une demande a été refusée récemment — délai de carence de 24 h)
+    const cooled = cooldownUntil && new Date(cooldownUntil).getTime() > Date.now();
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'hero-badge-remove';
     rm.textContent = '−';
-    rm.disabled = !!locked;
-    rm.title = locked ? 'Tenant verrouillé' : 'Demander la suppression de ce tag';
+    rm.disabled = !!locked || !!cooled;
+    rm.title = locked ? 'Tenant verrouillé'
+      : cooled ? 'Suppression refusée récemment — nouvelle demande possible plus tard'
+      : 'Demander la suppression de ce tag';
     rm.setAttribute('aria-label', 'Demander la suppression de ce tag');
     rm.addEventListener('click', (e) => {
       e.stopPropagation();
