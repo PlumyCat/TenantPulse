@@ -2104,6 +2104,18 @@ function copyTenantId(tenantId, btn) {
   }
 }
 
+function copyDomain(domain, btn) {
+  const ok = () => {
+    if (btn) { const o = btn.textContent; btn.textContent = 'Copié ✓'; setTimeout(() => { btn.textContent = o; }, 1200); }
+    heroTagFeedback('Domaine copié', false);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(domain).then(ok).catch(() => heroTagFeedback('Copie impossible', true));
+  } else {
+    heroTagFeedback('Copie non supportée par le navigateur', true);
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 //  Sous-onglet TENANT CONNU (utilisateurs + modérateurs + plus)
 //  Liste groupée par tenant (un tenant = une ligne, tous ses tags) + filtres
@@ -2179,6 +2191,11 @@ function buildKnownRow(t) {
   const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'admin-btn admin-btn-small'; copy.textContent = 'Copier ID';
   copy.addEventListener('click', () => copyTenantId(t.tenantId, copy));
   head.appendChild(dom); head.appendChild(tid); head.appendChild(copy);
+  if (t.domain) {
+    const copyDom = document.createElement('button'); copyDom.type = 'button'; copyDom.className = 'admin-btn admin-btn-small'; copyDom.textContent = 'Copier domaine';
+    copyDom.addEventListener('click', () => copyDomain(t.domain, copyDom));
+    head.appendChild(copyDom);
+  }
 
   const badges = document.createElement('div'); badges.className = 'admin-known-badges';
   t.types.forEach(ty => {
