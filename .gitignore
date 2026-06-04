@@ -1,8 +1,8 @@
 # Config locale Claude Code (ne pas publier)
 .claude/
 
-# Graphe généré par graphify (régénérable, non versionné)
-graphify-out/
+# Coffre Obsidian (config locale, non versionnée)
+.obsidian/
 
 # Artefacts OS / éditeur
 Thumbs.db
