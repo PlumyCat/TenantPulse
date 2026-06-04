@@ -16,43 +16,19 @@
   --unknown-bg: #f3f4f6;
 }
 
-/* ── Mode sombre — système (media query) ──
-   Couvre TOUS les tokens : ceux de tenantpulse.css (bg, surface, border…)
-   et ceux spécifiques à Mhaelle (good-bg, bad-bg…).
-   Utilisé en mode standalone et en secours si le parent ne répond pas. */
+/* ── Mode sombre — tokens Mhaelle uniquement ──
+   Les tokens partagés (bg, surface, border, text…) sont définis une seule
+   fois dans ../tenantpulse.css (manuel + fallback OS). Ici, seuls les tokens
+   propres à Mhaelle (statuts email) sont surchargés pour le mode sombre. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    /* Tokens partagés (tenantpulse.css) */
-    --bg:         #383630;
-    --surface:    #2e2c2a;
-    --border:     #4a4845;
-    --text:       #f0ede8;
-    --soft:       #b0ada8;
-    --muted:      #7a7874;
-    --row:        #333230;
-    --acc-hover:  #333230;
-    --step-bg:    #333230;
-    /* Tokens Mhaelle */
     --good-bg:    rgba(34,197,94,.15);
     --medium-bg:  rgba(245,158,11,.15);
     --bad-bg:     rgba(239,68,68,.15);
     --unknown-bg: rgba(100,116,139,.2);
   }
 }
-
-/* ── Mode sombre — manuel (data-theme="dark") ── */
 [data-theme="dark"] {
-  /* Tokens partagés */
-  --bg:         #383630;
-  --surface:    #2e2c2a;
-  --border:     #4a4845;
-  --text:       #f0ede8;
-  --soft:       #b0ada8;
-  --muted:      #7a7874;
-  --row:        #333230;
-  --acc-hover:  #333230;
-  --step-bg:    #333230;
-  /* Tokens Mhaelle */
   --good-bg:    rgba(34,197,94,.15);
   --medium-bg:  rgba(245,158,11,.15);
   --bad-bg:     rgba(239,68,68,.15);

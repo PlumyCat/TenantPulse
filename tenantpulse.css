@@ -33,6 +33,22 @@
   --acc-hover:#333230;
   --step-bg:#333230;
 }
+/* Fallback mode sombre système (OS) — couvre shell + sous-apps en standalone,
+   tant qu'aucun thème manuel (data-theme="light") n'est forcé.
+   Source unique : ne PAS recopier ces tokens dans ML/ ni PF/. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#383630;
+    --surface:#2e2c2a;
+    --border:#4a4845;
+    --text:#f0ede8;
+    --soft:#b0ada8;
+    --muted:#7a7874;
+    --row:#333230;
+    --acc-hover:#333230;
+    --step-bg:#333230;
+  }
+}
 
 html{height:100%}
 body{background:var(--bg);font-family:var(--font);font-size:var(--text-base);color:var(--text);height:100%;overflow:hidden;display:flex;flex-direction:column;transition:background .25s,color .25s}

@@ -2,27 +2,8 @@
    PsForge — Commandes PowerShell IT MW
    ────────────────────────────────────────────────────────────── */
 
-/* ── Mode sombre — système ── */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg:      #383630;
-    --surface: #2e2c2a;
-    --border:  #4a4845;
-    --text:    #f0ede8;
-    --soft:    #b0ada8;
-    --muted:   #7a7874;
-    --row:     #333230;
-  }
-}
-[data-theme="dark"] {
-  --bg:      #383630;
-  --surface: #2e2c2a;
-  --border:  #4a4845;
-  --text:    #f0ede8;
-  --soft:    #b0ada8;
-  --muted:   #7a7874;
-  --row:     #333230;
-}
+/* Tokens de thème (clair/sombre, OS + manuel) : source unique dans
+   ../tenantpulse.css, chargé avant cette feuille. Ne rien redéfinir ici. */
 
 /* ── Mode embarqué ── */
 html.embedded .topbar,
