@@ -354,6 +354,13 @@ html:not([data-theme="dark"]) .drop-menu .drop-info-row > span:first-child{filte
 .sb-head h1 span{color:var(--blue)}
 [data-theme="dark"] .sb-head h1 span{color:#8b80f8}
 .sb-head p{font-size:var(--text-xs);color:var(--soft);font-weight:400;line-height:1.5}
+/* ── Prise en main : « i » entouré + bouton guide ── */
+.sb-head-title-row{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.sb-head-title-row h1{margin-bottom:0}
+.sb-help-i{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1.4px solid var(--border);background:transparent;color:var(--soft);font-size:11px;font-weight:700;font-style:italic;font-family:Georgia,serif;line-height:1;padding:0;cursor:pointer;transition:border-color .15s,color .15s,background .15s;user-select:none}
+.sb-help-i:hover{border-color:var(--blue);color:var(--blue);background:var(--acc-hover)}
+[data-theme="dark"] .sb-help-i:hover{border-color:#8b80f8;color:#8b80f8}
+.sb-guide-btn{margin-top:10px}
 .sb-body{padding:14px 16px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
 
 
@@ -1236,6 +1243,26 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .storage-modal-close:hover{background:var(--row);color:var(--text)}
 .storage-modal-body{flex:1;min-height:0;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
 .storage-modal-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border);background:var(--row);flex-shrink:0}
+
+/* ── Modal Prise en main (guide) ── */
+.confirm-modal.guide-modal{width:580px;max-width:calc(100vw - 32px);max-height:min(740px,calc(100vh - 80px))}
+.guide-body{font-size:var(--text-sm);color:var(--text);line-height:1.55;gap:14px}
+.guide-section{display:flex;flex-direction:column;gap:5px}
+.guide-section-title{display:flex;align-items:center;gap:8px;font-size:var(--text-base);font-weight:700;color:var(--text);line-height:1.3}
+.guide-num{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;line-height:1}
+[data-theme="dark"] .guide-num{background:#8b80f8}
+.guide-body p{margin:0}
+.guide-body ul{margin:2px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+.guide-body li{line-height:1.5}
+.guide-body strong{font-weight:600;color:var(--text)}
+.guide-body code{font-family:'Courier New',monospace;font-size:.92em;background:var(--row);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+.guide-body kbd{font-family:var(--font);font-size:.85em;font-weight:600;background:var(--row);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+.guide-path{font-weight:600;color:var(--blue);background:var(--acc-hover);border-radius:4px;padding:1px 6px}
+[data-theme="dark"] .guide-path{color:#8b80f8}
+.guide-tip{display:flex;flex-direction:column;gap:5px;background:var(--acc-hover);border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:var(--r-md);padding:9px 11px;margin-top:3px}
+[data-theme="dark"] .guide-tip{border-left-color:#8b80f8}
+.guide-tip-badge{align-self:flex-start;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#fff;background:var(--blue);border-radius:999px;padding:2px 8px}
+[data-theme="dark"] .guide-tip-badge{background:#8b80f8}
 
 .storage-entry{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-md);overflow:hidden;transition:border-color .15s;flex-shrink:0}
 .storage-entry:hover{border-color:var(--muted)}

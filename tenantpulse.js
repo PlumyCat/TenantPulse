@@ -303,6 +303,14 @@ function hideDeleteConfirm() {
   const modal = document.getElementById('deleteConfirmModal');
   if (modal) modal.classList.remove('open');
 }
+function showGuide() {
+  const modal = document.getElementById('guideModal');
+  if (modal) modal.classList.add('open');
+}
+function hideGuide() {
+  const modal = document.getElementById('guideModal');
+  if (modal) modal.classList.remove('open');
+}
 function confirmDisableAndDelete() {
   hideDeleteConfirm();
   try { localStorage.setItem(HISTORY_OPT_KEY, 'false'); } catch {}
@@ -474,6 +482,17 @@ function bindEvents() {
   document.getElementById('btnStorageCloseFooter').addEventListener('click', hideStoragePanel);
   document.getElementById('btnClearAllStorage').addEventListener('click', clearAllStorage);
   document.getElementById('btnShowStorage').addEventListener('click', showStoragePanel);
+  document.getElementById('btnOpenGuide').addEventListener('click', showGuide);
+  document.getElementById('btnGuideInfo').addEventListener('click', showGuide);
+  document.getElementById('guideModal').addEventListener('click', hideGuide);
+  document.getElementById('guideModalInner').addEventListener('click', e => e.stopPropagation());
+  document.getElementById('btnGuideClose').addEventListener('click', hideGuide);
+  document.getElementById('btnGuideCloseFooter').addEventListener('click', hideGuide);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const m = document.getElementById('guideModal');
+    if (m && m.classList.contains('open')) hideGuide();
+  });
   document.querySelectorAll('[data-drop-section]').forEach(btn => {
     btn.addEventListener('click', () => toggleDropSection(btn));
   });
