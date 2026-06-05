@@ -452,7 +452,7 @@ input::placeholder{color:var(--muted);font-weight:500}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 .btn-export{width:100%;padding:9px;background:transparent;border:2px solid var(--border);border-radius:var(--r-md);font-family:var(--font);font-size:var(--text-sm);font-weight:500;color:var(--soft);cursor:pointer;display:none;align-items:center;justify-content:center;gap:6px;transition:all .2s;margin-top:8px}
-.btn-export:hover{border-color:var(--black);color:var(--black)}
+.btn-export:hover{border-color:var(--soft);color:var(--text);background:var(--acc-hover)}
 .btn-export.visible{display:flex}
 
 .btn-trigger-full{width:100%;padding:10px;background:transparent;border:2px dashed var(--blue);border-radius:var(--r-md);font-family:var(--font);font-size:var(--text-sm);font-weight:500;color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;margin-top:0;flex-shrink:0}
