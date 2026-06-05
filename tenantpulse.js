@@ -3883,6 +3883,7 @@ async function checkFast() {
     document.getElementById('progList').style.display = 'none';
     const confidence = computeConfidence(currentState.ms);
     lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: null, otherServices: null, host: null, tenantConfidence: confidence, fullDone: false };
+    exportBtn.classList.add('visible'); // rapport (partiel) copiable dès l'analyse rapide
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));
     if (currentState.dns?.detectedProviders?.length) {
