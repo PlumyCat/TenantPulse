@@ -493,7 +493,6 @@ function bindEvents() {
   document.getElementById('btnStorageCloseFooter').addEventListener('click', hideStoragePanel);
   document.getElementById('btnClearAllStorage').addEventListener('click', clearAllStorage);
   document.getElementById('btnShowStorage').addEventListener('click', showStoragePanel);
-  document.getElementById('btnOpenGuide').addEventListener('click', showGuide);
   document.getElementById('btnGuideInfo').addEventListener('click', showGuide);
   document.getElementById('guideModal').addEventListener('click', hideGuide);
   document.getElementById('guideModalInner').addEventListener('click', e => e.stopPropagation());

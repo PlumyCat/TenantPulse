@@ -337,7 +337,7 @@
     <div class="storage-modal-head">
       <div class="storage-modal-head-text">
         <div class="storage-modal-title"><img src="assets/information.png" class="icon-adaptive" alt=""> Prise en main de TenantPulse</div>
-        <div class="storage-modal-sub">Guide rapide de l'outil de diagnostic Microsoft 365 — tout reste dans votre navigateur.</div>
+        <div class="storage-modal-sub">Guide rapide de l'outil de diagnostic Microsoft 365. Tout reste dans votre navigateur.</div>
       </div>
       <button class="storage-modal-close" id="btnGuideClose" aria-label="Fermer">✕</button>
     </div>
@@ -345,7 +345,7 @@
 
       <div class="guide-section">
         <div class="guide-section-title"><span class="guide-num">1</span> Lancer une analyse</div>
-        <p>Saisissez un <strong>domaine</strong> (ex. <code>contoso.com</code>) ou une <strong>adresse e-mail</strong> dans le champ en haut de la colonne de gauche, puis&nbsp;:</p>
+        <p>Saisissez un <strong>domaine</strong> (ex. <code>contoso.com</code>) dans le champ en haut de la colonne de gauche, puis&nbsp;:</p>
         <ul>
           <li><strong>Tenant ID</strong> (analyse rapide)&nbsp;: récupère le Tenant ID Microsoft 365 et les enregistrements DNS de base. Astuce&nbsp;: appuyez sur <kbd>Entrée</kbd> dans le champ pour la lancer.</li>
           <li><strong>Analyse</strong> (analyse complète)&nbsp;: ajoute le WHOIS du domaine et un audit de sécurité DNS (SPF, DKIM, DMARC, DNSSEC, MTA-STS, BIMI) avec un score.</li>
@@ -358,7 +358,7 @@
         <p>Sous un tenant détecté, des boutons ouvrent directement les portails du client&nbsp;: <strong>Partner Center, Entra ID, M365 Admin, Exchange, Intune, Teams, SharePoint, Azure, Defender</strong>. Un clic les ouvre dans un nouvel onglet.</p>
         <div class="guide-tip">
           <span class="guide-tip-badge">Astuce Edge</span>
-          <span><strong>Clic droit</strong> sur un de ces boutons → <strong>«&nbsp;Ouvrir le lien dans&nbsp;»</strong> → choisissez un <strong>autre profil Edge</strong>. Vous ouvrez ainsi le centre d'administration du client directement dans le profil Edge dédié à ce client (idéal en multi-tenant / GDAP, pour ne pas mélanger les sessions).</span>
+          <span><strong>Clic droit</strong> sur un de ces boutons → <strong>«&nbsp;Ouvrir le lien en tant que&nbsp;»</strong> → choisissez un <strong>autre profil Edge</strong>. Vous ouvrez ainsi le centre d'administration du client directement dans le profil Edge dédié à ce client.</span>
         </div>
       </div>
 
@@ -388,7 +388,7 @@
         <p>Désactivé par défaut. Pour le conserver d'une analyse à l'autre&nbsp;:</p>
         <ul>
           <li><strong>Activer</strong>&nbsp;: <button class="guide-path" type="button" data-guide-action="settings-history">Paramètres &amp; Confidentialité → Gestion d'historique</button> (interrupteur).</li>
-          <li><strong>Régler la conservation</strong>&nbsp;: <button class="guide-path" type="button" data-guide-action="profiles">Profils → Rétention de l'historique</button> — nombre maximum de tenants et durée de conservation.</li>
+          <li><strong>Régler la conservation</strong>&nbsp;: <button class="guide-path" type="button" data-guide-action="profiles">Profils → Rétention de l'historique</button> : nombre maximum de tenants et durée de conservation.</li>
           <li><strong>Nettoyage automatique</strong>&nbsp;: les entrées trop anciennes sont purgées à l'ouverture de l'app, à chaque analyse enregistrée, et quand vous changez la durée. Rien n'est nettoyé tant que l'application est fermée.</li>
         </ul>
         <p>L'<strong>indicateur de cache</strong> dans la barre du haut montre l'état (actif, vide, désactivé, inactif). Vous consultez et effacez l'historique via le bloc <strong>«&nbsp;Historique des Tenant ID&nbsp;»</strong> dans la colonne de gauche.</p>
@@ -412,7 +412,7 @@
       <div class="guide-section">
         <div class="guide-section-title"><span class="guide-num">9</span> Vos données restent locales</div>
         <ul>
-          <li>Les analyses partent <strong>directement de votre navigateur</strong> vers les APIs officielles (Microsoft, Google DNS, RDAP) — aucun proxy ni serveur intermédiaire.</li>
+          <li>Les analyses partent <strong>directement de votre navigateur</strong> vers les APIs officielles (Microsoft, Google DNS, RDAP), sans proxy ni serveur intermédiaire.</li>
           <li>L'historique (optionnel) reste dans le <strong>localStorage</strong> de votre navigateur.</li>
           <li>Pour inspecter ou <strong>tout vider</strong>&nbsp;: <button class="guide-path" type="button" data-guide-action="settings-storage">Paramètres &amp; Confidentialité → Stockage local → Inspecter les données stockées</button>.</li>
           <li>Seules les <strong>classifications</strong> (badges de l'annuaire) sont partagées en ligne pour être visibles par l'équipe.</li>
@@ -421,7 +421,7 @@
 
       <div class="guide-section">
         <div class="guide-section-title"><span class="guide-num">10</span> Signaler un bug</div>
-        <p>Le lien <strong>«&nbsp;Report Bug(s)&nbsp;»</strong> en haut à gauche ouvre un e-mail pré-rempli pour signaler un problème. Merci d'indiquer ce que vous faisiez et le domaine concerné.</p>
+        <p>Le lien <strong>«&nbsp;Report Bug(s)&nbsp;»</strong> en haut à gauche ouvre un e-mail pré-rempli pour signaler un problème.</p>
       </div>
 
     </div>
@@ -475,9 +475,6 @@
         <button class="sb-help-i" id="btnGuideInfo" type="button" aria-label="Prise en main de TenantPulse" title="Prise en main de TenantPulse">i</button>
       </div>
       <p>Interface de diagnostic M365 et hygiène DNS, avec traitement local des données.</p>
-      <button class="privacy-cta sb-guide-btn" id="btnOpenGuide" type="button">
-        <img src="assets/information.png" class="icon-adaptive" alt=""> Prise en main de TenantPulse
-      </button>
     </div>
     <div class="sb-body">
       <label class="flabel">Adresse e-mail ou domaine</label>
