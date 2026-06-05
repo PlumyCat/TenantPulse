@@ -311,6 +311,17 @@ function hideGuide() {
   const modal = document.getElementById('guideModal');
   if (modal) modal.classList.remove('open');
 }
+function openSettingsSection(sectionLabel) {
+  hideGuide();
+  const dropdown = document.getElementById('mainDropdown');
+  if (dropdown) dropdown.classList.add('open');
+  document.querySelectorAll('#dropMenu [data-drop-section]').forEach(btn => {
+    if ((btn.textContent || '').trim().startsWith(sectionLabel)) {
+      if (!btn.classList.contains('open')) toggleDropSection(btn);
+      try { btn.scrollIntoView({ block: 'nearest' }); } catch {}
+    }
+  });
+}
 function confirmDisableAndDelete() {
   hideDeleteConfirm();
   try { localStorage.setItem(HISTORY_OPT_KEY, 'false'); } catch {}
@@ -488,6 +499,16 @@ function bindEvents() {
   document.getElementById('guideModalInner').addEventListener('click', e => e.stopPropagation());
   document.getElementById('btnGuideClose').addEventListener('click', hideGuide);
   document.getElementById('btnGuideCloseFooter').addEventListener('click', hideGuide);
+  document.getElementById('guideModalInner').addEventListener('click', e => {
+    const btn = e.target.closest('[data-guide-action]');
+    if (!btn) return;
+    e.stopPropagation();
+    const action = btn.dataset.guideAction;
+    if (action === 'settings-history')   { openHistorySettings(); }
+    else if (action === 'profiles')      { hideGuide(); openProfilesModal(); }
+    else if (action === 'settings-apparence') { openSettingsSection('Apparence'); }
+    else if (action === 'settings-storage')   { hideGuide(); showStoragePanel(); }
+  });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     const m = document.getElementById('guideModal');
