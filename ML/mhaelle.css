@@ -721,16 +721,20 @@ details summary:focus-visible {
    HIÉRARCHIE VISUELLE — MODE CLAIR
    ════════════════════════════════════════ */
 
-/* Cards de résultats — élévation légère pour les distinguer du fond var(--bg) */
+/* Fond Mhaelle — même teinte gris-bleu que TenantPulse */
+[data-theme="light"] body,
+html:not([data-theme="dark"]) body { background: #e8edf5; }
+
+/* Cards — élévation nette sur fond gris */
 [data-theme="light"] .card,
 html:not([data-theme="dark"]) .card {
-  box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
-  border-color: rgba(0,0,0,.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,.11), 0 0 0 1px rgba(0,0,0,.08);
+  border-color: rgba(0,0,0,.12);
 }
 
-/* Accordéons ouverts — header légèrement teinté */
+/* Accordéons ouverts — header teinté */
 [data-theme="light"] .card-details[open] > summary,
-html:not([data-theme="dark"]) .card-details[open] > summary { background: var(--row); }
+html:not([data-theme="dark"]) .card-details[open] > summary { background: #edf0f7; }
 
 /* Mode sombre */
 [data-theme="dark"] .btn-sec:focus-visible,

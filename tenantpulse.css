@@ -1735,23 +1735,27 @@ select.admin-input{cursor:pointer;color-scheme:light}
    En light : #f4f5f9 vs #fff = trop discret. Correctif : élévation via box-shadow.
    ════════════════════════════════════════ */
 
-/* Cards de résultats — légère élévation au-dessus de var(--bg) */
+/* Fond principal — teinte gris-bleu plus marquée */
+[data-theme="light"] body,
+html:not([data-theme="dark"]) body{ background:#e8edf5; }
+
+/* Cards de résultats — élévation nette */
 [data-theme="light"] .result-card,
 html:not([data-theme="dark"]) .result-card{
-  box-shadow:0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
-  border-color:rgba(0,0,0,.1);
+  box-shadow:0 2px 8px rgba(0,0,0,.11), 0 0 0 1px rgba(0,0,0,.08);
+  border-color:rgba(0,0,0,.13);
 }
 [data-theme="light"] .result-card:hover,
 html:not([data-theme="dark"]) .result-card:hover{
-  box-shadow:0 3px 12px rgba(75,63,190,.12), 0 0 0 1px rgba(75,63,190,.1);
+  box-shadow:0 4px 16px rgba(75,63,190,.18), 0 0 0 1px rgba(75,63,190,.15);
 }
 
-/* Panneau détail — border gauche plus marquée en clair */
+/* Panneau détail — border gauche marquée */
 [data-theme="light"] .detail-panel,
-html:not([data-theme="dark"]) .detail-panel{ border-left-color:rgba(0,0,0,.12); }
+html:not([data-theme="dark"]) .detail-panel{ border-left-color:rgba(0,0,0,.16); }
 
-/* Drop menu — élévation renforcée en clair */
+/* Drop menu — ombre profonde */
 [data-theme="light"] .drop-menu,
 html:not([data-theme="dark"]) .drop-menu{
-  box-shadow:0 4px 20px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.06);
+  box-shadow:0 6px 24px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.09);
 }

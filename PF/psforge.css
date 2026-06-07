@@ -2597,48 +2597,48 @@ html:not([data-theme="dark"]) .pf-desc-content {
    Correctif : box-shadow sur les cards + border renforcée + var(--row) ciblé.
    ════════════════════════════════════════ */
 
-/* Zone scrollable catalogue — fond explicite */
+/* Zone scrollable catalogue — fond plus marqué */
 [data-theme="light"] .pf-cmd-list,
-html:not([data-theme="dark"]) .pf-cmd-list { background: var(--bg); }
+html:not([data-theme="dark"]) .pf-cmd-list { background: #e8edf5; }
 
-/* Cards de groupes (SYSTÈME WINDOWS, FAVORIS…) — légère élévation */
+/* Cards de groupes — élévation nette sur fond gris */
 [data-theme="light"] .pf-cg-block,
 html:not([data-theme="dark"]) .pf-cg-block {
-  box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.05);
-  border-color: rgba(0,0,0,.09);
+  box-shadow: 0 2px 8px rgba(0,0,0,.1), 0 0 0 1px rgba(0,0,0,.08);
+  border-color: rgba(0,0,0,.13);
 }
 
-/* En-têtes de groupes — teinture var(--row) pour les distinguer du body white */
+/* En-têtes de groupes — teinte intermédiaire */
 [data-theme="light"] .pf-cg-header,
-html:not([data-theme="dark"]) .pf-cg-header { background: var(--row); }
+html:not([data-theme="dark"]) .pf-cg-header { background: #edf0f7; }
 
-/* Sections manager (SYSTÈME WINDOWS, MICROSOFT 365…) — même logique */
+/* Sections manager (SYSTÈME WINDOWS, MICROSOFT 365…) */
 [data-theme="light"] .pf-manager-builtin-heading,
 html:not([data-theme="dark"]) .pf-manager-builtin-heading {
-  background: var(--row);
-  border-bottom-color: rgba(0,0,0,.1);
+  background: #edf0f7;
+  border-bottom-color: rgba(0,0,0,.12);
 }
 [data-theme="light"] .pf-manager-groups-heading,
-html:not([data-theme="dark"]) .pf-manager-groups-heading { background: var(--row); }
+html:not([data-theme="dark"]) .pf-manager-groups-heading { background: #edf0f7; }
 
-/* Blocs builder (sidebar gauche) — légère élévation du bloc entier */
+/* Blocs builder sidebar — élévation plus nette */
 [data-theme="light"] .pf-block,
 html:not([data-theme="dark"]) .pf-block {
-  box-shadow: 0 1px 2px rgba(0,0,0,.04);
-  border-bottom-color: rgba(0,0,0,.1);
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  border-bottom-color: rgba(0,0,0,.13);
 }
-/* Header du bloc — légèrement plus teinté que le fond */
+/* Header du bloc — fond distinguable du body blanc */
 [data-theme="light"] .pf-block-header,
 html:not([data-theme="dark"]) .pf-block-header {
-  background: var(--row);
-  border-bottom-color: rgba(0,0,0,.08);
+  background: #edf0f7;
+  border-bottom-color: rgba(0,0,0,.1);
 }
 
-/* Barre de recherche — surface blanche au-dessus du fond bg */
+/* Barre de recherche — surface blanche au-dessus */
 [data-theme="light"] .pf-cmd-search-bar,
 html:not([data-theme="dark"]) .pf-cmd-search-bar {
   background: var(--surface);
-  box-shadow: 0 1px 0 var(--border);
+  box-shadow: 0 2px 4px rgba(0,0,0,.07);
 }
 
 /* Mode sombre — anneau violet clair */
