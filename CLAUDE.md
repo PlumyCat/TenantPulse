@@ -257,6 +257,19 @@ in this codebase) or `require`.
 
 ---
 
+## Confidentialité — mentions interdites
+
+Le dépôt est public. Les éléments suivants ne doivent **jamais** apparaître dans le code source, les commentaires, les messages de commit, la documentation ou tout autre fichier versionné :
+
+- **"Be Cloud"** (nom de l'entreprise) — ni en clair, ni abrégé, ni en variante de casse (`be cloud`, `BeCloud`, `BE CLOUD`, etc.)
+- Tout nom de client, de tenant ou de domaine réel utilisé en production
+- Toute adresse e-mail professionnelle interne
+- Toute clé, secret, token ou chaîne de connexion
+
+Si une référence à l'entreprise est nécessaire dans la documentation, utiliser le terme générique **"l'organisation"** ou **"l'équipe support"**.
+
+---
+
 ## Known issues
 
 - **Version string duplicated and inconsistent**: `index.html` `<title>` says `v0.8.5` but
