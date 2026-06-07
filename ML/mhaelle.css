@@ -717,6 +717,21 @@ details summary:focus-visible {
   outline-offset: 2px;
 }
 
+/* ════════════════════════════════════════
+   HIÉRARCHIE VISUELLE — MODE CLAIR
+   ════════════════════════════════════════ */
+
+/* Cards de résultats — élévation légère pour les distinguer du fond var(--bg) */
+[data-theme="light"] .card,
+html:not([data-theme="dark"]) .card {
+  box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.08);
+}
+
+/* Accordéons ouverts — header légèrement teinté */
+[data-theme="light"] .card-details[open] > summary,
+html:not([data-theme="dark"]) .card-details[open] > summary { background: var(--row); }
+
 /* Mode sombre */
 [data-theme="dark"] .btn-sec:focus-visible,
 [data-theme="dark"] .tool-btn:focus-visible,

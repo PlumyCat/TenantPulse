@@ -2590,6 +2590,57 @@ html:not([data-theme="dark"]) .pf-desc-content {
   outline-offset: 2px;
 }
 
+/* ════════════════════════════════════════
+   HIÉRARCHIE VISUELLE — MODE CLAIR
+   En dark : --bg vs --surface diffèrent de ~20 niveaux → contraste naturel.
+   En light : #f4f5f9 vs #fff = 6 niveaux seulement → trop discret.
+   Correctif : box-shadow sur les cards + border renforcée + var(--row) ciblé.
+   ════════════════════════════════════════ */
+
+/* Zone scrollable catalogue — fond explicite */
+[data-theme="light"] .pf-cmd-list,
+html:not([data-theme="dark"]) .pf-cmd-list { background: var(--bg); }
+
+/* Cards de groupes (SYSTÈME WINDOWS, FAVORIS…) — légère élévation */
+[data-theme="light"] .pf-cg-block,
+html:not([data-theme="dark"]) .pf-cg-block {
+  box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.05);
+  border-color: rgba(0,0,0,.09);
+}
+
+/* En-têtes de groupes — teinture var(--row) pour les distinguer du body white */
+[data-theme="light"] .pf-cg-header,
+html:not([data-theme="dark"]) .pf-cg-header { background: var(--row); }
+
+/* Sections manager (SYSTÈME WINDOWS, MICROSOFT 365…) — même logique */
+[data-theme="light"] .pf-manager-builtin-heading,
+html:not([data-theme="dark"]) .pf-manager-builtin-heading {
+  background: var(--row);
+  border-bottom-color: rgba(0,0,0,.1);
+}
+[data-theme="light"] .pf-manager-groups-heading,
+html:not([data-theme="dark"]) .pf-manager-groups-heading { background: var(--row); }
+
+/* Blocs builder (sidebar gauche) — légère élévation du bloc entier */
+[data-theme="light"] .pf-block,
+html:not([data-theme="dark"]) .pf-block {
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  border-bottom-color: rgba(0,0,0,.1);
+}
+/* Header du bloc — légèrement plus teinté que le fond */
+[data-theme="light"] .pf-block-header,
+html:not([data-theme="dark"]) .pf-block-header {
+  background: var(--row);
+  border-bottom-color: rgba(0,0,0,.08);
+}
+
+/* Barre de recherche — surface blanche au-dessus du fond bg */
+[data-theme="light"] .pf-cmd-search-bar,
+html:not([data-theme="dark"]) .pf-cmd-search-bar {
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--border);
+}
+
 /* Mode sombre — anneau violet clair */
 [data-theme="dark"] .pf-input:focus-visible,
 [data-theme="dark"] .pf-cmd-search:focus-visible,
