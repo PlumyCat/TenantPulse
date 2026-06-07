@@ -1495,7 +1495,7 @@ select.admin-input{cursor:pointer;color-scheme:light}
 /* ── Chips de filtre rapide ── */
 .admin-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .admin-chip{padding:5px 12px;border-radius:var(--r-pill);font-family:var(--font);font-size:var(--text-xs);font-weight:600;color:var(--soft);cursor:pointer;border:1px solid transparent;background:linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.02) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.1) inset;transition:background .15s,color .15s,box-shadow .15s}
-[data-theme="light"] .admin-chip,html:not([data-theme="dark"]) .admin-chip{background:linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.01) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.08) inset}
+[data-theme="light"] .admin-chip,html:not([data-theme="dark"]) .admin-chip{color:var(--text);background:linear-gradient(180deg, rgba(0,0,0,.04) 0%, rgba(0,0,0,.02) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.18) inset}
 .admin-chip:hover{color:var(--text)}
 .admin-chip.active{color:#fff;background:linear-gradient(180deg, rgba(90,78,210,.95) 0%, rgba(75,63,190,.95) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.14) inset}
 
