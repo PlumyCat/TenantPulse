@@ -1455,7 +1455,8 @@ html:not([data-theme="dark"]) .admin-req-row,html:not([data-theme="dark"]) .admi
 /* Secondaire — style footer Profils */
 .admin-btn-small{padding:6px 12px;color:var(--soft);background:linear-gradient(180deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.02) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 1px 0 rgba(255,255,255,.05) inset}
 .admin-btn-small:hover{color:var(--text);background:linear-gradient(180deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.06) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.2), 0 1px 0 rgba(255,255,255,.1) inset}
-[data-theme="light"] .admin-btn-small,html:not([data-theme="dark"]) .admin-btn-small{background:linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.01) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 1px 0 rgba(255,255,255,.5) inset}
+[data-theme="light"] .admin-btn-small,html:not([data-theme="dark"]) .admin-btn-small{color:var(--text);background:linear-gradient(180deg, rgba(0,0,0,.04) 0%, rgba(0,0,0,.02) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.5) inset}
+[data-theme="light"] .admin-btn-small:hover,html:not([data-theme="dark"]) .admin-btn-small:hover{color:var(--text);background:linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.04) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.26), 0 1px 0 rgba(255,255,255,.5) inset}
 .admin-btn-small.admin-btn-reject{padding:6px 12px;color:#fff;background:linear-gradient(180deg, rgba(220,38,38,.95) 0%, rgba(185,28,28,.95) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.18) inset, 0 4px 14px rgba(185,28,28,.3)}
 
 /* ── Formulaires (tags / rôles) ── */
