@@ -106,17 +106,17 @@ html.embedded nav { display: none; }
 .pf-block-header {
   cursor: pointer;
 }
-.pf-block-header:hover .pf-block-label { color: var(--blue, #4b3fbe); }
+.pf-block-header:hover .pf-block-label { color: var(--blue); }
 
 /* ── Surbrillance du bloc ouvert ── */
 .pf-block:not(.collapsed) {
-  border-left: 3px solid var(--blue, #4b3fbe);
+  border-left: 3px solid var(--blue);
 }
 .pf-block:not(.collapsed) .pf-block-header {
   background: rgba(75,63,190,.07);
 }
 .pf-block:not(.collapsed) .pf-block-label {
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
 }
 [data-theme="dark"] .pf-block:not(.collapsed) .pf-block-header {
   background: rgba(124,116,240,.1);
@@ -146,10 +146,10 @@ html.embedded nav { display: none; }
   opacity: .35;
 }
 .pf-block.drag-over-top {
-  box-shadow: inset 0 3px 0 0 var(--blue, #4b3fbe);
+  box-shadow: inset 0 3px 0 0 var(--blue);
 }
 .pf-block.drag-over-bottom {
-  box-shadow: inset 0 -3px 0 0 var(--blue, #4b3fbe);
+  box-shadow: inset 0 -3px 0 0 var(--blue);
 }
 
 /* ════════════════════════════════════════
@@ -164,7 +164,7 @@ html.embedded nav { display: none; }
 .pf-input {
   flex: 1;
   min-width: 0;
-  border: 2px solid var(--blue, #4b3fbe);
+  border: 2px solid var(--blue);
   border-radius:var(--r-md);
   padding: 8px 10px;
   font-family: var(--font);
@@ -196,7 +196,7 @@ html.embedded nav { display: none; }
   cursor: pointer;
   transition: background .13s, border-color .13s;
 }
-.pf-btn-icon:hover { border-color: var(--blue, #4b3fbe); background: var(--row); }
+.pf-btn-icon:hover { border-color: var(--blue); background: var(--row); }
 .pf-btn-icon img { width: 13px; height: 13px; }
 
 /* ── Bouton Valider ── */
@@ -313,7 +313,7 @@ html.embedded nav { display: none; }
 
 .pf-bubble-feedback {
   font-size: 9px;
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -456,7 +456,7 @@ html.embedded nav { display: none; }
   transition: border-color .15s, box-shadow .15s;
 }
 .pf-cmd-search:focus {
-  border-color: var(--blue, #4b3fbe);
+  border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(75,63,190,.15);
 }
 
@@ -512,7 +512,7 @@ html.embedded nav { display: none; }
   font-weight: 800;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
   border-bottom: 1px solid var(--border);
 }
 
@@ -614,7 +614,7 @@ html.embedded nav { display: none; }
 [data-theme="dark"] .pf-cmd-item-wrap:hover { background: rgba(124,116,240,.1); }
 .pf-cmd-item-wrap.selected {
   background: rgba(75,63,190,.13);
-  box-shadow: inset 3px 0 0 var(--blue, #4b3fbe);
+  box-shadow: inset 3px 0 0 var(--blue);
 }
 
 /* Bouton commande (texte) */
@@ -772,7 +772,7 @@ html.embedded nav { display: none; }
   transition: color .13s, border-color .13s, background .13s;
   white-space: nowrap;
 }
-.pf-btn-save:hover { color: var(--text); border-color: var(--blue, #4b3fbe); background: rgba(75,63,190,.07); }
+.pf-btn-save:hover { color: var(--text); border-color: var(--blue); background: rgba(75,63,190,.07); }
 /* Icône save.png dans les boutons sauvegarder — PNG sombre adapté */
 .pf-btn-save-icon {
   width: 12px; height: 12px;
@@ -796,7 +796,7 @@ html.embedded nav { display: none; }
 .pf-save-input {
   flex: 1;
   min-width: 0;
-  border: 1px solid var(--blue, #4b3fbe);
+  border: 1px solid var(--blue);
   border-radius:var(--r-sm);
   padding: 5px 9px;
   font-family: var(--font);
@@ -864,7 +864,7 @@ html.embedded nav { display: none; }
   gap: 4px;
 }
 .pf-reset-config:hover {
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
   background: rgba(75,63,190,.07);
 }
 .pf-reset-config:active { opacity: .8; }
@@ -895,16 +895,16 @@ html.embedded nav { display: none; }
   outline: none;
   transition: border-color .15s;
 }
-.pf-add-block-input:focus { border-color: var(--blue, #4b3fbe); }
+.pf-add-block-input:focus { border-color: var(--blue); }
 .pf-add-block-input::placeholder { color: var(--muted); }
 
 .pf-btn-add-block {
   flex-shrink: 0;
   padding: 5px 10px;
   border-radius:var(--r-sm);
-  border: 1px solid var(--blue, #4b3fbe);
+  border: 1px solid var(--blue);
   background: transparent;
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
   font-size: var(--text-xs);
   font-weight: 700;
   font-family: var(--font);
@@ -913,7 +913,7 @@ html.embedded nav { display: none; }
   transition: background .13s, color .13s;
 }
 .pf-btn-add-block:hover {
-  background: var(--blue, #4b3fbe);
+  background: var(--blue);
   color: #fff;
 }
 .pf-btn-add-block:active { opacity: .85; }
@@ -1116,7 +1116,7 @@ html.embedded nav { display: none; }
   transition: border-color .15s, box-shadow .15s;
 }
 .pf-modal-input:focus {
-  border-color: var(--blue, #4b3fbe);
+  border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(75,63,190,.15);
 }
 .pf-modal-textarea {
@@ -1279,7 +1279,7 @@ html.embedded nav { display: none; }
   transition: background .1s;
 }
 .pf-io-item:hover { background: var(--surface); }
-.pf-io-cb { accent-color: var(--blue, #4b3fbe); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; margin-top: 1px; }
+.pf-io-cb { accent-color: var(--blue); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; margin-top: 1px; }
 .pf-io-item-body { flex: 1; min-width: 0; }
 .pf-io-item-title { font-size: var(--text-sm); color: var(--text); font-weight: 600; word-break: break-word; }
 .pf-io-item-cmd {
@@ -1527,7 +1527,7 @@ html.embedded nav { display: none; }
 .pf-script-desc-btn:hover:not(:disabled),
 .pf-script-desc-btn.active { color: var(--text); border-color: var(--soft); background: var(--row); }
 .pf-script-desc-btn:disabled { opacity: .4; cursor: not-allowed; }
-.pf-script-desc-btn.active { border-color: var(--blue, #4b3fbe); color: var(--blue, #4b3fbe); }
+.pf-script-desc-btn.active { border-color: var(--blue); color: var(--blue); }
 
 /* ── Panneau Description (flottant, sur le fond terminal sombre) ── */
 .pf-desc-panel {
@@ -1661,9 +1661,9 @@ html.embedded nav { display: none; }
   flex-shrink: 0;
   padding: 5px 12px;
   border-radius:var(--r-md);
-  border: 1px solid var(--blue, #4b3fbe);
+  border: 1px solid var(--blue);
   background: transparent;
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
   font-size: var(--text-xs);
   font-weight: 700;
   font-family: var(--font);
@@ -1672,7 +1672,7 @@ html.embedded nav { display: none; }
   white-space: nowrap;
 }
 .pf-script-toggle:hover,
-.pf-script-toggle.active { background: var(--blue, #4b3fbe); color: #fff; }
+.pf-script-toggle.active { background: var(--blue); color: #fff; }
 
 /* ════════════════════════════════════════
    PNG BLANCS — ADAPTATION CLAIR/SOMBRE
@@ -1808,7 +1808,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 .pf-ssd-inject {
   width: 26px;
   height: 26px;
-  border: 1px solid var(--blue, #4b3fbe);
+  border: 1px solid var(--blue);
   border-radius:var(--r-sm);
   background: transparent;
   display: flex;
@@ -1818,7 +1818,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   transition: background .12s;
   flex-shrink: 0;
 }
-.pf-ssd-inject:hover { background: var(--blue, #4b3fbe); }
+.pf-ssd-inject:hover { background: var(--blue); }
 .pf-ssd-inject img { width: 11px; height: 11px; }
 .pf-ssd-inject:hover img { filter: brightness(0) invert(1) !important; }
 
@@ -1947,11 +1947,13 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
+/* .pf-manager-search hérite de .pf-cmd-search — on surcharge le padding/taille
+   pour la version compacte du manager (plus petite que la barre principale). */
 .pf-manager-search {
   width: 100%;
   box-sizing: border-box;
-  font-size: var(--text-xs) !important;
-  padding: 6px 10px !important;
+  font-size: var(--text-xs) !important; /* surcharge .pf-cmd-search font-size:var(--text-sm) */
+  padding: 6px 10px !important;         /* surcharge .pf-cmd-search padding:7px 12px */
 }
 
 /* Contexte commande intégrée dans le formulaire */
@@ -1970,7 +1972,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .08em;
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
 }
 .pf-manager-builtin-orig {
   font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
@@ -2035,10 +2037,10 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 .pf-manager-builtin-section.collapsed .pf-manager-builtin-body  { display: none; }
 
 /* Parent « Commandes personnalisées » — accent bleu pour le distinguer des sections intégrées (grises) */
-.pf-manager-builtin-section--custom > .pf-manager-builtin-heading { color: var(--blue, #4b3fbe); }
+.pf-manager-builtin-section--custom > .pf-manager-builtin-heading { color: var(--blue); }
 .pf-manager-builtin-section--custom > .pf-manager-builtin-heading .pf-manager-builtin-count {
   background: rgba(75,63,190,.12);
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
 }
 [data-theme="dark"] .pf-manager-builtin-section--custom > .pf-manager-builtin-heading { color: #9a90ff; }
 [data-theme="dark"] .pf-manager-builtin-section--custom > .pf-manager-builtin-heading .pf-manager-builtin-count {
@@ -2146,15 +2148,17 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 }
 .pf-manager-required { color: #ef4444; }
 
+/* Modifier les inputs génériques (.pf-modal-input) pour leur contexte spécifique.
+   !important nécessaire pour surcharger la règle .pf-modal-input appliquée en même temps. */
 .pf-manager-cmd-input {
   font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, 'Courier New', monospace !important;
-  font-size: 12px !important;
+  font-size: 12px !important; /* police fixe souhaitée pour la preview de commande */
 }
 
 .pf-manager-textarea {
   resize: vertical;
   min-height: 58px;
-  font-family: var(--font) !important;
+  font-family: var(--font) !important; /* surcharge la police mono héritée de certains inputs */
   font-size: var(--text-sm) !important;
   line-height: 1.5;
 }
@@ -2178,8 +2182,8 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   user-select: none;
   transition: background .12s, border-color .12s;
 }
-.pf-manager-cat-opt:hover { background: rgba(75,63,190,.06); border-color: var(--blue, #4b3fbe); }
-.pf-manager-cat-opt input[type="radio"] { accent-color: var(--blue, #4b3fbe); cursor: pointer; }
+.pf-manager-cat-opt:hover { background: rgba(75,63,190,.06); border-color: var(--blue); }
+.pf-manager-cat-opt input[type="radio"] { accent-color: var(--blue); cursor: pointer; }
 
 /* ── Sous-catégorie (groupe) ── */
 .pf-manager-subcat-field[hidden] { display: none !important; }
@@ -2188,7 +2192,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   flex-wrap: wrap;
   gap: 6px;
 }
-.pf-manager-cat-opt--new span { color: var(--blue, #4b3fbe); font-style: italic; }
+.pf-manager-cat-opt--new span { color: var(--blue); font-style: italic; }
 .pf-manager-newgroup-row { margin-top: 6px; }
 .pf-manager-newgroup-row[hidden] { display: none !important; }
 
@@ -2273,6 +2277,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   flex: 1;
   min-width: 0;
 }
+/* Surcharge la police mono héritée — !important nécessaire contre .pf-modal-input */
 .pf-manager-saved-desc-inp {
   resize: vertical;
   min-height: 44px;
@@ -2283,7 +2288,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 .pf-manager-group-input {
   flex: 1;
   min-width: 0;
-  border: 1px solid var(--blue, #4b3fbe);
+  border: 1px solid var(--blue);
   border-radius:var(--r-sm);
   padding: 4px 8px;
   font-family: var(--font);
@@ -2295,7 +2300,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
 .pf-manager-group-save {
   padding: 4px 9px;
   border-radius:var(--r-sm);
-  background: var(--blue, #4b3fbe);
+  background: var(--blue);
   color: #fff;
   font-size: var(--text-xs);
   font-weight: 700;
@@ -2324,15 +2329,15 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   outline: none;
   transition: border-color .15s;
 }
-.pf-manager-groups-add-input:focus { border-color: var(--blue, #4b3fbe); }
+.pf-manager-groups-add-input:focus { border-color: var(--blue); }
 .pf-manager-groups-add-input::placeholder { color: var(--muted); }
 .pf-manager-groups-add-btn {
   flex-shrink: 0;
   padding: 5px 10px;
   border-radius:var(--r-sm);
-  border: 1px solid var(--blue, #4b3fbe);
+  border: 1px solid var(--blue);
   background: transparent;
-  color: var(--blue, #4b3fbe);
+  color: var(--blue);
   font-size: var(--text-xs);
   font-weight: 700;
   font-family: var(--font);
@@ -2340,7 +2345,7 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   white-space: nowrap;
   transition: background .13s, color .13s;
 }
-.pf-manager-groups-add-btn:hover { background: var(--blue, #4b3fbe); color: #fff; }
+.pf-manager-groups-add-btn:hover { background: var(--blue); color: #fff; }
 
 .pf-manager-form-actions {
   display: flex;
@@ -2438,8 +2443,8 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   transition: color .12s, border-color .12s, background .12s;
 }
 .pf-manager-item-edit:hover {
-  color: var(--blue, #4b3fbe);
-  border-color: var(--blue, #4b3fbe);
+  color: var(--blue);
+  border-color: var(--blue);
   background: rgba(75,63,190,.07);
 }
 
@@ -2451,4 +2456,119 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
   opacity: .7;
   pointer-events: none;
   padding: 0 4px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ACCESSIBILITÉ — Focus visible PsForge
+   Complète les règles globales de tenantpulse.css pour les composants PF.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Inputs et boutons primaires */
+.pf-input:focus-visible,
+.pf-cmd-search:focus-visible,
+.pf-save-input:focus-visible,
+.pf-modal-input:focus-visible,
+.pf-add-block-input:focus-visible,
+.pf-manager-group-input:focus-visible,
+.pf-manager-groups-add-input:focus-visible,
+.pf-find-input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Boutons icône et actions compactes */
+.pf-btn-icon:focus-visible,
+.pf-btn-validate:focus-visible,
+.pf-btn-save:focus-visible,
+.pf-btn-add-block:focus-visible,
+.pf-block-reset:focus-visible,
+.pf-block-delete:focus-visible,
+.pf-reset-config:focus-visible,
+.pf-manager-toggle:focus-visible,
+.pf-script-toggle:focus-visible,
+.pf-script-back:focus-visible,
+.pf-script-find-btn:focus-visible,
+.pf-script-desc-btn:focus-visible,
+.pf-mgr-io-btn:focus-visible,
+.pf-ssd-copy:focus-visible,
+.pf-ssd-inject:focus-visible,
+.pf-modal-btn-cancel:focus-visible,
+.pf-modal-close:focus-visible,
+.pf-manager-item-edit:focus-visible,
+.pf-manager-item-reset:focus-visible,
+.pf-manager-group-save:focus-visible,
+.pf-manager-groups-add-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Bouton valider (fond bleu) → anneau blanc */
+.pf-btn-validate:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(75,63,190,.4);
+}
+
+/* En-têtes de blocs (cliquables) */
+.pf-block-header:focus-visible,
+.pf-cg-header:focus-visible,
+.pf-io-group-head:focus-visible,
+.pf-manager-builtin-heading:focus-visible,
+.pf-manager-groups-heading:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+/* Étoile favori */
+.pf-cmd-star:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* Chips paramètre */
+.pf-param-chip:focus-visible,
+.pf-param-tag:focus-visible {
+  outline: 2px solid #fb923c;
+  outline-offset: 2px;
+}
+
+/* Lignes bulle (commandes dans la zone de build) */
+.pf-bubble:focus-visible {
+  outline: 2px solid #4ade80;
+  outline-offset: -2px;
+}
+
+/* Numéros de ligne de l'éditeur */
+.pf-gutter-num:focus-visible {
+  outline: 2px solid #7c74f0;
+  outline-offset: -1px;
+}
+
+/* Panneau description — bouton de fermeture */
+.pf-desc-panel-close:focus-visible,
+.pf-find-opt:focus-visible,
+.pf-find-nav:focus-visible,
+.pf-find-close:focus-visible {
+  outline: 2px solid #7c74f0;
+  outline-offset: 2px;
+}
+
+/* Widget recherche — bouton remplacement */
+.pf-find-rep:focus-visible {
+  outline: 2px solid #7c74f0;
+  outline-offset: 2px;
+}
+
+/* Mode sombre — anneau violet clair */
+[data-theme="dark"] .pf-input:focus-visible,
+[data-theme="dark"] .pf-cmd-search:focus-visible,
+[data-theme="dark"] .pf-btn-icon:focus-visible,
+[data-theme="dark"] .pf-btn-save:focus-visible,
+[data-theme="dark"] .pf-btn-add-block:focus-visible,
+[data-theme="dark"] .pf-script-toggle:focus-visible,
+[data-theme="dark"] .pf-manager-toggle:focus-visible,
+[data-theme="dark"] .pf-block-header:focus-visible,
+[data-theme="dark"] .pf-cg-header:focus-visible {
+  outline-color: #8b80f8;
 }

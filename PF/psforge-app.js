@@ -4011,7 +4011,16 @@
     } catch (e) {}
     refreshPfView();
   }
+  /* Pont profils ← shell : vérification d'origine avant tout traitement.
+     On n'accepte que les messages du shell parent (même origine ou opaque sur file://). */
   window.addEventListener('message', function (e) {
+    /* Rejet des messages non fiables. */
+    var parentOrigin;
+    try { parentOrigin = window.parent.location.origin; } catch (ex) { parentOrigin = null; }
+    var isSameOrigin = parentOrigin !== null && parentOrigin === location.origin;
+    var isFileMode   = location.origin === 'null' || location.origin === 'file://';
+    var isOpaqueNull = e.origin === 'null';
+    if (!isSameOrigin && !(isFileMode && isOpaqueNull)) return;
     var d = e.data;
     if (!d || !d.type) return;
     if (d.type === 'pf-profile-query')       { postPfStats(); }

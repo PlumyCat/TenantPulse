@@ -43,13 +43,51 @@ module.exports = async function (context, req) {
     }
 
     const { tenantId, domain, type, comment } = req.body || {};
-    const action = (req.body && req.body.action) === "remove" ? "remove" : "add";
+    // Normalisation explicite : toute valeur autre que "remove" est traitée comme "add"
+    const action = (req.body || {}).action === "remove" ? "remove" : "add";
 
     if (!tenantId || !type) {
       context.res = {
         status: 400,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ error: "tenantId et type sont obligatoires" })
+      };
+      return;
+    }
+
+    // Validation des longueurs et du format pour éviter les débordements en Table Storage
+    // et limiter la surface d'attaque OData.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const TYPE_RE = /^[a-z0-9_-]{1,64}$/;
+    if (typeof tenantId !== "string" || !UUID_RE.test(tenantId.trim())) {
+      context.res = {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "tenantId invalide (format UUID attendu)" })
+      };
+      return;
+    }
+    if (typeof type !== "string" || !TYPE_RE.test(type)) {
+      context.res = {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "type invalide (lettres minuscules, chiffres, _ et - uniquement, 64 caractères max)" })
+      };
+      return;
+    }
+    if (comment && (typeof comment !== "string" || comment.length > 500)) {
+      context.res = {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "comment trop long (500 caractères max)" })
+      };
+      return;
+    }
+    if (domain && (typeof domain !== "string" || domain.length > 253)) {
+      context.res = {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "domain invalide (253 caractères max)" })
       };
       return;
     }

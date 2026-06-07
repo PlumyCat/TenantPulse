@@ -86,15 +86,15 @@ async function removeApprovedTag({ tenantId, type }) {
   }
 
   // 2. Nettoyer les demandes de suppression en attente pour ce tenant + type
+  //    escapeOData protège contre l'injection de simples guillemets dans les filtres OData.
   const pending = requestsClient.listEntities({
     queryOptions: {
-      filter: `PartitionKey eq 'request' and tenantId eq '${escapeOData(tenantId)}' and type eq '${escapeOData(type)}' and status eq 'pending'`
+      filter: `PartitionKey eq 'request' and tenantId eq '${escapeOData(tenantId)}' and type eq '${escapeOData(type)}' and action eq 'remove' and status eq 'pending'`
     }
   });
+  // Le filtre OData garantit déjà action='remove' et status='pending'
   for await (const e of pending) {
-    if ((e.action || "add") === "remove") {
-      try { await requestsClient.deleteEntity(e.partitionKey, e.rowKey); } catch {}
-    }
+    try { await requestsClient.deleteEntity(e.partitionKey, e.rowKey); } catch {}
   }
 
   return { ok: true, existed };

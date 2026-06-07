@@ -79,6 +79,27 @@ module.exports = async function (context, req) {
         return;
       }
 
+      // Protection : un utilisateur ne peut pas modifier son propre rôle
+      if (email.trim().toLowerCase() === auth.email.trim().toLowerCase()) {
+        context.res = {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Impossible de modifier son propre rôle" })
+        };
+        return;
+      }
+
+      // Validation : email basique (présence @, longueur raisonnable).
+      const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,253}$/;
+      if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+        context.res = {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "email invalide" })
+        };
+        return;
+      }
+
       // ── Blocage des requêtes d'un utilisateur (manager+) ──
       if (role === "blocked") {
         // On ne bloque que de simples utilisateurs (jamais un rôle privilégié)
@@ -155,6 +176,27 @@ module.exports = async function (context, req) {
           status: 400,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ error: "email est obligatoire" })
+        };
+        return;
+      }
+
+      // Protection : un utilisateur ne peut pas supprimer son propre rôle
+      if (email.trim().toLowerCase() === auth.email.trim().toLowerCase()) {
+        context.res = {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Impossible de supprimer son propre rôle" })
+        };
+        return;
+      }
+
+      // Validation email (même règle que dans le POST).
+      const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,253}$/;
+      if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+        context.res = {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "email invalide" })
         };
         return;
       }

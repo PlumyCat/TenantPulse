@@ -909,8 +909,14 @@ function pfEnsureThenPost(type) {
 function requestPsForgeStats()   { pfEnsureThenPost('pf-profile-query'); }
 function requestPsForgeStorage() { pfEnsureThenPost('pf-storage-list'); }
 
-/* Réception des compteurs PsForge → re-render du panneau */
+/* Réception des compteurs PsForge → re-render du panneau.
+   Vérification de l'origine : on n'accepte que les messages venant de la
+   même origine (ou de 'null' sur file://, où les iframes ont une origine opaque). */
 window.addEventListener('message', function (e) {
+  const trusted = location.origin === 'null' || location.origin === 'file://'
+    ? (e.origin === 'null' || e.origin === location.origin)
+    : e.origin === location.origin;
+  if (!trusted) return;
   const d = e.data;
   if (!d || d.type !== 'pf-profile-stats') return;
   _pfProfileStats = d.stats || {};
@@ -2906,8 +2912,38 @@ function cancelStep(key) {
 }
 async function retryStep(key) {
   const fn = stepRetryFns[key]; if (!fn) return;
+  // Rendre le prog-list visible si l'analyse précédente était terminée
+  const progList = document.getElementById('progList');
+  progList.style.display = 'flex';
+  document.getElementById('step-' + key).style.display = 'flex';
+  lockButtons();
   setStep('step-' + key, 'active');
-  try { await fn(); } catch { setStep('step-' + key, 'timeout'); }
+  try {
+    await fn();
+    // Synchroniser lastReport avec les données fraîches de currentState
+    if (lastReport) {
+      const cs = currentState;
+      const confidence = computeConfidence(cs.ms);
+      lastReport = Object.assign({}, lastReport, {
+        analysedAt: new Date().toISOString(),
+        microsoft: cs.ms,
+        google: cs.goog,
+        dns: cs.dns,
+        host: cs.host,
+        otherServices: cs.others,
+        tenantConfidence: confidence,
+        health: cs.health ? {
+          score: cs.health.score,
+          dmarcIsQuarantine: cs.health.dmarcIsQuarantine,
+          checks: cs.health.checks.map(c => ({ type: c.t, title: c.title, desc: c.desc })),
+          dkim: { selector1: cs.health.hasSel1, selector2: cs.health.hasSel2, allResults: cs.health.dkimResults }
+        } : lastReport.health,
+      });
+      // Historique : si le tenantId est (re)trouvé suite au retry, l'enregistrer
+      if (cs.ms?.tenantId && cs.ms.tenantValid) addToHistory(cs.domain, cs.ms.tenantId);
+    }
+  } catch { setStep('step-' + key, 'timeout'); }
+  finally { unlockButtons(); }
 }
 
 // ── Fetch helpers ──
@@ -3047,8 +3083,13 @@ function refreshStorageEmptyState() {
   else if (!existing) { body.appendChild(buildStorageEmptyMsg()); }
 }
 
-/* Réception du dump de stockage PsForge → (re)rendu de son groupe */
+/* Réception du dump de stockage PsForge → (re)rendu de son groupe.
+   Vérification de l'origine : rejet de tout message externe. */
 window.addEventListener('message', function (e) {
+  const trusted = location.origin === 'null' || location.origin === 'file://'
+    ? (e.origin === 'null' || e.origin === location.origin)
+    : e.origin === location.origin;
+  if (!trusted) return;
   const d = e.data;
   if (!d || d.type !== 'pf-storage-data') return;
   const group = document.getElementById('storagePfGroup');
@@ -3126,12 +3167,6 @@ function computeConfidence(ms) {
 
 // ── Core checks ──
 
-/**
- * Interroge les endpoints publics Microsoft pour identifier le tenant.
- * Usage interne uniquement — ne pas exposer comme API publique.
- * Appels : OIDC endpoint + federation metadata (lecture seule, pas d'auth).
- * @param {string} domain - Domaine à analyser (ex: contoso.com)
- */
 /**
  * Interroge les endpoints publics Microsoft pour identifier le tenant.
  * Usage interne uniquement — ne pas exposer comme API publique.
@@ -3902,6 +3937,7 @@ async function checkFast() {
   errBox.style.display = 'none'; center.replaceChildren(); closePanel();
   exportBtn.classList.remove('visible'); lastReport = null;
   currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, fullDone:false };
+  lockButtons(); setFastLoading(true);
   showSteps(['ms', 'google', 'dns']);
   try {
     setStep('step-ms', 'active');
@@ -3917,7 +3953,7 @@ async function checkFast() {
     setStep('step-dns', 'active');
     stepRetryFns.dns = async () => { setStep('step-dns', 'active'); currentState.dns = await checkDNS(domain); setStep('step-dns', currentState.dns?.mx?.length > 0 ? 'done' : 'fail'); };
     currentState.dns = await checkDNS(domain);
-    if (!document.getElementById('step-dns').className.includes('timeout')) setStep('step-dns', currentState.dns.mx.length > 0 ? 'done' : 'fail');
+    if (!document.getElementById('step-dns').className.includes('timeout')) setStep('step-dns', (currentState.dns?.mx?.length ?? 0) > 0 ? 'done' : 'fail');
 
     document.getElementById('progList').style.display = 'none';
     const confidence = computeConfidence(currentState.ms);
@@ -3940,26 +3976,35 @@ async function checkFast() {
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
     if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
     const ctaBtn = document.createElement('button'); ctaBtn.className = 'btn-trigger-full'; ctaBtn.id = 'btnTriggerFull';
-    (() => {
-      ctaBtn.textContent = '';
-      const lbl = document.createElement('span'); lbl.id = 'stfLabel';
-      const img = document.createElement('img'); img.src='assets/Analyse.png'; img.width=14; img.height=14; img.alt=''; img.style.cssText='display:inline-block;vertical-align:middle;flex-shrink:0;margin-right:4px;';
-      lbl.appendChild(img); lbl.appendChild(document.createTextNode("Lancer l'analyse complète"));
-      const spinner = document.createElement('span'); spinner.className = 'stf-spinner';
-      const hint = document.createElement('span'); hint.style.cssText='font-size:10px;opacity:.65;margin-left:4px'; hint.textContent='WHOIS · sécurité DNS';
-      ctaBtn.appendChild(lbl); ctaBtn.appendChild(spinner); ctaBtn.appendChild(hint);
-    })();
-    ctaBtn.addEventListener('click', () => runFullFromState(raw, domain, ctaBtn), { once: true });
+    // Construire le contenu initial et attacher le listener via le helper partagé
+    resetCtaBtn(ctaBtn, raw, domain);
     center.appendChild(ctaBtn);
   } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFastLoading(false); }
+}
+
+// ── Helper : réinitialise le bouton CTA "Analyse complète" à son état initial ──
+// Permet de ré-attacher le listener après une erreur (le { once:true } d'origine est consommé)
+function resetCtaBtn(btn, raw, domain) {
+  btn.replaceChildren();
+  const lbl = document.createElement('span'); lbl.id = 'stfLabel';
+  const img = document.createElement('img'); img.src = 'assets/Analyse.png'; img.width = 14; img.height = 14; img.alt = '';
+  img.style.cssText = 'display:inline-block;vertical-align:middle;flex-shrink:0;margin-right:4px;';
+  lbl.appendChild(img); lbl.appendChild(document.createTextNode("Lancer l'analyse complète"));
+  const spinner = document.createElement('span'); spinner.className = 'stf-spinner';
+  const hint = document.createElement('span'); hint.style.cssText = 'font-size:10px;opacity:.65;margin-left:4px'; hint.textContent = 'WHOIS · sécurité DNS';
+  btn.appendChild(lbl); btn.appendChild(spinner); btn.appendChild(hint);
+  // Ré-attacher le listener (once:true garantit une seule invocation par cycle)
+  btn.addEventListener('click', () => runFullFromState(raw, domain, btn), { once: true });
 }
 
 // ── Full from fast ──
 async function runFullFromState(raw, domain, ctaBtn) {
   if (currentState.fullDone) return;
   ctaBtn.classList.add('running');
-  document.getElementById('stfLabel').textContent = 'Analyse en cours…';
+  // Mettre à jour uniquement le nœud texte du label (préserve l'icône img enfant)
+  const stfLbl = document.getElementById('stfLabel');
+  if (stfLbl) { const tn = [...stfLbl.childNodes].find(n => n.nodeType === Node.TEXT_NODE); if (tn) tn.textContent = 'Analyse en cours…'; }
   lockButtons();
   showSteps(['health', 'others', 'host']);
   ['health', 'others', 'host'].forEach(k => setStep('step-' + k, 'pending'));
@@ -4016,12 +4061,8 @@ async function runFullFromState(raw, domain, ctaBtn) {
     ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.replaceChildren(); const doneImg = document.createElement('img'); doneImg.src='assets/checked.png'; doneImg.className='icon-adaptive'; doneImg.alt=''; ctaBtn.appendChild(doneImg); ctaBtn.appendChild(document.createTextNode(' Analyse complète effectuée'));
   } catch (err) {
     ctaBtn.classList.remove('running');
-    ctaBtn.textContent = '';
-    const lbl2 = document.createElement('span'); lbl2.id = 'stfLabel';
-    const img2 = document.createElement('img'); img2.src='assets/Analyse.png'; img2.width=14; img2.height=14; img2.alt=''; img2.style.cssText='display:inline-block;vertical-align:middle;flex-shrink:0;margin-right:4px;';
-    lbl2.appendChild(img2); lbl2.appendChild(document.createTextNode("Lancer l'analyse complète"));
-    const hint2 = document.createElement('span'); hint2.style.cssText='font-size:10px;opacity:.65;margin-left:4px'; hint2.textContent='WHOIS · sécurité DNS';
-    ctaBtn.appendChild(lbl2); ctaBtn.appendChild(hint2);
+    // Reconstruire le contenu du bouton et ré-attacher le listener (once:true est consommé)
+    resetCtaBtn(ctaBtn, raw, domain);
     document.getElementById('progList').style.display = 'none';
     showError('Erreur analyse complète : ' + err.message);
   } finally { unlockButtons(); }
@@ -4038,10 +4079,17 @@ async function checkFull() {
   lockButtons(); setFullLoading(true);
   showSteps(['ms', 'google', 'dns', 'health', 'others', 'host']);
   ['ms', 'google', 'dns', 'health', 'others', 'host'].forEach(k => setStep('step-' + k, 'pending'));
+  // Peupler stepRetryFns pour que le bouton "Relancer" fonctionne en mode full
+  stepRetryFns.ms     = async () => { setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail'); };
+  stepRetryFns.google = async () => { setStep('step-google', 'active'); currentState.goog   = await checkGoogle(domain);                                          setStep('step-google', currentState.goog ? 'done' : 'fail'); };
+  stepRetryFns.dns    = async () => { setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', currentState.dns?.mx?.length > 0 ? 'done' : 'fail'); };
+  stepRetryFns.health = async () => { setStep('step-health', 'active'); currentState.health = await checkHealth(domain);                                         setStep('step-health', 'done'); };
+  stepRetryFns.others = async () => { setStep('step-others', 'active'); currentState.others = await checkOtherTenants(domain, currentState.dns || {});          setStep('step-others', 'done'); };
+  stepRetryFns.host   = async () => { setStep('step-host', 'active');   currentState.host   = await checkHost(domain);                                           setStep('step-host', currentState.host ? 'done' : 'fail'); };
   try {
     setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail');
     setStep('step-google', 'active'); currentState.goog   = await checkGoogle(domain);                                          setStep('step-google', currentState.goog ? 'done' : 'fail');
-    setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', currentState.dns.mx.length > 0 ? 'done' : 'fail');
+    setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', (currentState.dns?.mx?.length ?? 0) > 0 ? 'done' : 'fail');
     setStep('step-health', 'active'); currentState.health = await checkHealth(domain);                                         setStep('step-health', 'done');
     setStep('step-others', 'active'); currentState.others = await checkOtherTenants(domain, currentState.dns);                 setStep('step-others', 'done');
     setStep('step-host', 'active');   currentState.host   = await checkHost(domain);                                           setStep('step-host', currentState.host ? 'done' : 'fail');

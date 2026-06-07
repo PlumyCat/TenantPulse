@@ -1,5 +1,5 @@
 const { getAuthContext, hasRole } = require("../shared/auth");
-const { requestsClient } = require("../shared/tableClient");
+const { requestsClient, locksClient } = require("../shared/tableClient");
 const { applyApprovedTag, removeApprovedTag } = require("../shared/classify");
 
 /**
@@ -57,6 +57,25 @@ module.exports = async function (context, req) {
       return;
     }
 
+    // Validation : requestId est un UUID, comment est limité en longueur.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof requestId !== "string" || !UUID_RE.test(requestId.trim())) {
+      context.res = {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "requestId invalide (format UUID attendu)" })
+      };
+      return;
+    }
+    if (comment && (typeof comment !== "string" || comment.length > 500)) {
+      context.res = {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "comment trop long (500 caractères max)" })
+      };
+      return;
+    }
+
     // Récupérer la demande
     let requestEntity;
     try {
@@ -70,9 +89,46 @@ module.exports = async function (context, req) {
       return;
     }
 
+    // Empêcher le double traitement : refuser si la demande n'est plus en attente.
+    // Critique pour le cooldown 24 h : re-rejeter une demande déjà rejetée
+    // mettrait à jour reviewedAt et réinitialiserait le délai de carence.
+    if (requestEntity.status !== "pending") {
+      context.res = {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: `Cette demande a déjà été traitée (statut : ${requestEntity.status})` })
+      };
+      return;
+    }
+
     const now = new Date().toISOString();
 
     const action = requestEntity.action || "add";
+
+    // Vérification du verrou avant toute modification (approuvé seulement).
+    // Le rejet ne modifie pas les classifications → pas de vérification nécessaire.
+    if (decision === "approved") {
+      let isLocked = false;
+      try {
+        await locksClient.getEntity("lock", requestEntity.tenantId);
+        isLocked = true;
+      } catch {
+        try {
+          await locksClient.getEntity("lock", "global");
+          isLocked = true;
+        } catch {
+          isLocked = false;
+        }
+      }
+      if (isLocked) {
+        context.res = {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Les modifications sont verrouillées pour ce tenant" })
+        };
+        return;
+      }
+    }
 
     if (decision === "approved" && action === "remove") {
       // Demande de suppression validée : retire le tag (idempotent) et nettoie

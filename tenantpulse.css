@@ -706,7 +706,7 @@ html:not([data-theme="dark"]) .profiles-modal-title img[src="assets/user.png"]{f
 }
 /* ── Mhaelle block list ── */
 .ml-block-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
-.ml-block-section{}
+/* .ml-block-section — pas de surcharge nécessaire, héritage suffisant */
 .ml-block-section-title{
   font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:.08em;
   color:var(--muted);padding:0 2px 6px
@@ -964,7 +964,8 @@ html:not([data-theme="dark"]) .profiles-modal-title img[src="assets/user.png"]{f
 .d-label{font-size:var(--text-xs);font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.09em;margin-bottom:3px}
 .d-value{font-size:var(--text-sm);font-weight:500;color:var(--text);word-break:break-all;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .copy-btn{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);color:var(--soft);font-size:var(--text-xs);font-weight:500;font-family:var(--font);padding:2px 7px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
-.copy-btn:hover{border-color:var(--black);color:var(--black)}
+/* Hover copy-btn : --black est invisible en dark mode → on utilise --text */
+.copy-btn:hover{border-color:var(--text);color:var(--text)}
 .copy-btn.copied{border-color:#16a34a;color:#16a34a}
 .dkim-detail{background:var(--row);border:1.5px solid var(--border);border-radius:var(--r-md);padding:9px 11px;margin-top:4px}
 .dkim-detail-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
@@ -1053,7 +1054,8 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .history-item-domain{font-size:var(--text-sm);font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history-item-guid{font-size:var(--text-xs);font-weight:400;color:var(--muted);font-family:'Courier New',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
 .history-item-copy{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);color:var(--soft);font-size:var(--text-xs);font-weight:500;font-family:var(--font);padding:2px 6px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
-.history-item-copy:hover{border-color:var(--black);color:var(--black)}
+/* Hover history-copy : --black invisible en dark mode → --text */
+.history-item-copy:hover{border-color:var(--text);color:var(--text)}
 .history-item-copy.copied{border-color:#16a34a;color:#16a34a}
 .history-item-time{font-size:var(--text-xs);font-weight:400;color:var(--muted);flex-shrink:0}
 .history-item-icon{font-size:var(--text-base);flex-shrink:0;display:flex;align-items:center;width:16px}
@@ -1512,4 +1514,211 @@ select.admin-input{cursor:pointer;color-scheme:light}
   .admin-req-actions{width:100%}
   .admin-modal{max-height:calc(100vh - 40px)}
   .admin-overlay{padding:20px 10px}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ACCESSIBILITÉ — Focus visible (WCAG 2.1 SC 2.4.7)
+   Règle générale + surcharges composant.
+   On utilise :focus-visible (natif) pour ne pas afficher l'anneau au clic
+   souris, uniquement au clavier ou au tap.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Reset global : on supprime outline natif pour tout remplacer proprement ── */
+:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+[data-theme="dark"] :focus-visible{
+  outline-color:#8b80f8;
+}
+
+/* ── Boutons primaires (fond coloré) : anneau blanc ── */
+.btn-go:focus-visible,
+.btn-full-analysis:focus-visible,
+.profiles-save-btn:focus-visible,
+.admin-btn-approve:focus-visible,
+.admin-btn-reject:focus-visible{
+  outline:2px solid #fff;
+  outline-offset:2px;
+  box-shadow:0 0 0 4px rgba(75,63,190,.45);
+}
+
+/* ── Input wrap (champ de saisie principal) ── */
+.input-wrap input:focus-visible{
+  outline:none; /* géré par le box-shadow existant */
+}
+
+/* ── Onglets nav (app-tab) ── */
+.app-tab:focus-visible{
+  outline:2px solid rgba(255,255,255,.8);
+  outline-offset:2px;
+}
+
+/* ── Onglets Profils / Admin ── */
+.profiles-tab:focus-visible,
+.admin-subtab:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:-2px;
+  border-radius:var(--r-xs);
+}
+[data-theme="dark"] .profiles-tab:focus-visible,
+[data-theme="dark"] .admin-subtab:focus-visible{
+  outline-color:#8b80f8;
+}
+
+/* ── Dropdown nav ── */
+.nav-drop-btn:focus-visible{
+  outline:2px solid rgba(255,255,255,.8);
+  outline-offset:2px;
+}
+
+/* ── Éléments de dropdown (sections, toggles, proxy rows) ── */
+.drop-section-btn:focus-visible,
+.drop-toggle:focus-visible,
+.proxy-row:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:-2px;
+}
+[data-theme="dark"] .drop-section-btn:focus-visible,
+[data-theme="dark"] .drop-toggle:focus-visible,
+[data-theme="dark"] .proxy-row:focus-visible{
+  outline-color:#8b80f8;
+}
+
+/* ── Boutons collapsible ── */
+.collapsible-btn:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+
+/* ── Boutons secondaires (export, trigger-full, copy, history) ── */
+.btn-export:focus-visible,
+.btn-trigger-full:focus-visible,
+.copy-btn:focus-visible,
+.history-item-copy:focus-visible,
+.btn-clear-history:focus-visible,
+.btn-msa:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+[data-theme="dark"] .btn-export:focus-visible,
+[data-theme="dark"] .btn-trigger-full:focus-visible,
+[data-theme="dark"] .copy-btn:focus-visible,
+[data-theme="dark"] .history-item-copy:focus-visible,
+[data-theme="dark"] .btn-clear-history:focus-visible,
+[data-theme="dark"] .btn-msa:focus-visible{
+  outline-color:#8b80f8;
+}
+
+/* ── Cards résultats (cliquables au clavier) ── */
+.result-card:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+  box-shadow:0 0 0 4px rgba(75,63,190,.2);
+}
+
+/* ── Éléments hero (tag add, badge pending) ── */
+.hero-tag-add:focus-visible{
+  outline:2px solid #fff;
+  outline-offset:2px;
+}
+.hero-badge-pending.clickable:focus-visible{
+  outline:2px solid #fff;
+  outline-offset:2px;
+}
+
+/* ── Boutons admin (small, chips) ── */
+.admin-btn:focus-visible,
+.admin-chip:focus-visible,
+.admin-btn-small:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+[data-theme="dark"] .admin-btn:focus-visible,
+[data-theme="dark"] .admin-chip:focus-visible,
+[data-theme="dark"] .admin-btn-small:focus-visible{
+  outline-color:#8b80f8;
+}
+
+/* ── Inputs admin (admin-input, admin-color) ── */
+.admin-input:focus-visible{
+  outline:none; /* géré par box-shadow existant */
+}
+.admin-color:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+
+/* ── Liens topbar ── */
+.topbar-logout:focus-visible,
+.topbar-bug:focus-visible,
+.topbar-admin:focus-visible{
+  outline:2px solid rgba(255,255,255,.8);
+  outline-offset:2px;
+  border-radius:var(--r-xs);
+}
+
+/* ── Bouton fermer modal/panel ── */
+.panel-close:focus-visible,
+.profiles-modal-close:focus-visible,
+.admin-modal-close:focus-visible,
+.storage-modal-close:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+
+/* ── Bouton hero copy ── */
+.hero-copy-btn:focus-visible{
+  outline:2px solid rgba(255,255,255,.8);
+  outline-offset:2px;
+}
+
+/* ── Liens ext-link ── */
+.ext-link:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+
+/* ── Toggle dropdown info ── */
+.drop-info-toggle:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:-2px;
+}
+
+/* ── Slider cache ── */
+.cache-slider:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+[data-theme="dark"] .cache-slider:focus-visible{
+  outline-color:#8b80f8;
+}
+
+/* ── Boutons cancel/keep modal confirm ── */
+.confirm-btn-delete:focus-visible,
+.confirm-btn-keep:focus-visible,
+.confirm-btn-cancel:focus-visible,
+.storage-btn-danger:focus-visible,
+.storage-btn-secondary:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+
+/* ── Pills toggle ── */
+.pills-toggle:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+
+/* ── Profile items (modal drag) ── */
+.profiles-footer-btn:focus-visible{
+  outline:2px solid var(--blue);
+  outline-offset:2px;
+}
+
+/* ── nav-brand-link ── */
+.nav-brand-link:focus-visible{
+  outline:2px solid rgba(255,255,255,.8);
+  outline-offset:4px;
+  border-radius:var(--r-xs);
 }

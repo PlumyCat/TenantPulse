@@ -88,6 +88,27 @@ module.exports = async function (context, req) {
       const { tenantId, reason } = req.body || {};
       const lockKey = tenantId || "global";
 
+      // Validation : tenantId doit être un UUID si fourni, reason est limitée en longueur.
+      if (tenantId !== undefined && tenantId !== null) {
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (typeof tenantId !== "string" || !UUID_RE.test(tenantId.trim())) {
+          context.res = {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: "tenantId invalide (format UUID attendu)" })
+          };
+          return;
+        }
+      }
+      if (reason && (typeof reason !== "string" || reason.length > 500)) {
+        context.res = {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "reason trop longue (500 caractères max)" })
+        };
+        return;
+      }
+
       await locksClient.upsertEntity({
         partitionKey: "lock",
         rowKey:       lockKey,
@@ -121,6 +142,19 @@ module.exports = async function (context, req) {
 
       const { tenantId } = req.body || {};
       const lockKey = tenantId || "global";
+
+      // Validation : tenantId doit être un UUID si fourni.
+      if (tenantId !== undefined && tenantId !== null) {
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (typeof tenantId !== "string" || !UUID_RE.test(tenantId.trim())) {
+          context.res = {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: "tenantId invalide (format UUID attendu)" })
+          };
+          return;
+        }
+      }
 
       try {
         await locksClient.deleteEntity("lock", lockKey);

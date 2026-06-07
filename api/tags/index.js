@@ -38,9 +38,9 @@ async function cascadeDeleteType(type) {
  * Accessible : manager, admin.
  *
  * DELETE /api/tags
- * Supprime un tag custom.
+ * Supprime un tag custom (cascade : assignations + demandes en attente supprimées).
  * Body : { tagId }
- * Accessible : manager, admin.
+ * Accessible : admin uniquement.
  */
 module.exports = async function (context, req) {
   try {
@@ -135,6 +135,20 @@ module.exports = async function (context, req) {
           context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "name et color sont obligatoires" }) };
           return;
         }
+        // Validation longueurs et format couleur hexadécimale.
+        const COLOR_RE = /^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/;
+        if (typeof name !== "string" || name.length > 64) {
+          context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "name trop long (64 caractères max)" }) };
+          return;
+        }
+        if (typeof color !== "string" || !COLOR_RE.test(color)) {
+          context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "color invalide (format #RRGGBB ou #RGB)" }) };
+          return;
+        }
+        if (description && (typeof description !== "string" || description.length > 500)) {
+          context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "description trop longue (500 caractères max)" }) };
+          return;
+        }
         const id = key || uuidv4();
         // Préserver groupe/ordre si la balise existe déjà (édition)
         let group, order;
@@ -172,21 +186,72 @@ module.exports = async function (context, req) {
         return;
       }
 
+      // Validation longueurs et format couleur hexadécimale.
+      const COLOR_RE = /^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/;
+      const UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (typeof name !== "string" || name.length > 64) {
+        context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "name trop long (64 caractères max)" }) };
+        return;
+      }
+      if (typeof color !== "string" || !COLOR_RE.test(color)) {
+        context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "color invalide (format #RRGGBB ou #RGB)" }) };
+        return;
+      }
+      if (description && (typeof description !== "string" || description.length > 500)) {
+        context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "description trop longue (500 caractères max)" }) };
+        return;
+      }
+      if (tagId && (typeof tagId !== "string" || !UUID_RE.test(tagId.trim()))) {
+        context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "tagId invalide (format UUID attendu)" }) };
+        return;
+      }
+      if (retentionDays !== undefined && retentionDays !== null &&
+          (typeof retentionDays !== "number" || !Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650)) {
+        context.res = { status: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "retentionDays invalide (entier entre 1 et 3650)" }) };
+        return;
+      }
+
       const id = tagId || uuidv4();
       const now = new Date().toISOString();
 
-      await tagsClient.upsertEntity({
-        partitionKey:  "tag",
-        rowKey:        id,
-        name,
-        color,
-        description:   description || "",
-        retentionDays: retentionDays || null,
-        alertOnExpiry: alertOnExpiry === true,
-        createdBy:     auth.email,
-        createdAt:     tagId ? undefined : now,
-        updatedAt:     now
-      }, "Replace");
+      if (tagId) {
+        // Mise à jour partielle : on préserve createdBy et createdAt d'origine.
+        // updateEntity("Merge") échoue si l'entité n'existe pas → 404 explicite.
+        try {
+          await tagsClient.updateEntity({
+            partitionKey:  "tag",
+            rowKey:        id,
+            name,
+            color,
+            description:   description || "",
+            retentionDays: retentionDays || null,
+            alertOnExpiry: alertOnExpiry === true,
+            updatedBy:     auth.email,
+            updatedAt:     now
+          }, "Merge");
+        } catch {
+          context.res = {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ error: "Tag introuvable" })
+          };
+          return;
+        }
+      } else {
+        // Création : on initialise createdBy et createdAt
+        await tagsClient.upsertEntity({
+          partitionKey:  "tag",
+          rowKey:        id,
+          name,
+          color,
+          description:   description || "",
+          retentionDays: retentionDays || null,
+          alertOnExpiry: alertOnExpiry === true,
+          createdBy:     auth.email,
+          createdAt:     now,
+          updatedAt:     now
+        }, "Replace");
+      }
 
       context.res = {
         status: 200,
@@ -216,11 +281,13 @@ module.exports = async function (context, req) {
         return;
       }
 
-      if (!hasRole(auth.role, "manager")) {
+      // Suppression d'un tag custom — réservé aux admins (cascade sur les
+      // Classifications et Requests : opération destructive irréversible).
+      if (!hasRole(auth.role, "admin")) {
         context.res = {
           status: 403,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Accès refusé — manager minimum requis" })
+          body: JSON.stringify({ error: "Accès refusé — admin requis" })
         };
         return;
       }

@@ -45,8 +45,17 @@
         }).observe(parentHtml, { attributes: true, attributeFilter: ['data-theme'] });
       } catch (e) { /* accès bloqué (file://) — on se rabat sur postMessage */ }
 
-      /* 2. postMessage — fiable sur file:// et toute origine */
+      /* 2. postMessage — fiable sur file:// et toute origine.
+         Vérification d'origine : on n'accepte que les messages du parent
+         de même origine (ou origine opaque 'null' sur file://). */
       window.addEventListener('message', function (e) {
+        /* Rejet des messages provenant d'une origine non fiable. */
+        var parentOrigin;
+        try { parentOrigin = window.parent.location.origin; } catch (ex) { parentOrigin = null; }
+        var isSameOrigin = parentOrigin !== null && parentOrigin === location.origin;
+        var isFileMode   = location.origin === 'null' || location.origin === 'file://';
+        var isOpaqueNull = e.origin === 'null';
+        if (!isSameOrigin && !(isFileMode && isOpaqueNull)) return;
         if (!e.data) return;
         if (e.data.type === 'tp-theme') applyTheme(e.data.theme);
         if (e.data.type === 'ml-profile') {

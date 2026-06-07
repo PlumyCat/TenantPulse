@@ -678,3 +678,49 @@ input[type="file"] { display: none; }
    ───────────────────────────────────────────────────────────── */
 html.embedded .topbar,
 html.embedded nav { display: none !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ACCESSIBILITÉ — Focus visible Mhaelle
+   Complète les règles globales de tenantpulse.css pour les composants ML.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Textarea principale (analyse d'en-têtes) */
+.input-wrap textarea:focus-visible {
+  outline: none; /* géré par le box-shadow existant */
+}
+
+/* Textarea rapport */
+.report-textarea:focus-visible {
+  outline: none; /* géré par le box-shadow existant */
+}
+
+/* Boutons secondaires */
+.btn-sec:focus-visible,
+.ml-sec:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Boutons outils */
+.tool-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Liens details summary (accordéons) */
+.card-details > summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+details summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Mode sombre */
+[data-theme="dark"] .btn-sec:focus-visible,
+[data-theme="dark"] .tool-btn:focus-visible,
+[data-theme="dark"] .card-details > summary:focus-visible,
+[data-theme="dark"] details summary:focus-visible {
+  outline-color: #8b80f8;
+}

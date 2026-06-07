@@ -24,6 +24,15 @@ module.exports = async function (context, req) {
       if (!hasRole(auth.role, "moderator")) { context.res = json(403, { error: "Accès refusé" }); return; }
       const { tenantId, type } = req.body || {};
       if (!tenantId || !type) { context.res = json(400, { error: "tenantId et type sont obligatoires" }); return; }
+      // Validation format pour éviter les injections OData et les débordements.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const TYPE_RE = /^[a-z0-9_-]{1,64}$/;
+      if (typeof tenantId !== "string" || !UUID_RE.test(tenantId.trim())) {
+        context.res = json(400, { error: "tenantId invalide (format UUID attendu)" }); return;
+      }
+      if (typeof type !== "string" || !TYPE_RE.test(type)) {
+        context.res = json(400, { error: "type invalide" }); return;
+      }
       try {
         await classificationsClient.deleteEntity(tenantId, type);
       } catch {
@@ -36,7 +45,8 @@ module.exports = async function (context, req) {
 
     // ── GET ?all=1 : tous les tags assignés (manager+) ──
     if (req.query.all === "1") {
-      // Liste des tenants connus — accessible à tout utilisateur connecté (lecture seule)
+      // Réservé aux managers et admins : vue globale de tous les tenants
+      if (!hasRole(auth.role, "manager")) { context.res = json(403, { error: "Accès refusé — manager minimum requis" }); return; }
       const items = [];
       for await (const e of classificationsClient.listEntities()) {
         items.push({
@@ -55,6 +65,13 @@ module.exports = async function (context, req) {
     // ── GET ?tenantId=xxx : détail d'un tenant ──
     const tenantId = req.query.tenantId;
     if (!tenantId) { context.res = json(400, { error: "Paramètre tenantId manquant" }); return; }
+
+    // Validation du format UUID pour éviter les injections OData via la query string.
+    const UUID_RE_GET = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof tenantId !== "string" || !UUID_RE_GET.test(tenantId.trim())) {
+      context.res = json(400, { error: "tenantId invalide (format UUID attendu)" });
+      return;
+    }
 
     // 1. Tags validés
     const approvedTags = [];

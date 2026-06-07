@@ -73,16 +73,33 @@ async function getUserRole(email) {
 /**
  * Indique si l'email est marqué "blocked" dans la table Roles
  * (utilisateur dont les requêtes de tag sont coupées discrètement).
+ * Utilise le même schéma de lookup que getUserRole pour être cohérent :
+ * lookup direct d'abord, puis fallback par scan si non trouvé.
  */
 async function isBlocked(email) {
   if (!email) return false;
   const target = email.trim().toLowerCase();
+
+  // 1. Lookup direct (cas nominal)
   try {
     const e = await rolesClient.getEntity("role", target);
     return String(e.role || "").trim().toLowerCase() === "blocked";
   } catch {
-    return false;
+    // pas trouvé en lookup direct → on tente le fallback
   }
+
+  // 2. Fallback tolérant : scan insensible à la casse (cohérent avec getUserRole)
+  try {
+    for await (const e of rolesClient.listEntities()) {
+      if (String(e.rowKey).trim().toLowerCase() === target) {
+        return String(e.role || "").trim().toLowerCase() === "blocked";
+      }
+    }
+  } catch {
+    // table inaccessible → non bloqué par défaut
+  }
+
+  return false;
 }
 
 /**
