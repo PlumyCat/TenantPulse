@@ -239,7 +239,7 @@ html.embedded nav { display: none; }
   gap: 5px;
   padding: 5px 8px;
   border-radius: 0;
-  /* Style PowerShell 7 */
+  /* Style PowerShell 7 — fond sombre en dark mode */
   background: #0f0f0f;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -253,6 +253,10 @@ html.embedded nav { display: none; }
 }
 .pf-bubble:hover { background: #1a2a1a; }
 [data-theme="dark"] .pf-bubble:hover { background: #1a2a1a; }
+[data-theme="light"] .pf-bubble,
+html:not([data-theme="dark"]) .pf-bubble { background: var(--row); }
+[data-theme="light"] .pf-bubble:hover,
+html:not([data-theme="dark"]) .pf-bubble:hover { background: var(--bg); }
 
 @keyframes bubbleIn {
   from { opacity: 0; transform: scale(.95); }
@@ -264,7 +268,7 @@ html.embedded nav { display: none; }
   min-width: 0;
   font-size: 11px;
   font-weight: 400;
-  /* Police + couleur PowerShell 7 */
+  /* Police + couleur PowerShell 7 — clair en dark mode */
   color: #f0f0f0;
   font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
   overflow: hidden;
@@ -272,6 +276,8 @@ html.embedded nav { display: none; }
   white-space: nowrap;
   user-select: none;
 }
+[data-theme="light"] .pf-bubble-text,
+html:not([data-theme="dark"]) .pf-bubble-text { color: var(--text); }
 
 /* Bouton arrow — réservé usage futur */
 .pf-bubble-btn-arrow {
@@ -975,6 +981,8 @@ html.embedded nav { display: none; }
   border-bottom: 1px solid #222;
   min-height: 34px;
 }
+[data-theme="light"] .pf-param-chips-bar,
+html:not([data-theme="dark"]) .pf-param-chips-bar { background: var(--surface); border-bottom-color: var(--border); }
 
 .pf-chips-label {
   font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, monospace;
