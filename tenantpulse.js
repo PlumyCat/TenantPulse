@@ -1137,6 +1137,25 @@ async function initAuth() {
     // Pas d'API disponible (dev local) — on reste en utilisateur anonyme
   }
   applyAuthToUI();
+  setBugReportLink();
+}
+
+/* Alimente le lien "Report Bug(s)" avec l'email du premier admin de la table Roles.
+   Requiert manager+ (seul rôle autorisé à lire /api/roles). Sans accès, le lien
+   reste fonctionnel mais sans destinataire (subject seul). */
+async function setBugReportLink() {
+  const link = document.getElementById('bugReportLink');
+  if (!link || !TP_AUTH.hasRole('manager')) return;
+  try {
+    const res = await fetch('/api/roles', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return;
+    const list = await res.json();
+    const firstAdmin = Array.isArray(list) ? list.find(u => u.role === 'admin') : null;
+    if (!firstAdmin) return;
+    const mailto = new URL('mailto:' + firstAdmin.email);
+    mailto.searchParams.set('subject', 'Bug report - TenantPulse');
+    link.href = mailto.href;
+  } catch {}
 }
 
 /* Reflète l'état d'auth dans l'interface : rôle en bas à gauche + bouton Admin. */
