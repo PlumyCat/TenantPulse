@@ -94,6 +94,15 @@
     </div>
     <!-- Pane TenantPulse -->
     <div class="profiles-pane" id="profilesPaneTP">
+      <!-- Section Analyse complète (mode manuel / automatique) -->
+      <div class="analysis-mode-block">
+        <div class="analysis-mode-title">Analyse complète</div>
+        <div class="analysis-mode-seg" id="analysisModeSeg" role="radiogroup" aria-label="Mode d'analyse complète">
+          <button type="button" class="analysis-mode-opt" data-mode="manuel" role="radio" aria-checked="true">Manuel</button>
+          <button type="button" class="analysis-mode-opt" data-mode="auto" role="radio" aria-checked="false">Automatique</button>
+        </div>
+        <div class="analysis-mode-hint" id="analysisModeHint"></div>
+      </div>
       <!-- Section Rétention de l'historique -->
       <button class="drop-section-btn" data-drop-section>
         <span>Rétention de l'historique</span><span class="ds-arrow">▾</span>

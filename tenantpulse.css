@@ -661,6 +661,20 @@ html:not([data-theme="dark"]) .profiles-modal-title img[src="assets/user.png"]{f
 .profiles-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
 /* ── Profiles modal — panes ── */
 .profiles-pane{max-height:340px;overflow-y:auto}
+/* Sélecteur de mode d'analyse complète (modale Profils > TenantPulse) */
+.analysis-mode-block{padding:2px 2px 12px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.analysis-mode-title{font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px}
+.analysis-mode-seg{display:flex;gap:4px;background:var(--row);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px}
+.analysis-mode-opt{flex:1;border:none;background:transparent;border-radius:var(--r-pill);padding:7px 10px;font-family:var(--font);font-size:var(--text-sm);font-weight:600;color:var(--soft);cursor:pointer;transition:background .15s,color .15s}
+.analysis-mode-opt.active{background:var(--blue);color:#fff}
+.analysis-mode-hint{font-size:var(--text-xs);color:var(--muted);margin-top:8px;line-height:1.45}
+/* Correctif : group.png (Partner Center) est noir → inversé en blanc en thème sombre dans la modale */
+[data-theme="dark"] .profile-item-icon.profile-icon-invert-dark{filter:invert(1)}
+/* Mode automatique : un seul bouton de recherche « Tenant ID » */
+body.analysis-auto #checkBtnFull{display:none}
+body.analysis-auto #checkBtnFast{flex:1 1 100%}
+body.analysis-auto .btn-hints{justify-content:center}
+body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .profiles-pane-hidden{display:none}
 /* ── Profiles section label ── */
 .profiles-section-label{

@@ -294,7 +294,26 @@ function loadProfile() {
   }
   // Partner Center is always enabled (locked recommandé)
   profile.partnerCenter = true;
+  // Mode d'analyse complète : 'manuel' (boutons Tenant ID + Analyse) ou 'auto' (Tenant ID enchaîne tout)
+  if (profile.analysisMode !== 'auto' && profile.analysisMode !== 'manuel') profile.analysisMode = 'manuel';
   return profile;
+}
+
+/* Met à jour le texte explicatif du sélecteur de mode d'analyse (modale Profils). */
+function updateAnalysisModeHint(mode) {
+  const h = document.getElementById('analysisModeHint');
+  if (!h) return;
+  h.textContent = mode === 'auto'
+    ? "Un seul bouton « Tenant ID » : il lance la recherche puis l'analyse complète automatiquement (le hero s'affiche d'abord)."
+    : "Deux boutons : « Tenant ID » (rapide) et « Analyse » (complète), à lancer au choix.";
+}
+
+/* Applique le mode d'analyse à l'interface principale.
+   En automatique : on masque le bouton « Analyse » (un seul bouton « Tenant ID » qui enchaîne tout). */
+function applyAnalysisMode(mode) {
+  document.body.classList.toggle('analysis-auto', mode === 'auto');
+  const hints = document.querySelectorAll('.btn-hints .btn-hint');
+  if (hints[0]) hints[0].textContent = mode === 'auto' ? 'Recherche + analyse complète en un clic' : 'Rapide: ID MS + DNS de base';
 }
 function saveProfile(profile) {
   try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {}
@@ -757,6 +776,16 @@ function bindEvents() {
   document.getElementById('profilesTabTP').addEventListener('click', () => switchProfilesTab('tp'));
   document.getElementById('profilesTabML').addEventListener('click', () => switchProfilesTab('ml'));
   document.getElementById('profilesTabPF').addEventListener('click', () => switchProfilesTab('pf'));
+  document.querySelectorAll('#analysisModeSeg .analysis-mode-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('#analysisModeSeg .analysis-mode-opt').forEach(o => {
+        const active = o === opt;
+        o.classList.toggle('active', active);
+        o.setAttribute('aria-checked', active ? 'true' : 'false');
+      });
+      updateAnalysisModeHint(opt.dataset.mode);
+    });
+  });
   document.getElementById('btnPFClearAll').addEventListener('click', clearAllPsForgeData);
   document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
     saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
@@ -867,6 +896,15 @@ function renderTpProfilePane() {
   const list = document.getElementById('profilesToggleList');
   list.replaceChildren();
 
+  /* Sélecteur de mode d'analyse complète (manuel / automatique) */
+  const mode = profile.analysisMode === 'auto' ? 'auto' : 'manuel';
+  document.querySelectorAll('#analysisModeSeg .analysis-mode-opt').forEach(o => {
+    const active = o.dataset.mode === mode;
+    o.classList.toggle('active', active);
+    o.setAttribute('aria-checked', active ? 'true' : 'false');
+  });
+  updateAnalysisModeHint(mode);
+
   /* Partner Center — verrouillé, en tête de la section Raccourcis */
   const pc = REDIRECT_BUTTONS.find(b => b.key === 'partnerCenter');
   if (pc) {
@@ -900,7 +938,7 @@ function makeTpProfileItem(btn, profile, locked) {
     item.appendChild(handle);
   }
   const left = document.createElement('div'); left.className = 'profile-item-left';
-  const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'profile-item-icon';
+  const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'profile-item-icon' + (btn.key === 'partnerCenter' ? ' profile-icon-invert-dark' : '');
   const name = document.createElement('span'); name.className = 'profile-item-name'; name.textContent = btn.label;
   left.appendChild(icon); left.appendChild(name);
   if (locked) {
@@ -1231,12 +1269,15 @@ function saveTpProfileFromModal() {
     profile[sw.dataset.key] = sw.classList.contains('on');
   });
   profile.partnerCenter = true;
+  const _modeOpt = document.querySelector('#analysisModeSeg .analysis-mode-opt.active');
+  profile.analysisMode = (_modeOpt && _modeOpt.dataset.mode === 'auto') ? 'auto' : 'manuel';
   /* Ordre des boutons glissables */
   const sortable = document.getElementById('tpSortableGrid');
   if (sortable) {
     profile.order = [...sortable.querySelectorAll('.profile-item[draggable]')].map(i => i.dataset.key);
   }
   saveProfile(profile);
+  applyAnalysisMode(profile.analysisMode);
   closeProfilesModal();
   if (currentState.ms && currentState.domain) {
     const center = document.getElementById('centerCol');
@@ -1269,6 +1310,7 @@ function saveMhaelleProfileFromModal() {
 
 window.addEventListener('load', () => {
   bindEvents();
+  applyAnalysisMode(loadProfile().analysisMode);
   syncHistoryToggleUI();
   renderHistory();
   syncCacheIndicator();
@@ -4244,6 +4286,10 @@ async function checkFast() {
     // Construire le contenu initial et attacher le listener via le helper partagé
     resetCtaBtn(ctaBtn, raw, domain);
     center.appendChild(ctaBtn);
+    if (loadProfile().analysisMode === 'auto') {
+      // Priorité au hero : on le laisse s'afficher, puis l'analyse complète s'enchaîne en arrière-plan.
+      setTimeout(() => runFullFromState(raw, domain, ctaBtn), 0);
+    }
   } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFastLoading(false); }
 }
@@ -4265,7 +4311,8 @@ function resetCtaBtn(btn, raw, domain) {
 
 // ── Full from fast ──
 async function runFullFromState(raw, domain, ctaBtn) {
-  if (currentState.fullDone) return;
+  if (currentState.fullDone || currentState.fullRunning) return; // évite un double lancement (auto + clic CTA)
+  currentState.fullRunning = true;
   ctaBtn.classList.add('running');
   // Mettre à jour uniquement le nœud texte du label (préserve l'icône img enfant)
   const stfLbl = document.getElementById('stfLabel');
@@ -4330,7 +4377,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     resetCtaBtn(ctaBtn, raw, domain);
     document.getElementById('progList').style.display = 'none';
     showError('Erreur analyse complète : ' + err.message);
-  } finally { unlockButtons(); }
+  } finally { unlockButtons(); currentState.fullRunning = false; }
 }
 
 // ── Full from scratch ──
