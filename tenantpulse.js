@@ -95,9 +95,8 @@ const ADMIN_SHORTCUTS = {
     { label: 'Politique de messages', url: 'https://admin.teams.microsoft.com/policies/messaging?delegatedOrg={domain}' },
   ],
   sharepoint: [
-    { label: 'Sites actifs',             url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' },
-    { label: 'Politiques de partage',    url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/sharing' },
-    { label: 'Ouvrir via M365 Admin',    url: 'https://admin.microsoft.com/sharepoint?delegatedOrg={domain}' },
+    { label: 'Sites actifs',          url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' },
+    { label: 'Politiques de partage', url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/sharing' },
   ],
   azure: [
     { label: 'Abonnements',           url: 'https://portal.azure.com/{tenantId}#view/Microsoft_Azure_Billing/SubscriptionsBladeV2' },
@@ -3885,7 +3884,7 @@ function renderHero(ms, domain, confidence) {
           a.className = 'hero-partner-btn' + (btn.key === 'partnerCenter' ? ' recommended' : '') + (spDisabled ? ' disabled' : '');
           if (spDisabled) {
             a.setAttribute('aria-disabled', 'true');
-            a.title = "Lien direct SharePoint indisponible (nom de tenant non détecté). Lancez l'analyse complète, ou ouvrez SharePoint via « Ouvrir via M365 Admin » dans le menu ▾.";
+            a.title = "Lien direct SharePoint indisponible (nom de tenant non détecté). Lancez l'analyse complète, ou ouvrez SharePoint via la tuile M365 Admin.";
             a.addEventListener('click', e => {
               e.preventDefault(); e.stopPropagation();
               const chev = a.closest('.hero-btn-cell')?.querySelector('.hero-btn-chevron');
@@ -3913,9 +3912,9 @@ function renderHero(ms, domain, confidence) {
           }
           if (btn.key === 'sharepoint') {
             // Bouton principal = lien direct SharePoint (fiable en GDAP), actif seulement si le nom de tenant
-            // est détecté (DKIM + analyse complète). Sinon grisé ; accès M365 dans le menu ▾.
+            // est détecté (DKIM + analyse complète). Sinon grisé ; SharePoint reste joignable via la tuile M365 Admin.
             const info = document.createElement('span'); info.className = 'hero-partner-btn-info'; info.appendChild(makeInfoIcon('white'));
-            info.title = "Le bouton ouvre l'admin SharePoint en direct quand le nom de tenant est détecté (via DKIM, analyse complète). Sinon il est désactivé — ouvrez SharePoint via « Ouvrir via M365 Admin » dans le menu ▾.";
+            info.title = "Le bouton ouvre l'admin SharePoint en direct quand le nom de tenant est détecté (via DKIM, analyse complète). Sinon il est désactivé — ouvrez SharePoint via la tuile M365 Admin.";
             info.setAttribute('aria-label', 'Information sur le lien SharePoint');
             info.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
             a.appendChild(info);
