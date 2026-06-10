@@ -17,7 +17,7 @@ const PROXY_DATA = {
 
 // ── Redirect buttons config ──
 const REDIRECT_BUTTONS = [
-  { key:'partnerCenter', label:'Partner Center',  sub:'Clients & licences CSP',       icon:'assets/Redirect.png',              href: id => `https://partner.microsoft.com/dashboard/v2/customers/${encodeURIComponent(id)}/servicemanagementpage` },
+  { key:'partnerCenter', label:'Partner Center',  sub:'Clients & licences CSP',       icon:'assets/group.png',                 href: id => `https://partner.microsoft.com/dashboard/v2/customers/${encodeURIComponent(id)}/servicemanagementpage` },
   { key:'entraId',       label:'Entra ID',         sub:'Identités & accès',             icon:'assets/MicrosoftEntraID.png',      href: id => `https://entra.microsoft.com/${encodeURIComponent(id)}` },
   { key:'m365Admin',     label:'M365 Admin',       sub:'Administration Microsoft 365',  icon:'assets/Microsoft365Admin.png',     href: (id, dom) => `https://admin.cloud.microsoft/?delegatedOrg=${encodeURIComponent(dom || '')}` },
   { key:'exchange',      label:'Exchange',          sub:'Messagerie & calendriers',      icon:'assets/MicrosoftExchange.png',     href: (id, dom) => `https://admin.exchange.microsoft.com/?delegatedOrg=${encodeURIComponent(dom || '')}` },
@@ -713,8 +713,9 @@ function bindEvents() {
   document.getElementById('btnHistoryToggle').addEventListener('click', () => toggleCollapsible('historyBody', 'historyArrow'));
   document.getElementById('btnClearHistory').addEventListener('click', clearHistory);
   document.getElementById('btnPrivacyToggle').addEventListener('click', () => toggleCollapsible('privacyBody', 'privacyArrow'));
-  document.getElementById('btnPrivacyCta').addEventListener('click', () => {
-    toggleDropdown();
+  document.getElementById('btnPrivacyCta').addEventListener('click', (e) => {
+    e.stopPropagation(); // sans ça, le clic remonte au handler document qui referme aussitôt le dropdown
+    document.getElementById('mainDropdown').classList.add('open');
     toggleCollapsible('privacyBody', 'privacyArrow');
   });
   document.getElementById('btnPanelClose').addEventListener('click', closePanel);
@@ -3848,7 +3849,7 @@ function renderHero(ms, domain, confidence) {
           a.className = 'hero-partner-btn' + (btn.key === 'partnerCenter' ? ' recommended' : '');
           a.href = safeHref;
           a.target = '_blank'; a.rel = 'noopener noreferrer';
-          const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'hero-partner-btn-icon';
+          const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'hero-partner-btn-icon' + (btn.key === 'partnerCenter' ? ' hero-icon-invert' : '');
           const text = document.createElement('div'); text.className = 'hero-partner-btn-text';
           const label = document.createElement('span'); label.className = 'hero-partner-btn-label'; label.textContent = btn.label;
           const sub = document.createElement('span'); sub.className = 'hero-partner-btn-sub'; sub.textContent = btn.sub;
