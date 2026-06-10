@@ -2464,6 +2464,14 @@ async function loadKnownTenants() {
 
   pane.replaceChildren();
   const section = adminSection('Annuaire des tenants');
+  const titleEl = section.querySelector('.admin-section-title');
+  if (titleEl) {
+    const countBadge = document.createElement('span');
+    countBadge.className = 'admin-count-badge';
+    countBadge.textContent = String(tenants.length);
+    countBadge.title = 'Nombre total de tenants tagués';
+    titleEl.appendChild(countBadge);
+  }
 
   const chips = buildFilterChips(() => render());
   section.appendChild(chips.el);

@@ -1457,6 +1457,7 @@ footer{position:relative}
 .admin-error{color:#dc2626}
 .admin-section{margin-top:18px}
 .admin-section-title{font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:10px}
+.admin-count-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:18px;padding:0 6px;margin-left:8px;border-radius:var(--r-pill);background:var(--blue);color:#fff;font-size:11px;font-weight:700;letter-spacing:0;vertical-align:middle}
 
 /* ── Surface de carte commune (style profile-item) ── */
 .admin-req-row,.admin-tag-row,.admin-expired-row,.admin-role-row,.admin-assigned-row,.admin-tag-form{
