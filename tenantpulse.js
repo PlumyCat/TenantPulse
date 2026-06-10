@@ -19,7 +19,7 @@ const PROXY_DATA = {
 const REDIRECT_BUTTONS = [
   { key:'partnerCenter', label:'Partner Center',  sub:'Clients & licences CSP',       icon:'assets/Redirect.png',              href: id => `https://partner.microsoft.com/dashboard/v2/customers/${encodeURIComponent(id)}/servicemanagementpage` },
   { key:'entraId',       label:'Entra ID',         sub:'Identités & accès',             icon:'assets/MicrosoftEntraID.png',      href: id => `https://entra.microsoft.com/${encodeURIComponent(id)}` },
-  { key:'m365Admin',     label:'M365 Admin',       sub:'Administration Microsoft 365',  icon:'assets/Microsoft365Admin.png',     href: (id, dom) => `https://admin.microsoft.com/?delegatedOrg=${encodeURIComponent(dom || '')}` },
+  { key:'m365Admin',     label:'M365 Admin',       sub:'Administration Microsoft 365',  icon:'assets/Microsoft365Admin.png',     href: (id, dom) => `https://admin.cloud.microsoft/?delegatedOrg=${encodeURIComponent(dom || '')}` },
   { key:'exchange',      label:'Exchange',          sub:'Messagerie & calendriers',      icon:'assets/MicrosoftExchange.png',     href: (id, dom) => `https://admin.exchange.microsoft.com/?delegatedOrg=${encodeURIComponent(dom || '')}` },
   { key:'intune',        label:'Intune',            sub:'Gestion des appareils',         icon:'assets/MicrosoftIntune.png',       href: id => `https://intune.microsoft.com/${encodeURIComponent(id)}` },
   { key:'teams',         label:'Teams',             sub:'Collaboration & réunions',      icon:'assets/MicrosoftTeams.png',        href: (id, dom) => `https://admin.teams.microsoft.com/?delegatedOrg=${encodeURIComponent(dom || '')}` },
@@ -33,16 +33,193 @@ const REDIRECT_BUTTONS = [
    compromission supply-chain), un lien hors de cette liste ne serait jamais rendu. */
 const ALLOWED_REDIRECT_HOSTS = new Set([
   'partner.microsoft.com', 'entra.microsoft.com', 'admin.microsoft.com',
-  'admin.exchange.microsoft.com', 'intune.microsoft.com', 'admin.teams.microsoft.com',
-  'portal.azure.com', 'security.microsoft.com'
+  'admin.cloud.microsoft', 'admin.exchange.microsoft.com', 'intune.microsoft.com',
+  'admin.teams.microsoft.com', 'portal.azure.com', 'security.microsoft.com'
 ]);
+
+/* Hôte de redirection autorisé : liste fixe MS + centres SharePoint admin dynamiques
+   « <tenant>-admin.sharepoint.com » (le nom du tenant varie, on valide la forme). */
+function isAllowedRedirectHost(host) {
+  return ALLOWED_REDIRECT_HOSTS.has(host) || /^[a-z0-9][a-z0-9-]*-admin\.sharepoint\.com$/.test(host);
+}
 
 /* Construit l'URL d'un bouton et ne la renvoie que si elle vise un hôte MS autorisé en HTTPS. */
 function safeRedirectHref(hrefFn, id, dom) {
   let raw; try { raw = hrefFn(id, dom); } catch { return null; }
   let u;   try { u = new URL(raw); } catch { return null; }
   if (u.protocol !== 'https:') return null;
-  return ALLOWED_REDIRECT_HOSTS.has(u.hostname) ? u.href : null;
+  return isAllowedRedirectHost(u.hostname) ? u.href : null;
+}
+
+/* ── Raccourcis par centre d'administration (sous-menu dépliant des boutons) ──
+   Jetons remplacés à l'exécution : {tenantId} (GUID), {domain} (domaine analysé),
+   {spTenant} (nom de tenant SharePoint détecté via le CNAME DKIM selector1).
+   Un raccourci dont un jeton est indisponible est rendu désactivé (non cliquable). */
+const ADMIN_SHORTCUTS = {
+  partnerCenter: [
+    { label: 'Abonnements',                   url: 'https://partner.microsoft.com/dashboard/v2/customers/{tenantId}/subscriptions' },
+    { label: 'Utilisateurs & licences',       url: 'https://partner.microsoft.com/dashboard/v2/customers/{tenantId}/users' },
+    { label: "Relations de l'administrateur", url: 'https://partner.microsoft.com/dashboard/v2/customers/{tenantId}/adminrelationships' },
+  ],
+  entraId: [
+    { label: 'Utilisateurs',              url: 'https://entra.microsoft.com/{tenantId}#view/Microsoft_AAD_UsersAndTenants/UserManagementMenuBlade/~/AllUsers/menuId/' },
+    { label: 'Groupes',                   url: 'https://entra.microsoft.com/{tenantId}#view/Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/Overview/menuId/Overview' },
+    { label: 'Accès conditionnel',        url: 'https://entra.microsoft.com/{tenantId}#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Overview/menuId//fromNav/Identity' },
+    { label: 'Journaux de connexion',     url: 'https://entra.microsoft.com/{tenantId}#view/Microsoft_AAD_UsersAndTenants/UserManagementMenuBlade/~/Audit/menuId/' },
+    { label: "Applications d'entreprise", url: 'https://entra.microsoft.com/{tenantId}#view/Microsoft_AAD_IAM/StartboardApplicationsMenuBlade/~/AppAppsPreview' },
+  ],
+  m365Admin: [
+    { label: 'Utilisateurs actifs', url: 'https://admin.cloud.microsoft/?delegatedOrg={domain}#/users' },
+    { label: 'Licences',            url: 'https://admin.cloud.microsoft/?delegatedOrg={domain}#/licenses' },
+    { label: 'Domaines',            url: 'https://admin.cloud.microsoft/?delegatedOrg={domain}#/Domains' },
+    { label: 'Groupes',             url: 'https://admin.cloud.microsoft/?delegatedOrg={domain}#/groups' },
+    { label: 'Santé des services',  url: 'https://admin.cloud.microsoft/?delegatedOrg={domain}#/servicehealth' },
+  ],
+  exchange: [
+    { label: 'Boîtes aux lettres',         url: 'https://admin.exchange.microsoft.com/?delegatedOrg={domain}#/mailboxes' },
+    { label: 'Groupes de distribution',    url: 'https://admin.exchange.microsoft.com/?delegatedOrg={domain}#/groups' },
+    { label: 'Règles de flux',             url: 'https://admin.exchange.microsoft.com/?delegatedOrg={domain}#/transportrules' },
+    { label: 'Connecteurs',                url: 'https://admin.exchange.microsoft.com/?delegatedOrg={domain}#/connectors' },
+    { label: 'Suivi des messages',         url: 'https://admin.exchange.microsoft.com/?delegatedOrg={domain}#/messagetrace' },
+  ],
+  intune: [
+    { label: 'Appareils',               url: 'https://intune.microsoft.com/{tenantId}#view/Microsoft_Intune_DeviceSettings/DevicesMenu/~/overview' },
+    { label: 'Stratégie de conformité', url: 'https://intune.microsoft.com/{tenantId}#view/Microsoft_Intune_DeviceSettings/DevicesComplianceMenu/~/policies' },
+    { label: 'Applications',            url: 'https://intune.microsoft.com/{tenantId}#view/Microsoft_Intune_DeviceSettings/AppsMenu/~/allApps' },
+    { label: 'ASR',                     url: 'https://intune.microsoft.com/{tenantId}#view/Microsoft_Intune_Workflows/SecurityManagementMenu/~/asr' },
+  ],
+  teams: [
+    { label: 'Utilisateurs',          url: 'https://admin.teams.microsoft.com/users?delegatedOrg={domain}' },
+    { label: 'Stratégies de réunion', url: 'https://admin.teams.microsoft.com/policies/meetings?delegatedOrg={domain}' },
+    { label: 'Channels',              url: 'https://admin.teams.microsoft.com/policies/channels?delegatedOrg={domain}' },
+    { label: 'Politique de messages', url: 'https://admin.teams.microsoft.com/policies/messaging?delegatedOrg={domain}' },
+  ],
+  sharepoint: [
+    { label: 'Sites actifs',          url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' },
+    { label: 'Politiques de partage', url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/sharing' },
+  ],
+  azure: [
+    { label: 'Abonnements',           url: 'https://portal.azure.com/{tenantId}#view/Microsoft_Azure_Billing/SubscriptionsBladeV2' },
+    { label: 'Groupes de ressources', url: 'https://portal.azure.com/{tenantId}#servicemenu/Microsoft_Azure_Resources/ResourceManager/resourcegroups' },
+    { label: 'Machines virtuelles',   url: 'https://portal.azure.com/{tenantId}#view/Microsoft_Azure_ComputeHub/ComputeHubMenuBlade/~/virtualMachinesBrowse' },
+  ],
+  defender: [
+    { label: 'Stratégies et règles', url: 'https://security.microsoft.com/securitypoliciesandrules?tid={tenantId}' },
+    { label: 'Entités restreintes',  url: 'https://security.microsoft.com/restrictedentities?tid={tenantId}' },
+    { label: 'Quarantaine',          url: 'https://security.microsoft.com/quarantine?viewid=Email&tid={tenantId}' },
+    { label: 'Liens fiables',        url: 'https://security.microsoft.com/safelinksv2?tid={tenantId}' },
+    { label: 'Alerte',               url: 'https://security.microsoft.com/alerts?tid={tenantId}' },
+    { label: 'Incidents',            url: 'https://security.microsoft.com/incidents?tid={tenantId}' },
+    { label: 'Analyse des menaces',  url: 'https://security.microsoft.com/threatanalytics3?tid={tenantId}' },
+  ],
+};
+
+/* Remplace les jetons d'un gabarit de raccourci et ne renvoie l'URL que si elle est
+   complète (tous les jetons disponibles) et vise un hôte autorisé en HTTPS. Sinon null. */
+function resolveShortcutUrl(tpl, ctx) {
+  if (tpl.includes('{tenantId}') && !ctx.tenantId) return null;
+  if (tpl.includes('{domain}')   && !ctx.domain)   return null;
+  if (tpl.includes('{spTenant}') && !ctx.spTenant) return null;
+  const url = tpl
+    .replace(/\{tenantId\}/g, encodeURIComponent(ctx.tenantId || ''))
+    .replace(/\{domain\}/g,   encodeURIComponent(ctx.domain   || ''))
+    .replace(/\{spTenant\}/g, encodeURIComponent(ctx.spTenant || ''));
+  let u; try { u = new URL(url); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  return isAllowedRedirectHost(u.hostname) ? u.href : null;
+}
+
+/* ── Menu dépliant de raccourcis (un par bouton de redirection) ── */
+let _openShortcutMenu = null;
+function closeShortcutMenu() {
+  if (_openShortcutMenu) { _openShortcutMenu.remove(); _openShortcutMenu = null; }
+  document.removeEventListener('click', closeShortcutMenu);
+  window.removeEventListener('scroll', closeShortcutMenu, true);
+}
+function openShortcutMenu(btn, anchorEl, ctx) {
+  const wasKey = _openShortcutMenu && _openShortcutMenu._key;
+  closeShortcutMenu();
+  if (wasKey === btn.key) return; // re-clic sur le même bouton → simple fermeture
+
+  const list = ADMIN_SHORTCUTS[btn.key] || [];
+  const menu = document.createElement('div');
+  menu.className = 'hero-shortcut-menu';
+  menu._key = btn.key;
+  menu.setAttribute('role', 'menu');
+  menu.addEventListener('click', e => e.stopPropagation());
+
+  const title = document.createElement('div');
+  title.className = 'hero-shortcut-menu-title';
+  title.textContent = btn.label;
+  menu.appendChild(title);
+
+  // Page d'accueil du centre (même cible que le clic sur la tuile)
+  const primary = safeRedirectHref(btn.href, ctx.tenantId, ctx.domain);
+  if (primary) {
+    const a = document.createElement('a');
+    a.className = 'hero-shortcut-opt primary';
+    a.href = primary; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.textContent = 'Accueil';
+    a.setAttribute('role', 'menuitem');
+    a.addEventListener('click', closeShortcutMenu);
+    menu.appendChild(a);
+  }
+
+  list.forEach(sc => {
+    const url = resolveShortcutUrl(sc.url, ctx);
+    if (url) {
+      const a = document.createElement('a');
+      a.className = 'hero-shortcut-opt';
+      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = sc.label;
+      a.setAttribute('role', 'menuitem');
+      a.addEventListener('click', closeShortcutMenu);
+      menu.appendChild(a);
+    } else {
+      const span = document.createElement('span');
+      span.className = 'hero-shortcut-opt disabled';
+      span.textContent = sc.label;
+      span.title = sc.url.includes('{spTenant}')
+        ? "Nom de tenant SharePoint non détecté (CNAME DKIM absent). Lancez l'analyse complète, ou ouvrez SharePoint via M365 Admin."
+        : 'Lien indisponible pour ce tenant.';
+      menu.appendChild(span);
+    }
+  });
+
+  // Positionnement fixe + ajout au body pour passer au-dessus du contexte d'empilement.
+  const rect = anchorEl.getBoundingClientRect();
+  const menuWidth = 240;
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '3000';
+  let left = rect.left;
+  if (left + menuWidth > window.innerWidth - 12) left = window.innerWidth - menuWidth - 12;
+  if (left < 12) left = 12;
+  menu.style.left = left + 'px';
+  menu.style.top = (rect.bottom + 6) + 'px';
+  document.body.appendChild(menu);
+
+  // Repli vers le haut si le menu déborde en bas de l'écran.
+  const mh = menu.getBoundingClientRect().height;
+  if (rect.bottom + 6 + mh > window.innerHeight - 12) {
+    let top = rect.top - 6 - mh;
+    if (top < 12) top = 12;
+    menu.style.top = top + 'px';
+  }
+
+  _openShortcutMenu = menu;
+  setTimeout(() => document.addEventListener('click', closeShortcutMenu), 0);
+  window.addEventListener('scroll', closeShortcutMenu, true);
+}
+
+/* Pastille « i » → asset assets/information.png (source noire).
+   variant 'adapt' : suit le thème (noir en clair, blanc en sombre).
+   variant 'white' : toujours blanc (badges à fond coloré). */
+function makeInfoIcon(variant) {
+  const im = document.createElement('img');
+  im.src = 'assets/information.png';
+  im.alt = '';
+  im.className = 'info-ic ' + (variant === 'white' ? 'always-white' : 'adapt');
+  return im;
 }
 
 const PROFILE_KEY = 'tenantpulse_profile_v1';
@@ -709,7 +886,7 @@ function makeTpProfileItem(btn, profile, locked) {
   left.appendChild(icon); left.appendChild(name);
   if (locked) {
     const badge = document.createElement('span'); badge.className = 'profile-item-badge'; badge.textContent = 'Recommandé';
-    const info = document.createElement('span'); info.className = 'profile-item-info'; info.textContent = 'i';
+    const info = document.createElement('span'); info.className = 'profile-item-info'; info.appendChild(makeInfoIcon('adapt'));
     info.setAttribute('aria-label', 'Information'); info.setAttribute('tabindex', '0');
     info.title = "Le Partner Center permet de s'assurer que le tenant est bien présent dans votre base de données clients.";
     left.appendChild(badge); left.appendChild(info);
@@ -3277,6 +3454,17 @@ async function checkHealth(domain) {
     checks.push({ t:'ok', icon:'assets/checked.png', title:`DKIM actif (${selNames})`, desc: dkimDesc, dkimResults, hasSel1, hasSel2 });
   } else checks.push({ t:'error', icon:'assets/warning.png', title:'DKIM non détecté', desc:'Aucun DKIM sur les sélecteurs testés.', dkimResults, hasSel1:false, hasSel2:false });
 
+  // Nom de tenant SharePoint : le CNAME DKIM selector1 pointe vers « ...<tenant>.onmicrosoft.com ».
+  // Ex. selector1._domainkey.contoso.fr → selector1-contoso-fr._domainkey.contoso75.onmicrosoft.com → spTenant = contoso75.
+  let spTenant = null;
+  try {
+    const sel1Cn = await dnsQuery(`selector1._domainkey.${domain}`, 'CNAME');
+    for (const a of sel1Cn) {
+      const m = (a.data || '').match(/([a-z0-9][a-z0-9-]*)\.onmicrosoft\.com/i);
+      if (m) { spTenant = m[1].toLowerCase(); break; }
+    }
+  } catch { /* CNAME absent ou DKIM non Microsoft : SharePoint direct restera indisponible */ }
+
   const cnA = await dnsQuery(`www.${domain}`, 'CNAME'), aA = await dnsQuery(`www.${domain}`, 'A');
   if      (cnA.length > 0) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'CNAME www',          desc: cnA.map(a => a.data).join(', ') }); }
   else if (aA.length  > 0) { score += 4; checks.push({ t:'info', icon:'assets/information.png', title:'www via A record',   desc: aA.map(a  => a.data).join(', ') }); }
@@ -3294,7 +3482,7 @@ async function checkHealth(domain) {
   if (bimiRec) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'BIMI configuré',          desc: bimiRec }); }
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'BIMI absent',              desc: 'Nécessite DMARC p=quarantine ou reject.' });
 
-  return { score: Math.min(score, 100), checks, dkimResults, hasSel1, hasSel2, dmarcIsQuarantine };
+  return { score: Math.min(score, 100), checks, dkimResults, hasSel1, hasSel2, dmarcIsQuarantine, spTenant };
 }
 
 async function checkOtherTenants(domain, dns) {
@@ -3631,7 +3819,7 @@ function renderHero(ms, domain, confidence) {
       copyBtn.addEventListener('click', () => copyVal(hid, copyBtn));
       const badge = document.createElement('span'); badge.className = 'confidence-badge ' + confClass;
       badge.textContent = confidence + '% — ' + confLabel;
-      const infoBtn = document.createElement('button'); infoBtn.className = 'conf-info-btn'; infoBtn.textContent = 'i'; infoBtn.setAttribute('aria-label', 'Détail de l\'indice de confiance');
+      const infoBtn = document.createElement('button'); infoBtn.className = 'conf-info-btn'; infoBtn.appendChild(makeInfoIcon('white')); infoBtn.setAttribute('aria-label', 'Détail de l\'indice de confiance');
       infoBtn.addEventListener('mousedown', (e) => { e.preventDefault(); showConfTooltip(e, confidence, ms); });
       badge.appendChild(infoBtn);
       guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(badge);
@@ -3669,14 +3857,40 @@ function renderHero(ms, domain, confidence) {
           if (btn.key === 'partnerCenter') {
             const ribbon = document.createElement('span'); ribbon.className = 'hero-partner-btn-ribbon';
             const rLabel = document.createElement('span'); rLabel.className = 'hero-partner-btn-ribbon-label'; rLabel.textContent = 'Recommandé';
-            const rInfo = document.createElement('span'); rInfo.className = 'hero-partner-btn-ribbon-info'; rInfo.textContent = 'i';
+            const rInfo = document.createElement('span'); rInfo.className = 'hero-partner-btn-ribbon-info'; rInfo.appendChild(makeInfoIcon('white'));
             rInfo.title = "Le Partner Center permet de s'assurer que le tenant est bien présent dans votre base de données clients.";
             rInfo.setAttribute('aria-label', 'Information');
             rInfo.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
             ribbon.appendChild(rLabel); ribbon.appendChild(rInfo);
             a.appendChild(ribbon);
           }
-          actions.appendChild(a);
+          if (btn.key === 'sharepoint') {
+            // Lien direct SharePoint peu fiable : l'URL « <tenant>-admin.sharepoint.com »
+            // dépend du nom interne du tenant, pas toujours détectable. On informe l'utilisateur.
+            const info = document.createElement('span'); info.className = 'hero-partner-btn-info'; info.appendChild(makeInfoIcon('white'));
+            info.title = "Lien direct non garanti : il dépend du nom interne du tenant SharePoint (ex. « contoso75 »), pas toujours détectable automatiquement. En cas d'échec, ouvrez SharePoint via M365 Admin → Centres d'administration → SharePoint.";
+            info.setAttribute('aria-label', 'Information sur le lien SharePoint');
+            info.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+            a.appendChild(info);
+          }
+          // Tuile + chevron de sous-menu si le centre expose des raccourcis
+          const cell = document.createElement('div');
+          cell.className = 'hero-btn-cell';
+          cell.appendChild(a);
+          if ((ADMIN_SHORTCUTS[btn.key] || []).length) {
+            const chev = document.createElement('button');
+            chev.type = 'button';
+            chev.className = 'hero-btn-chevron';
+            chev.textContent = '▾';
+            chev.setAttribute('aria-haspopup', 'true');
+            chev.setAttribute('aria-label', 'Raccourcis ' + btn.label);
+            chev.addEventListener('click', e => {
+              e.preventDefault(); e.stopPropagation();
+              openShortcutMenu(btn, chev, { tenantId: ms.tenantId, domain, spTenant: currentState.health?.spTenant || null });
+            });
+            cell.appendChild(chev);
+          }
+          actions.appendChild(cell);
         });
         hero.appendChild(actions);
       }
