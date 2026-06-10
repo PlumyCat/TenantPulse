@@ -131,10 +131,24 @@ function resolveShortcutUrl(tpl, ctx) {
 
 /* ── Menu dépliant de raccourcis (un par bouton de redirection) ── */
 let _openShortcutMenu = null;
+/* Joue l'animation de fermeture (menuOut) puis retire l'élément du DOM.
+   L'état (variable _open…) doit être remis à null par l'appelant AVANT, pour
+   que l'ouverture suivante reparte proprement même si l'anim n'est pas finie. */
+function animateMenuClose(menu) {
+  if (!menu || menu._closing) return;
+  menu._closing = true;
+  menu.classList.add('menu-closing');
+  let done = false;
+  const finish = () => { if (done) return; done = true; menu.remove(); };
+  menu.addEventListener('animationend', finish, { once: true });
+  setTimeout(finish, 220); // filet de sécurité si animationend ne se déclenche pas
+}
 function closeShortcutMenu() {
-  if (_openShortcutMenu) { _openShortcutMenu.remove(); _openShortcutMenu = null; }
   document.removeEventListener('click', closeShortcutMenu);
   window.removeEventListener('scroll', closeShortcutMenu, true);
+  const menu = _openShortcutMenu;
+  _openShortcutMenu = null;
+  animateMenuClose(menu);
 }
 function openShortcutMenu(btn, anchorEl, ctx) {
   const wasKey = _openShortcutMenu && _openShortcutMenu._key;
@@ -1449,10 +1463,11 @@ let _openHeroMenu = null;
 
 function closeHeroTagMenu() {
   if (_openHeroMenu) {
-    _openHeroMenu.remove();
-    _openHeroMenu = null;
     document.removeEventListener('click', closeHeroTagMenu);
     window.removeEventListener('scroll', closeHeroTagMenu, true);
+    const menu = _openHeroMenu;
+    _openHeroMenu = null;
+    animateMenuClose(menu);
   }
 }
 
