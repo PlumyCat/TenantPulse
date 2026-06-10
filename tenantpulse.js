@@ -95,8 +95,9 @@ const ADMIN_SHORTCUTS = {
     { label: 'Politique de messages', url: 'https://admin.teams.microsoft.com/policies/messaging?delegatedOrg={domain}' },
   ],
   sharepoint: [
-    { label: 'Sites actifs',          url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' },
-    { label: 'Politiques de partage', url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/sharing' },
+    { label: 'Sites actifs',             url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' },
+    { label: 'Politiques de partage',    url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/sharing' },
+    { label: 'Via M365 Admin (secours)', url: 'https://admin.microsoft.com/sharepoint?delegatedOrg={domain}' },
   ],
   azure: [
     { label: 'Abonnements',           url: 'https://portal.azure.com/{tenantId}#view/Microsoft_Azure_Billing/SubscriptionsBladeV2' },
@@ -168,7 +169,11 @@ function openShortcutMenu(btn, anchorEl, ctx) {
   menu.appendChild(title);
 
   // Page d'accueil du centre (même cible que le clic sur la tuile)
-  const primary = safeRedirectHref(btn.href, ctx.tenantId, ctx.domain);
+  let primary = safeRedirectHref(btn.href, ctx.tenantId, ctx.domain);
+  if (btn.key === 'sharepoint' && ctx.spTenant) {
+    const direct = resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', ctx);
+    if (direct) primary = direct;
+  }
   if (primary) {
     const a = document.createElement('a');
     a.className = 'hero-shortcut-opt primary';
@@ -3866,7 +3871,13 @@ function renderHero(ms, domain, confidence) {
       if (enabled.length > 0) {
         const actions = document.createElement('div'); actions.className = 'hero-actions';
         enabled.forEach(btn => {
-          const safeHref = safeRedirectHref(btn.href, ms.tenantId, domain);
+          let safeHref = safeRedirectHref(btn.href, ms.tenantId, domain);
+          if (btn.key === 'sharepoint' && currentState.health?.spTenant) {
+            // En GDAP, l'URL directe du tenant est fiable ; on la préfère à la route M365 déléguée
+            // (admin.microsoft.com/sharepoint?delegatedOrg=…) qui peut renvoyer « accès refusé ».
+            const direct = resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', { spTenant: currentState.health.spTenant });
+            if (direct) safeHref = direct;
+          }
           if (!safeHref) return; // cible non fiable → bouton non rendu
           const a = document.createElement('a');
           a.className = 'hero-partner-btn' + (btn.key === 'partnerCenter' ? ' recommended' : '');
@@ -3889,10 +3900,10 @@ function renderHero(ms, domain, confidence) {
             a.appendChild(ribbon);
           }
           if (btn.key === 'sharepoint') {
-            // Lien direct SharePoint peu fiable : l'URL « <tenant>-admin.sharepoint.com »
-            // dépend du nom interne du tenant, pas toujours détectable. On informe l'utilisateur.
+            // Si le nom de tenant SharePoint est détecté, le bouton ouvre l'URL directe (fiable en GDAP) ;
+            // sinon il passe par M365 Admin. Le menu ▾ propose les deux voies.
             const info = document.createElement('span'); info.className = 'hero-partner-btn-info'; info.appendChild(makeInfoIcon('white'));
-            info.title = "Lien direct non garanti : il dépend du nom interne du tenant SharePoint (ex. « contoso75 »), pas toujours détectable automatiquement. En cas d'échec, ouvrez SharePoint via M365 Admin → Centres d'administration → SharePoint.";
+            info.title = "Quand le nom de tenant SharePoint est détecté, ce bouton ouvre l'admin SharePoint directement (fiable en GDAP) ; sinon il passe par M365 Admin. Si « accès refusé », essayez l'autre voie via le menu ▾.";
             info.setAttribute('aria-label', 'Information sur le lien SharePoint');
             info.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
             a.appendChild(info);
