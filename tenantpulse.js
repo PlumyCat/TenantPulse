@@ -97,7 +97,7 @@ const ADMIN_SHORTCUTS = {
   sharepoint: [
     { label: 'Sites actifs',             url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' },
     { label: 'Politiques de partage',    url: 'https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/sharing' },
-    { label: 'Via M365 Admin (secours)', url: 'https://admin.microsoft.com/sharepoint?delegatedOrg={domain}' },
+    { label: 'Ouvrir via M365 Admin',    url: 'https://admin.microsoft.com/sharepoint?delegatedOrg={domain}' },
   ],
   azure: [
     { label: 'Abonnements',           url: 'https://portal.azure.com/{tenantId}#view/Microsoft_Azure_Billing/SubscriptionsBladeV2' },
@@ -170,9 +170,9 @@ function openShortcutMenu(btn, anchorEl, ctx) {
 
   // Page d'accueil du centre (même cible que le clic sur la tuile)
   let primary = safeRedirectHref(btn.href, ctx.tenantId, ctx.domain);
-  if (btn.key === 'sharepoint' && ctx.spTenant) {
-    const direct = resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', ctx);
-    if (direct) primary = direct;
+  if (btn.key === 'sharepoint') {
+    // « Accueil » SharePoint = lien direct uniquement ; le repli M365 est l'entrée dédiée du menu.
+    primary = ctx.spTenant ? resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', ctx) : null;
   }
   if (primary) {
     const a = document.createElement('a');
@@ -3872,17 +3872,29 @@ function renderHero(ms, domain, confidence) {
         const actions = document.createElement('div'); actions.className = 'hero-actions';
         enabled.forEach(btn => {
           let safeHref = safeRedirectHref(btn.href, ms.tenantId, domain);
-          if (btn.key === 'sharepoint' && currentState.health?.spTenant) {
-            // En GDAP, l'URL directe du tenant est fiable ; on la préfère à la route M365 déléguée
-            // (admin.microsoft.com/sharepoint?delegatedOrg=…) qui peut renvoyer « accès refusé ».
-            const direct = resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', { spTenant: currentState.health.spTenant });
+          let spDisabled = false; // SharePoint : bouton principal grisé si le lien direct n'est pas disponible
+          if (btn.key === 'sharepoint') {
+            // Lien direct fiable en GDAP, construit à partir du nom de tenant déduit du DKIM (analyse complète).
+            const spT = currentState.health?.spTenant;
+            const direct = spT ? resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', { spTenant: spT }) : null;
             if (direct) safeHref = direct;
+            else spDisabled = true; // pas de nom (pas de DKIM / analyse rapide) → grisé ; accès M365 via le menu ▾
           }
           if (!safeHref) return; // cible non fiable → bouton non rendu
           const a = document.createElement('a');
-          a.className = 'hero-partner-btn' + (btn.key === 'partnerCenter' ? ' recommended' : '');
-          a.href = safeHref;
-          a.target = '_blank'; a.rel = 'noopener noreferrer';
+          a.className = 'hero-partner-btn' + (btn.key === 'partnerCenter' ? ' recommended' : '') + (spDisabled ? ' disabled' : '');
+          if (spDisabled) {
+            a.setAttribute('aria-disabled', 'true');
+            a.title = "Lien direct SharePoint indisponible (nom de tenant non détecté). Lancez l'analyse complète, ou ouvrez SharePoint via « Ouvrir via M365 Admin » dans le menu ▾.";
+            a.addEventListener('click', e => {
+              e.preventDefault(); e.stopPropagation();
+              const chev = a.closest('.hero-btn-cell')?.querySelector('.hero-btn-chevron');
+              if (chev) openShortcutMenu(btn, chev, { tenantId: ms.tenantId, domain, spTenant: currentState.health?.spTenant || null });
+            });
+          } else {
+            a.href = safeHref;
+            a.target = '_blank'; a.rel = 'noopener noreferrer';
+          }
           const icon = document.createElement('img'); icon.src = btn.icon; icon.alt = btn.label; icon.className = 'hero-partner-btn-icon' + (btn.key === 'partnerCenter' ? ' hero-icon-invert' : '');
           const text = document.createElement('div'); text.className = 'hero-partner-btn-text';
           const label = document.createElement('span'); label.className = 'hero-partner-btn-label'; label.textContent = btn.label;
@@ -3900,10 +3912,10 @@ function renderHero(ms, domain, confidence) {
             a.appendChild(ribbon);
           }
           if (btn.key === 'sharepoint') {
-            // Si le nom de tenant SharePoint est détecté, le bouton ouvre l'URL directe (fiable en GDAP) ;
-            // sinon il passe par M365 Admin. Le menu ▾ propose les deux voies.
+            // Bouton principal = lien direct SharePoint (fiable en GDAP), actif seulement si le nom de tenant
+            // est détecté (DKIM + analyse complète). Sinon grisé ; accès M365 dans le menu ▾.
             const info = document.createElement('span'); info.className = 'hero-partner-btn-info'; info.appendChild(makeInfoIcon('white'));
-            info.title = "Quand le nom de tenant SharePoint est détecté, ce bouton ouvre l'admin SharePoint directement (fiable en GDAP) ; sinon il passe par M365 Admin. Si « accès refusé », essayez l'autre voie via le menu ▾.";
+            info.title = "Le bouton ouvre l'admin SharePoint en direct quand le nom de tenant est détecté (via DKIM, analyse complète). Sinon il est désactivé — ouvrez SharePoint via « Ouvrir via M365 Admin » dans le menu ▾.";
             info.setAttribute('aria-label', 'Information sur le lien SharePoint');
             info.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
             a.appendChild(info);

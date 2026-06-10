@@ -532,6 +532,9 @@ input::placeholder{color:var(--muted);font-weight:500}
   box-shadow:0 0 0 1px rgba(255,255,255,.35), 0 1px 0 rgba(255,255,255,.2) inset, 0 6px 18px rgba(0,0,0,.3)
 }
 .hero-partner-btn:hover::before{opacity:1}
+/* Bouton hero désactivé (ex. SharePoint sans nom de tenant détecté) — la tuile est grisée mais le chevron ▾ reste actif */
+.hero-partner-btn.disabled{opacity:.45;cursor:not-allowed}
+.hero-partner-btn.disabled:hover{transform:none}
 .hero-partner-btn.recommended{
   background:linear-gradient(180deg, rgba(146,195,83,.22) 0%, rgba(146,195,83,.06) 100%);
   box-shadow:0 0 0 1px rgba(146,195,83,.55), 0 1px 0 rgba(255,255,255,.14) inset, 0 4px 14px rgba(0,0,0,.2)
