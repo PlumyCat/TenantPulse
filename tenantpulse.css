@@ -1358,7 +1358,11 @@ footer{position:relative}
 /* ── Zone de tags dans le hero ── */
 .hero-tags{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px}
 .hero-tags-badges{display:flex;flex-wrap:wrap;gap:6px}
-.hero-tag-add{display:inline-flex;align-items:center;justify-content:center;width:32px;height:21px;border-radius:999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);-webkit-backdrop-filter:blur(6px) saturate(140%);backdrop-filter:blur(6px) saturate(140%);box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 1px 3px rgba(0,0,0,.16);color:#fff;font-size:15px;font-weight:600;line-height:1;cursor:pointer;transition:background .15s,border-color .15s;flex-shrink:0}
+.hero-tag-add{display:inline-flex;align-items:center;justify-content:center;position:relative;width:32px;height:21px;border-radius:999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);-webkit-backdrop-filter:blur(6px) saturate(140%);backdrop-filter:blur(6px) saturate(140%);box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 1px 3px rgba(0,0,0,.16);color:#fff;font-size:0;cursor:pointer;transition:background .15s,border-color .15s;flex-shrink:0}
+/* « + » dessiné en CSS (croix géométrique) : toujours centré, indépendant du zoom et des métriques de police */
+.hero-tag-add::before,.hero-tag-add::after{content:"";position:absolute;top:50%;left:50%;background:currentColor;border-radius:1px}
+.hero-tag-add::before{width:9px;height:1.6px;transform:translate(-50%,-50%)}
+.hero-tag-add::after{width:1.6px;height:9px;transform:translate(-50%,-50%)}
 .hero-tag-add:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.35)}
 .hero-tag-add:disabled,.hero-tag-add.locked{opacity:.4;cursor:not-allowed}
 
