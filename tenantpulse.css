@@ -182,8 +182,8 @@ body.view-pf footer{display:none}
   box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.12) inset, 0 12px 40px rgba(0,0,0,.4);
   width:260px;max-height:calc(100vh - 80px);overflow-y:auto;
   z-index:500;position:absolute;
-  opacity:0;visibility:hidden;transform:scale(.96) translateY(-6px);transform-origin:top right;
-  transition:opacity .18s ease,transform .18s cubic-bezier(.2,.8,.2,1),visibility 0s linear .18s
+  opacity:0;visibility:hidden;transform:scale(.82) translateY(-8px);transform-origin:top right;
+  transition:opacity .15s ease,transform .15s ease-in,visibility 0s linear .15s
 }
 [data-theme="light"] .drop-menu,html:not([data-theme="dark"]) .drop-menu{
   background:linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(248,248,250,.55) 100%);
@@ -242,11 +242,11 @@ html:not([data-theme="dark"]) .drop-menu .cache-legend-label{color:var(--soft)}
 html:not([data-theme="dark"]) .drop-menu .cache-legend-label strong{color:var(--text)}
 [data-theme="light"] .drop-menu .drop-info-row > span:first-child,
 html:not([data-theme="dark"]) .drop-menu .drop-info-row > span:first-child{filter:none}
-.nav-dropdown.open .drop-menu{opacity:1;visibility:visible;transform:none;transition:opacity .18s ease,transform .18s cubic-bezier(.2,.8,.2,1),visibility 0s}
+.nav-dropdown.open .drop-menu{opacity:1;visibility:visible;transform:none;transition:opacity .2s ease,transform .2s cubic-bezier(.16,1,.3,1),visibility 0s}
 @keyframes dropIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 /* Apparition « zoom depuis le bouton » des menus déroulants (origine au déclencheur via transform-origin) */
-@keyframes menuIn{from{opacity:0;transform:scale(.94) translateY(-6px)}to{opacity:1;transform:scale(1) translateY(0)}}
-@keyframes menuOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.96) translateY(-4px)}}
+@keyframes menuIn{from{opacity:0;transform:scale(.82) translateY(-8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes menuOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.9) translateY(-4px)}}
 .hero-shortcut-menu.menu-closing,.hero-tag-menu.menu-closing{animation:menuOut .13s ease-in forwards;pointer-events:none}
 @media (prefers-reduced-motion: reduce){
   .hero-shortcut-menu,.hero-tag-menu,.nav-dropdown.open .drop-menu{animation:none!important;transition:none!important}
@@ -553,7 +553,7 @@ input::placeholder{color:var(--muted);font-weight:500}
 .hero-btn-chevron:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.2);color:#fff}
 /* Menu dépliant de raccourcis */
 /* Glassmorphisme calqué sur le menu « Paramètres & Confidentialité » (.drop-menu) */
-.hero-shortcut-menu{min-width:200px;max-width:250px;max-height:60vh;overflow-y:auto;background:linear-gradient(180deg, rgba(46,44,42,.5) 0%, rgba(34,32,30,.5) 100%);-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%);border:1px solid transparent;border-radius:var(--r-lg);box-shadow:0 0 0 1px rgba(255,255,255,.14),0 1px 0 rgba(255,255,255,.12) inset,0 12px 40px rgba(0,0,0,.4);padding:7px;display:flex;flex-direction:column;gap:2px;transform-origin:top left;animation:menuIn .18s cubic-bezier(.2,.8,.2,1)}
+.hero-shortcut-menu{min-width:200px;max-width:250px;max-height:60vh;overflow-y:auto;background:linear-gradient(180deg, rgba(46,44,42,.5) 0%, rgba(34,32,30,.5) 100%);-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%);border:1px solid transparent;border-radius:var(--r-lg);box-shadow:0 0 0 1px rgba(255,255,255,.14),0 1px 0 rgba(255,255,255,.12) inset,0 12px 40px rgba(0,0,0,.4);padding:7px;display:flex;flex-direction:column;gap:2px;transform-origin:top left;animation:menuIn .2s cubic-bezier(.16,1,.3,1)}
 [data-theme="light"] .hero-shortcut-menu,html:not([data-theme="dark"]) .hero-shortcut-menu{background:linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(248,248,250,.55) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.08),0 1px 0 rgba(255,255,255,.7) inset,0 12px 40px rgba(0,0,0,.15)}
 .hero-shortcut-menu-title{font-size:var(--text-xs);font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:4px 8px 6px}
 .hero-shortcut-opt{text-align:left;text-decoration:none;background:transparent;border:none;border-radius:var(--r-sm);padding:8px 10px;font-family:var(--font);font-size:var(--text-sm);color:var(--text);cursor:pointer;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1386,7 +1386,7 @@ footer{position:relative}
 .hero-tag-add:disabled,.hero-tag-add.locked{opacity:.4;cursor:not-allowed}
 
 /* ── Menu contextuel du bouton (+) ── */
-.hero-tag-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:3000;min-width:215px;max-width:240px;max-height:60vh;overflow-y:auto;background:linear-gradient(180deg, rgba(46,44,42,.5) 0%, rgba(34,32,30,.5) 100%);-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%);border:1px solid transparent;border-radius:var(--r-lg);box-shadow:0 0 0 1px rgba(255,255,255,.14),0 1px 0 rgba(255,255,255,.12) inset,0 12px 40px rgba(0,0,0,.4);padding:8px;display:flex;flex-direction:column;gap:3px;transform-origin:top left;animation:menuIn .18s cubic-bezier(.2,.8,.2,1)}
+.hero-tag-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:3000;min-width:215px;max-width:240px;max-height:60vh;overflow-y:auto;background:linear-gradient(180deg, rgba(46,44,42,.5) 0%, rgba(34,32,30,.5) 100%);-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%);border:1px solid transparent;border-radius:var(--r-lg);box-shadow:0 0 0 1px rgba(255,255,255,.14),0 1px 0 rgba(255,255,255,.12) inset,0 12px 40px rgba(0,0,0,.4);padding:8px;display:flex;flex-direction:column;gap:3px;transform-origin:top left;animation:menuIn .2s cubic-bezier(.16,1,.3,1)}
 [data-theme="light"] .hero-tag-menu,html:not([data-theme="dark"]) .hero-tag-menu{background:linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(248,248,250,.55) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.08),0 1px 0 rgba(255,255,255,.7) inset,0 12px 40px rgba(0,0,0,.15)}
 .hero-tag-menu-title{font-size:var(--text-xs);font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:4px 6px}
 .hero-tag-menu-sep{font-size:var(--text-xs);font-weight:600;color:var(--muted);padding:6px 6px 2px;border-top:1px solid rgba(255,255,255,.12);margin-top:4px}
