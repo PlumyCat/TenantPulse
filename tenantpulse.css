@@ -1091,6 +1091,13 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .history-item-copy.copied{border-color:#16a34a;color:#16a34a}
 .history-item-time{font-size:var(--text-xs);font-weight:400;color:var(--muted);flex-shrink:0}
 .history-item-icon{font-size:var(--text-base);flex-shrink:0;display:flex;align-items:center;width:16px}
+/* Liste d'historique défilante : évite le rognage de .collapsible-body (max-height) quand il y a beaucoup d'entrées */
+#historyList{max-height:50vh;overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.18) transparent}
+#historyList::-webkit-scrollbar{width:6px}
+#historyList::-webkit-scrollbar-track{background:transparent}
+#historyList::-webkit-scrollbar-thumb{background:rgba(0,0,0,.22);border-radius:var(--r-xs)}
+[data-theme="dark"] #historyList{scrollbar-color:rgba(255,255,255,.2) transparent}
+[data-theme="dark"] #historyList::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2)}
 .btn-clear-history{width:100%;margin-top:4px;padding:6px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r-md);font-family:var(--font);font-size:var(--text-xs);font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s}
 .btn-clear-history:hover{border-color:#fecdd3;color:#dc2626}
 [data-theme="dark"] .btn-clear-history:hover{border-color:#7f1d1d;color:#fca5a5}
