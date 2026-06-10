@@ -534,7 +534,7 @@ input::placeholder{color:var(--muted);font-weight:500}
 .hero-partner-btn-ribbon-label{pointer-events:none}
 .hero-partner-btn-ribbon-info{display:inline-flex;align-items:center;justify-content:center;width:11px;height:11px;border-radius:50%;background:rgba(255,255,255,.28);color:#fff;font-style:italic;font-family:Georgia,serif;font-size:8px;font-weight:700;cursor:help;line-height:1}
 .hero-partner-btn-ribbon-info:hover{background:rgba(255,255,255,.45)}
-.hero-partner-btn-info{position:absolute;top:-6px;right:-6px;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#0078D4;color:#fff;font-style:italic;font-family:Georgia,serif;font-size:10px;font-weight:700;cursor:help;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.4);z-index:2}
+.hero-partner-btn-info{position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#0078D4;color:#fff;font-style:italic;font-family:Georgia,serif;font-size:10px;font-weight:700;cursor:help;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.4);z-index:2}
 .hero-partner-btn-info:hover{background:#106EBE}
 /* Cellule (tuile + chevron de sous-menu) */
 .hero-btn-cell{position:relative;display:flex;min-width:0}
