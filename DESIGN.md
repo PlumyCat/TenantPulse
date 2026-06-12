@@ -29,6 +29,24 @@ Single-page app à 3 colonnes, encadrée par une topbar noire et une nav violett
   remplacent `.app` au changement d'onglet (`body.view-ml` / `body.view-pf`).
   Elles partagent `../tenantpulse.css` et reçoivent le thème par `postMessage`.
 
+### Raccord barre / contenu — feuille glissée sous la nav
+
+La barre violette reste un **rectangle pleine largeur** (pas d'arrondi, pas
+d'ombre portée — design plat). C'est le **contenu** qui est une *feuille unique*
+glissée dessous, avec les **coins supérieurs arrondis** (`--r-lg`, 12 px) :
+
+- `.app` (et les iframes `.mhaelle-frame` / `.psforge-frame`) portent
+  `border-radius: var(--r-lg) var(--r-lg) 0 0` + `overflow:clip` — les 3 colonnes
+  sont ainsi clippées en **une seule feuille** sans créer de conteneur de scroll.
+- Le **`body` est en violet `var(--blue)`** (couleur exacte de la nav) **dans les
+  deux thèmes**. Il n'est visible que dans les **encoches des coins arrondis**, ce
+  qui prolonge le violet de la barre en continu — la barre et le contenu se lisent
+  comme une seule surface. Pas de bande factice : c'est le fond réel du `body`.
+- Le fond gris-bleu de page (`#e8edf5` clair / `var(--bg)` sombre) est porté par
+  **`.app`** (et non par le `body`), sinon il masquerait le violet des encoches.
+  ⚠️ La règle `html:not([data-theme="dark"]) .app{background:#e8edf5}` doit viser
+  `.app` et **pas** `body`, sous peine de repeindre les encoches en gris en clair.
+
 ---
 
 ## 2. Le système Glass — 3 intensités
