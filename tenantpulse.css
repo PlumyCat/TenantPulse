@@ -867,7 +867,7 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .empty-state-icon{font-size:44px}
 .empty-state-title{font-size:var(--text-lg);font-weight:500;color:var(--text)}
 .empty-state-sub{font-size:var(--text-sm);font-weight:400;color:var(--soft)}
-/* ───── Hero "Aurora" — couleurs logo Be-Cloud (jaune/orange/bleu/violet) ───── */
+/* ───── Hero "Aurora" — couleurs du logo de l'organisation (jaune/orange/bleu/violet) ───── */
 .tenant-hero{
   background:#1F1C26;
   background-image:

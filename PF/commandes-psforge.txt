@@ -150,7 +150,7 @@
                ex. google.com  /  192.168.1.1  /  smtp.office365.com
 
   <domaine>  = Nom de domaine DNS
-               ex. contoso.com  /  be-cloud.fr
+               ex. contoso.com  /  fabrikam.fr
 
   <port>     = Numéro de port TCP/UDP
                ex. 443 (HTTPS)  /  25 (SMTP)  /  587 (SMTP auth)  /  3389 (RDP)

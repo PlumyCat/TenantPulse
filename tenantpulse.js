@@ -2915,7 +2915,7 @@ function buildBlockForm() {
   form.appendChild(title);
 
   const email = document.createElement('input');
-  email.type = 'email'; email.className = 'admin-input'; email.placeholder = 'adresse@be-cloud.fr';
+  email.type = 'email'; email.className = 'admin-input'; email.placeholder = 'prenom.nom@contoso.com';
 
   const submit = document.createElement('button');
   submit.type = 'button'; submit.className = 'admin-btn admin-btn-reject'; submit.textContent = 'Bloquer les requêtes';
@@ -2967,7 +2967,7 @@ function buildAddRoleForm() {
   form.appendChild(title);
 
   const email = document.createElement('input');
-  email.type = 'email'; email.className = 'admin-input'; email.placeholder = 'adresse@be-cloud.fr';
+  email.type = 'email'; email.className = 'admin-input'; email.placeholder = 'prenom.nom@contoso.com';
 
   const select = document.createElement('select'); select.className = 'admin-input';
   const optMod = document.createElement('option'); optMod.value = 'moderator'; optMod.textContent = 'Modérateur';

@@ -165,7 +165,7 @@
     { id: 'id',       label: 'ID',         hint: 'Id retourné par une commande précédente',             placeholder: 'id retourné'                          },
     { id: 'nom',      label: 'Nom',        hint: 'ex. Spooler · W32Time · Teams',                      placeholder: 'Spooler'                              },
     { id: 'host',     label: 'Hôte / IP',  hint: 'ex. google.com · 192.168.1.1 · smtp.office365.com',  placeholder: 'google.com'                           },
-    { id: 'domaine',  label: 'Domaine',    hint: 'ex. contoso.com · be-cloud.fr',                      placeholder: 'contoso.com'                          },
+    { id: 'domaine',  label: 'Domaine',    hint: 'ex. contoso.com · fabrikam.fr',                      placeholder: 'contoso.com'                          },
     { id: 'port',     label: 'Port',       hint: 'ex. 443 · 25 · 587 · 3389',                          placeholder: '443',          inputmode: 'numeric'   },
     { id: 'ip',       label: 'IP',         hint: 'ex. 192.168.1.100 · 10.0.0.1',                       placeholder: '192.168.1.100'                        },
     { id: 'date',     label: 'Date',       hint: 'Format MM/DD/YYYY (Get-MessageTrace)',                placeholder: '05/27/2026'                           },
