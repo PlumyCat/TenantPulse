@@ -59,17 +59,14 @@
 }
 
 html{height:100%}
-/* Fond du body = violet de la navbar : seules les encoches des coins arrondis de la
-   feuille de contenu (.app) le laissent voir, créant un raccord violet continu avec la
-   barre juste au-dessus. .app pose son propre fond gris opaque par-dessus. */
-body{background:var(--blue);font-family:var(--font);font-size:var(--text-base);color:var(--text);height:100%;overflow:hidden;display:flex;flex-direction:column;transition:background .25s,color .25s}
+body{background:var(--bg);font-family:var(--font);font-size:var(--text-base);color:var(--text);height:100%;overflow:hidden;display:flex;flex-direction:column;transition:background .25s,color .25s}
 
 .topbar{background:#121212!important;color:#fff;text-align:center;font-size:var(--text-sm);font-weight:400;padding:6px 20px;letter-spacing:.03em;position:relative}
 .topbar-logout{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:5px;color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
 .topbar-logout:hover{opacity:1;text-decoration:underline}
 .topbar-bug{position:absolute;left:20px;top:50%;transform:translateY(-50%);color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
 .topbar-bug:hover{opacity:1;text-decoration:underline}
-nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:300}
+nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:300;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 /* ── Marque nav (logo + nom app) + wrapper gauche ── */
 .nav-left{display:flex;align-items:center;height:100%}
 .nav-brand{
@@ -112,7 +109,6 @@ nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-i
 .mhaelle-frame{
   display:none;flex:1 1 0;width:100%;border:none;background:var(--bg);
   min-height:calc(100vh - 100px);
-  border-radius:var(--r-lg) var(--r-lg) 0 0;
 }
 body.view-ml .app{display:none}
 body.view-ml .mhaelle-frame{display:block}
@@ -124,7 +120,6 @@ body.view-ml footer{display:none}
 .psforge-frame{
   display:none;flex:1 1 0;width:100%;border:none;background:var(--bg);
   min-height:calc(100vh - 100px);
-  border-radius:var(--r-lg) var(--r-lg) 0 0;
 }
 body.view-pf .app{display:none}
 body.view-pf .mhaelle-frame{display:none}
@@ -356,11 +351,7 @@ html:not([data-theme="dark"]) .drop-menu .drop-info-row > span:first-child{filte
 [data-theme="dark"] .cache-warning-info{border-color:#fcd34d;color:#fcd34d}
 [data-theme="dark"] .cache-warning-info:hover{background:rgba(252,211,77,.15)}
 
-/* ── Le contenu est UNE feuille unique aux coins supérieurs arrondis, glissée sous la
-      barre violette (qui reste un rectangle plein largeur, posée par-dessus avec son
-      ombre). overflow:clip clippe les colonnes dans la feuille sans créer de conteneur
-      de scroll. Les coins se découpent sur le fond de page → visibles en clair ET sombre. ── */
-.app{flex:1;display:flex;min-height:0;overflow:clip;border-radius:var(--r-lg) var(--r-lg) 0 0;background:var(--bg)}
+.app{flex:1;display:flex;min-height:0;overflow-x:clip;overflow-y:visible}
 
 .col-header{display:flex;align-items:center;gap:8px;padding-bottom:12px;border-bottom:1.5px solid var(--border);margin-bottom:4px;flex-shrink:0}
 .col-header-icon{font-size:var(--text-lg)}
@@ -1816,11 +1807,9 @@ select.admin-input{cursor:pointer;color-scheme:light}
    En light : #f4f5f9 vs #fff = trop discret. Correctif : élévation via box-shadow.
    ════════════════════════════════════════ */
 
-/* Fond principal (feuille de contenu) — teinte gris-bleu plus marquée.
-   Porté par .app (et non body) : le body reste violet dans les deux thèmes pour que
-   les encoches des coins arrondis révèlent le même violet que la navbar. */
-[data-theme="light"] .app,
-html:not([data-theme="dark"]) .app{ background:#e8edf5; }
+/* Fond principal — teinte gris-bleu plus marquée */
+[data-theme="light"] body,
+html:not([data-theme="dark"]) body{ background:#e8edf5; }
 
 /* Cards de résultats — élévation nette */
 [data-theme="light"] .result-card,
