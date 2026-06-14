@@ -1903,8 +1903,21 @@ html:not([data-theme="dark"]) .drop-menu{ box-shadow:var(--shadow-lg) }
 html:not([data-theme="dark"]) .drop-menu{
   background:linear-gradient(180deg, rgba(255,255,255,.88) 0%, rgba(248,248,250,.88) 100%);
 }
+/* Lisibilité mode clair — en-têtes/onglets en gris très foncé (var(--text)),
+   et texte BLANC sur l'état SÉLECTIONNÉ (fond violet). NB : la règle d'alignement
+   [data-theme=light] .drop-menu .drop-section-btn (0,3,0) écrasait le .open{color:#fff}
+   (0,2,0) → on rétablit le blanc avec une règle .open plus spécifique (0,4,0). */
 [data-theme="light"] .drop-menu .drop-section-btn,
-html:not([data-theme="dark"]) .drop-menu .drop-section-btn{ color:var(--soft) }
+html:not([data-theme="dark"]) .drop-menu .drop-section-btn{ color:var(--text) }
+[data-theme="light"] .drop-menu .drop-section-btn.open,
+html:not([data-theme="dark"]) .drop-menu .drop-section-btn.open{ color:#fff }
+/* Modale Administration : titres de section + onglets foncés (actif reste violet) */
+[data-theme="light"] .admin-section-title,
+html:not([data-theme="dark"]) .admin-section-title{ color:var(--text) }
+[data-theme="light"] .admin-subtab,
+html:not([data-theme="dark"]) .admin-subtab{ color:#374151 }
+[data-theme="light"] .admin-subtab.active,
+html:not([data-theme="dark"]) .admin-subtab.active{ color:var(--blue) }
 
 /* ── Accent : survol des cartes nettement marqué (tinte + anneau + lift) ── */
 .result-card:hover{ box-shadow:var(--shadow-md); transform:translateY(-2px) }
