@@ -480,6 +480,15 @@ input::placeholder{color:var(--muted);font-weight:500}
 .btn-trigger-full.running .stf-spinner{display:inline-block}
 .btn-trigger-full.done{border-style:solid;border-color:#16a34a;color:#15803d;cursor:default}
 [data-theme="dark"] .btn-trigger-full.done{border-color:#4a7c4a;color:#86efac}
+/* assets/Analyse.png est un PNG blanc (OK sur fond sombre). En mode clair, sur le fond
+   transparent du CTA, il devenait invisible → on l'inverse (blanc→sombre) pour qu'il
+   reste lisible, sauf quand le fond passe en violet (survol/running) où le blanc est correct.
+   En mode sombre il reste blanc (visible sur la colonne sombre). */
+[data-theme="light"] .btn-trigger-full img,
+html:not([data-theme="dark"]) .btn-trigger-full img{filter:invert(1)}
+[data-theme="light"] .btn-trigger-full:hover img,
+html:not([data-theme="dark"]) .btn-trigger-full:hover img,
+.btn-trigger-full.running img{filter:none}
 
 .prog-list{margin-top:12px;display:none;flex-direction:column;gap:4px}
 .p-step{display:flex;align-items:center;gap:7px;font-size:var(--text-xs);font-weight:500;color:var(--soft);padding:5px 8px 5px 10px;border-radius:var(--r-sm);background:var(--step-bg);border:1.5px solid var(--border);transition:all .2s;position:relative}
@@ -1884,6 +1893,18 @@ html:not([data-theme="dark"]) .result-card{
 }
 [data-theme="light"] .drop-menu,
 html:not([data-theme="dark"]) .drop-menu{ box-shadow:var(--shadow-lg) }
+
+/* ── Aligner le dropdown « Paramètres & Confidentialité » (.drop-menu) sur le style
+      des menus de raccourcis des boutons (.hero-shortcut-menu) : le .drop-menu étant
+      posé sur la nav/hero violets, son verre à .55 virait au violet → on l'opacifie
+      pour un frosted net et on fonce les en-têtes de section pour la lisibilité. ── */
+.drop-menu{ background:linear-gradient(180deg, rgba(44,42,40,.8) 0%, rgba(32,30,28,.8) 100%) }
+[data-theme="light"] .drop-menu,
+html:not([data-theme="dark"]) .drop-menu{
+  background:linear-gradient(180deg, rgba(255,255,255,.88) 0%, rgba(248,248,250,.88) 100%);
+}
+[data-theme="light"] .drop-menu .drop-section-btn,
+html:not([data-theme="dark"]) .drop-menu .drop-section-btn{ color:var(--soft) }
 
 /* ── Accent : survol des cartes nettement marqué (tinte + anneau + lift) ── */
 .result-card:hover{ box-shadow:var(--shadow-md); transform:translateY(-2px) }
