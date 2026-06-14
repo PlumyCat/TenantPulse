@@ -4104,36 +4104,6 @@ function exportReport() {
     }
   }
 
-  // ── Recommended Actions ─────────────────────
-  if (r.health) {
-    const actions = [];
-    r.health.checks.forEach(c => {
-      if (c.type === 'error') {
-        if (c.title.includes('DKIM'))  actions.push('Enable and configure DKIM signing');
-        if (c.title.includes('SPF'))   actions.push('Add a valid SPF record (-all)');
-        if (c.title.includes('DMARC')) actions.push('Deploy a DMARC policy (p=quarantine minimum)');
-        if (c.title.includes('MX'))    actions.push('Configure MX records');
-      }
-      if (c.type === 'warn') {
-        if (c.title.includes('DMARC') && c.title.includes('none'))     actions.push('Enforce DMARC \u2014 move to p=quarantine or p=reject');
-        if (c.title.includes('SPF')   && c.title.includes('softfail')) actions.push('Harden SPF \u2014 replace ~all with -all');
-        if (c.title.includes('DNSSEC'))                                 actions.push('Activate DNSSEC on your registrar');
-      }
-      if (c.type === 'info') {
-        if (c.title.includes('MTA-STS')) actions.push('Configure MTA-STS for inbound mail security');
-        if (c.title.includes('BIMI'))    actions.push('Configure BIMI (requires DMARC enforce)');
-      }
-    });
-    const unique = [...new Set(actions)];
-    if (unique.length) {
-      lines.push('RECOMMENDED ACTIONS:');
-      lines.push('');
-      unique.forEach((a, i) => lines.push(' ' + (i + 1) + '.  ' + a));
-      lines.push(HR);
-      lines.push('');
-    }
-  }
-
   // ── Detected Services ────────────────────────
   const active = (r.otherServices || []).filter(s => s.on);
   if (active.length) {
@@ -4145,7 +4115,7 @@ function exportReport() {
   }
 
   // ── Footer ───────────────────────────────────
-  lines.push('TenantPulse \u2014 Internal RUN MW Platform \u2014 v0.6 in development');
+  lines.push('TenantPulse \u2014 Internal RUN MW Platform \u2014 v1.5');
 
   const text = lines.join('\n');
   const btn  = document.getElementById('exportBtn');
