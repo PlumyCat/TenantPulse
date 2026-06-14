@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this is
+# What this is
 
 TenantPulse is an **M365 / Google Workspace tenant diagnostic tool** built as a static web app
 with an optional Azure Functions backend. It analyses domains via public APIs called directly
