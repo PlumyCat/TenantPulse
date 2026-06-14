@@ -1831,3 +1831,113 @@ html:not([data-theme="dark"]) .detail-panel{ border-left-color:rgba(0,0,0,.16); 
 html:not([data-theme="dark"]) .drop-menu{
   box-shadow:0 6px 24px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.09);
 }
+
+/* ════════════════════════════════════════════════════════════
+   MODERNISATION 2026 — affinage PUREMENT visuel : rondeur & air,
+   accents de couleur, élévation maîtrisée, micro-interactions.
+   Aucune logique modifiée. Bloc isolé → retirable d'un seul tenant.
+   Le motion respecte prefers-reduced-motion (garde en fin de bloc).
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Tokens : easing + ombres multi-couches (élévation modérée) ── */
+:root{
+  --ease-spring:cubic-bezier(.16,1,.3,1);
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --shadow-sm:0 1px 2px rgba(20,22,50,.05), 0 3px 10px rgba(20,22,50,.08);
+  --shadow-md:0 2px 6px rgba(20,22,50,.06), 0 10px 24px rgba(20,22,50,.11);
+  --shadow-lg:0 6px 16px rgba(20,22,50,.08), 0 22px 48px rgba(20,22,50,.14);
+  --ring-accent:0 0 0 1px rgba(75,63,190,.18);
+}
+[data-theme="dark"]{
+  --shadow-sm:0 1px 2px rgba(0,0,0,.22), 0 3px 10px rgba(0,0,0,.32);
+  --shadow-md:0 2px 6px rgba(0,0,0,.28), 0 10px 24px rgba(0,0,0,.44);
+  --shadow-lg:0 6px 16px rgba(0,0,0,.34), 0 22px 48px rgba(0,0,0,.52);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --shadow-sm:0 1px 2px rgba(0,0,0,.22), 0 3px 10px rgba(0,0,0,.32);
+    --shadow-md:0 2px 6px rgba(0,0,0,.28), 0 10px 24px rgba(0,0,0,.44);
+    --shadow-lg:0 6px 16px rgba(0,0,0,.34), 0 22px 48px rgba(0,0,0,.52);
+  }
+}
+
+/* ── Rondeur & air : cartes/hero plus arrondis, icônes plus douces, plus d'espace ── */
+.result-card{ border-radius:var(--r-xl) }
+.tenant-hero{ border-radius:20px }
+.empty-state{ border-radius:var(--r-xl) }
+.card-icon-wrap{ border-radius:var(--r-lg) }
+.center{ gap:18px }
+.card-row{ padding:15px 17px }
+
+/* ── Élévation modérée + transition ── */
+.result-card{
+  box-shadow:var(--shadow-sm);
+  transition:border-color .2s, box-shadow .25s var(--ease-out),
+             transform .2s var(--ease-out), background .2s;
+}
+.empty-state{ box-shadow:var(--shadow-sm) }
+.panel-section{ box-shadow:var(--shadow-sm); border-color:transparent }
+[data-theme="light"] .result-card,
+html:not([data-theme="dark"]) .result-card{
+  box-shadow:var(--shadow-sm);
+  border-color:rgba(20,22,50,.05);
+}
+[data-theme="light"] .drop-menu,
+html:not([data-theme="dark"]) .drop-menu{ box-shadow:var(--shadow-lg) }
+
+/* ── Accent : survol des cartes nettement marqué (tinte + anneau + lift) ── */
+.result-card:hover{ box-shadow:var(--shadow-md); transform:translateY(-2px) }
+[data-theme="light"] .result-card:hover,
+html:not([data-theme="dark"]) .result-card:hover{
+  box-shadow:var(--shadow-md), var(--ring-accent);
+  border-color:rgba(75,63,190,.32);
+  background:var(--acc-hover);
+}
+[data-theme="dark"] .result-card:hover{ border-color:rgba(139,128,248,.42) }
+
+/* ── Accent : badges plus contemporains (voile dégradé + poids), hue préservée ── */
+.card-badge{
+  font-weight:600; padding:3px 9px;
+  background-image:linear-gradient(180deg, rgba(255,255,255,.25), rgba(255,255,255,0));
+}
+[data-theme="dark"] .card-badge{
+  background-image:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,0));
+}
+
+/* ── Score ring & GUID plus affirmés ── */
+.score-ring .lbl{ font-size:var(--text-base); font-weight:700 }
+.score-ring{ filter:drop-shadow(0 2px 4px rgba(0,0,0,.18)) }
+.hero-guid{ font-size:1.24rem; letter-spacing:-.01em }
+.sb-head h1,.col-header-title{ letter-spacing:-.012em }
+
+/* ── Modernisation GLOBALE : échelle de rayons relevée. Tout le shell ET les
+      sous-apps (ML/PF) en héritent — nav, onglets, inputs, boutons, étapes,
+      collapsibles, dropdowns, modales deviennent plus ronds d'un seul coup. ── */
+:root{ --r-sm:7px; --r-md:10px; --r-lg:14px; --r-xl:18px; }
+
+/* Micro-interactions de survol sur les contrôles de la sidebar */
+.btn-export,.collapsible-btn{ transition:background .18s,color .15s,border-color .15s,box-shadow .2s,transform .15s var(--ease-out) }
+.btn-export:hover,.collapsible-btn:hover{ transform:translateY(-1px) }
+
+/* Étapes d'analyse un poil plus aérées + séparation footer plus douce */
+.p-step{ padding:6px 9px 6px 11px }
+footer{ box-shadow:0 -1px 0 rgba(0,0,0,.04) }
+
+/* Bloc de recherche : champ fin en capsule (extrémités demi-cercle) */
+.input-wrap input{ border-radius:var(--r-pill); padding:6px 16px }
+/* Boutons de recherche aussi fins que la barre */
+.btn-go,.btn-full-analysis{ padding-top:8px; padding-bottom:8px }
+
+/* ── Motion : apparition montante (fill backwards pour ne pas bloquer le
+      translate du hover une fois l'anim terminée) ── */
+@keyframes tpRise{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+.tenant-hero{ animation:tpRise .42s var(--ease-spring) backwards }
+.result-card{ animation:tpRise .4s var(--ease-spring) backwards }
+.empty-state{ animation:tpRise .45s var(--ease-spring) backwards }
+
+/* ── Respect de prefers-reduced-motion ── */
+@media (prefers-reduced-motion:reduce){
+  .tenant-hero,.result-card,.empty-state{ animation:none }
+  .result-card{ transition:border-color .2s, box-shadow .2s, background .2s }
+  .result-card:hover{ transform:none }
+}

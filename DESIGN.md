@@ -170,8 +170,9 @@ Services détectés (chips).
 | `--blue` | `#4B3FBE` | inchangé (accents `#8b80f8` / `#a5b4fc`) |
 | `--border` | `#e5e7eb` | `#4a4845` |
 
-- Rayons : `--r-xs` 4 px → `--r-sm` 6 → `--r-md` 8 → `--r-lg` 12 →
-  `--r-xl` 16 → `--r-pill` 999 px
+- Rayons (base) : `--r-xs` 4 px → `--r-sm` 6 → `--r-md` 8 → `--r-lg` 12 →
+  `--r-xl` 16 → `--r-pill` 999 px. **Relevés par la Modernisation 2026** (voir §10)
+  à `--r-sm` 7 / `--r-md` 10 / `--r-lg` 14 / `--r-xl` 18 → valeurs effectives.
 - Typo fluide via `clamp()` (`--text-xs` → `--text-xl`), police Inter ;
   GUID et URLs en mono (JetBrains Mono / Courier)
 - Sombre : `[data-theme="dark"]` sur `<html>` + fallback
@@ -193,3 +194,45 @@ Services détectés (chips).
   + `prefers-reduced-motion`)
 - Tout nouveau bouton sur fond violet/aurora doit reprendre la signature
   4 couches (fond dégradé, blur, triple ombre, bordure masquée `::before`)
+
+---
+
+## 10. Modernisation 2026
+
+Affinage **purement visuel** (aucune logique modifiée), regroupé dans un **bloc
+isolé** en fin de `tenantpulse.css` (`/* MODERNISATION 2026 */`) → retirable d'un
+seul tenant. Un bloc miroir existe en fin de `ML/mhaelle.css` pour l'alignement des
+boutons de la sous-app.
+
+### Tokens ajoutés
+- **Easing** : `--ease-spring: cubic-bezier(.16,1,.3,1)`, `--ease-out: cubic-bezier(.22,1,.36,1)`.
+- **Élévation multi-couches** : `--shadow-sm` / `--shadow-md` / `--shadow-lg`
+  (versions claires douces + versions sombres plus profondes via `[data-theme="dark"]`
+  et le fallback `@media (prefers-color-scheme:dark)`).
+- **Anneau d'accent** : `--ring-accent` (liseré violet pour le survol des cartes).
+
+### Rondeur & air
+- Échelle `--r-*` relevée (cf. §8) → tout le shell **et** les sous-apps ML/PF
+  deviennent plus ronds d'un seul levier (nav, onglets, input, boutons, étapes,
+  collapsibles, dropdowns, modales).
+- `.result-card` → `--r-xl` (18) ; `.tenant-hero` → 20 px ; `.card-icon-wrap` → `--r-lg`.
+- Plus d'air : `.center{gap:18px}`, `.card-row` padding 15/17, `.p-step` un poil plus aéré.
+
+### Accents & élévation
+- `.result-card` : ombre `--shadow-sm`, **survol** = `--shadow-md` + `--ring-accent`
+  + tinte `--acc-hover` + lift `translateY(-2px)`.
+- `.card-badge` : voile dégradé blanc (hue sémantique préservée) + poids 600.
+- `.score-ring` : léger `drop-shadow` pour le relief ; `.hero-guid` 1.24 rem, titres resserrés.
+
+### Bloc de recherche & boutons
+- **Champ de recherche** (`.input-wrap input`) : capsule `--r-pill`, fine (padding `6px 16px`).
+- **Boutons de recherche** (`.btn-go`, `.btn-full-analysis`) : padding vertical 11→8 px
+  pour s'aligner sur la finesse de la barre. `.btn-go` étant partagé, le bouton
+  « Analyser » de **Mhaelle** hérite automatiquement de cette finesse.
+- **Mhaelle** (`ML/mhaelle.css`) : `.btn-sec` / `.ml-sec` amincis (padding vertical 8→6 px).
+
+### Motion
+- `@keyframes tpRise` (fade + translateY 8→0) en `backwards` sur `.tenant-hero`,
+  `.result-card`, `.empty-state` (le `backwards` évite de bloquer le `translate` du
+  hover une fois l'anim terminée).
+- Garde `@media (prefers-reduced-motion:reduce)` : coupe animations + lift de survol.

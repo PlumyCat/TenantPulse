@@ -743,3 +743,11 @@ html:not([data-theme="dark"]) .card-details[open] > summary { background: #edf0f
 [data-theme="dark"] details summary:focus-visible {
   outline-color: #8b80f8;
 }
+
+/* ════════════════════════════════════════════════════════════
+   MODERNISATION 2026 — alignement de la finesse des boutons sur le shell.
+   Le bouton principal « Analyser » réutilise .btn-go (aminci côté tenantpulse.css).
+   Ici on amincit les boutons secondaires propres à Mhaelle. Bloc isolé.
+   ════════════════════════════════════════════════════════════ */
+.btn-sec { padding-top: 6px; padding-bottom: 6px; }
+.ml-sec  { padding: 6px 8px; }
