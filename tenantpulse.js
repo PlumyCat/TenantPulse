@@ -4350,7 +4350,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     const newPb = document.createElement('div'); newPb.className = 'pills-block';
     const pl = document.createElement('div'); pl.className = 'pills-label'; pl.textContent = 'Autres services détectés';
     const pr = document.createElement('div'); pr.className = 'pills-row collapsed';
-    (currentState.others || []).forEach(t => {
+    [...(currentState.others || [])].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).forEach(t => {
       const p = document.createElement('div'); p.className = 'pill ' + (t.on ? 'on' : 'off');
       if (t.imgSrc) { const img = document.createElement('img'); img.className='svc-logo'; img.src=t.imgSrc; img.alt=t.name; img.loading='lazy'; p.appendChild(img); p.appendChild(document.createTextNode(' ')); }
       p.appendChild(document.createTextNode(t.name + (t.on ? ' ✓' : '')));
@@ -4416,7 +4416,7 @@ async function checkFull() {
     const pb = document.createElement('div'); pb.className = 'pills-block';
     const pl = document.createElement('div'); pl.className = 'pills-label'; pl.textContent = 'Autres services détectés';
     const pr = document.createElement('div'); pr.className = 'pills-row collapsed';
-    currentState.others.forEach(t => {
+    [...currentState.others].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).forEach(t => {
       const p = document.createElement('div'); p.className = 'pill ' + (t.on ? 'on' : 'off');
       if (t.imgSrc) { const img = document.createElement('img'); img.className='svc-logo'; img.src=t.imgSrc; img.alt=t.name; img.loading='lazy'; p.appendChild(img); p.appendChild(document.createTextNode(' ')); }
       p.appendChild(document.createTextNode(t.name + (t.on ? ' ✓' : '')));
