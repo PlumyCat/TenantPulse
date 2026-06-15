@@ -73,36 +73,28 @@
   }
 
   /* ── Placeholders interactifs (<upn>, <port>…) ──────────────────
-     Les scripts/commandes d'une procédure conservent leurs paramètres :
-     le lecteur saisit ses propres valeurs, le rendu se met à jour en direct
-     et le bouton Copier copie la version remplie. */
+     Les scripts/commandes d'une procédure conservent leurs paramètres comme
+     dans le constructeur : on clique sur un jeton <param> pour le sélectionner,
+     puis on injecte une valeur depuis les blocs de la colonne de gauche
+     (mêmes jetons .pf-param-tag, même flux activeParamTag / injectIntoActive).
+     Le bouton Copier copie la version courante (valeurs injectées incluses). */
   const PARAM_TOKEN = /^<([a-zA-Z]+)>$/;
 
-  // Métadonnées (label, hint, exemple) des placeholders connus de PsForge.
-  function getBlocksMeta() {
-    const map = {};
-    const cfg = typeof window.pfGetBlocksConfig === 'function' ? window.pfGetBlocksConfig() : [];
-    if (Array.isArray(cfg)) {
-      for (const b of cfg) { if (b && b.id) map[b.id.toLowerCase()] = b; }
+  // Crée un jeton <param> ; délègue au builder pour un comportement identique.
+  function makeProcParamTag(part, key) {
+    if (typeof window.pfMakeParamTag === 'function') {
+      return window.pfMakeParamTag(part, key);
     }
-    return map;
+    // Repli défensif (psforge-app.js absent) : simple texte coloré, non interactif.
+    const span = document.createElement('span');
+    span.className = 'pf-param-tag';
+    span.textContent = part;
+    return span;
   }
 
   // Construit un bloc de code interactif et l'ajoute au conteneur.
   function appendScriptBlock(rawCode, lang, container) {
-    const meta  = getBlocksMeta();
     const lines = rawCode.split('\n');
-
-    // Repère les placeholders distincts (ordre d'apparition).
-    const order = [];
-    const seen  = {};
-    for (const part of rawCode.split(/(<[a-zA-Z]+>)/)) {
-      const m = part.match(PARAM_TOKEN);
-      if (m) {
-        const key = m[1].toLowerCase();
-        if (!seen[key]) { seen[key] = true; order.push(key); }
-      }
-    }
 
     const wrap = document.createElement('div');
     wrap.className = 'pf-proc-collapse-wrap pf-proc-pre-wrap';
@@ -129,36 +121,7 @@
     const body = document.createElement('div');
     body.className = 'pf-proc-block-body';
 
-    // Champs à remplir (un par placeholder distinct).
-    if (order.length) {
-      const fields = document.createElement('div');
-      fields.className = 'pf-proc-param-fields';
-      for (const key of order) {
-        const m = meta[key];
-        const field = document.createElement('label');
-        field.className = 'pf-proc-param-field';
-
-        const cap = document.createElement('span');
-        cap.className = 'pf-proc-param-field-lbl';
-        cap.textContent = m ? m.label : key;
-        if (m && m.hint) cap.title = m.hint;
-        field.appendChild(cap);
-
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.className = 'pf-proc-param-input';
-        inp.dataset.param = key;
-        inp.placeholder = m ? m.placeholder : '<' + key + '>';
-        if (m && m.inputmode) inp.inputMode = m.inputmode;
-        if (m && m.hint) inp.title = m.hint;
-        field.appendChild(inp);
-
-        fields.appendChild(field);
-      }
-      body.appendChild(fields);
-    }
-
-    // Code : placeholders rendus en jetons interactifs.
+    // Code : placeholders rendus en jetons interactifs (style builder).
     const pre  = document.createElement('pre');
     pre.className = 'pf-proc-pre';
     const code = document.createElement('code');
@@ -166,13 +129,7 @@
       lineText.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
         const m = part.match(PARAM_TOKEN);
         if (m) {
-          const key = m[1].toLowerCase();
-          const span = document.createElement('span');
-          span.className = 'pf-proc-param';
-          span.dataset.param = key;
-          span.dataset.ph = part;       // placeholder d'origine, ex. <upn>
-          span.textContent = part;
-          code.appendChild(span);
+          code.appendChild(makeProcParamTag(part, m[1].toLowerCase()));
         } else if (part) {
           code.appendChild(document.createTextNode(part));
         }
@@ -186,21 +143,7 @@
     container.appendChild(wrap);
   }
 
-  // Met à jour tous les jetons <param> d'un bloc avec la valeur saisie.
-  function applyParamValue(wrap, key, value) {
-    const spans = wrap.querySelectorAll('.pf-proc-param[data-param="' + key + '"]');
-    spans.forEach(function (span) {
-      if (value) {
-        span.textContent = value;
-        span.classList.add('filled');
-      } else {
-        span.textContent = span.dataset.ph;
-        span.classList.remove('filled');
-      }
-    });
-  }
-
-  // Copie le texte courant du bloc (valeurs remplies incluses).
+  // Copie le texte courant du bloc (valeurs injectées incluses).
   function copyScriptBlock(wrap, btn) {
     const code = wrap.querySelector('pre.pf-proc-pre code');
     if (!code) return;
@@ -839,12 +782,6 @@
     }
     if (e.target.id === 'pfProcCmdPickerInput') {
       renderCmdPickerList(e.target.value);
-      return;
-    }
-    // Remplissage d'un placeholder dans un bloc script/commande (vue détail)
-    if (e.target.classList && e.target.classList.contains('pf-proc-param-input')) {
-      const wrap = e.target.closest('.pf-proc-collapse-wrap');
-      if (wrap) applyParamValue(wrap, e.target.dataset.param, e.target.value.trim());
     }
   });
 

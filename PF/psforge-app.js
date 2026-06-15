@@ -4073,9 +4073,11 @@
   /* Accès à la liste de commandes pour les modules externes (psforge-process.js). */
   window.pfGetCommandList = function () { return PF_COMMANDS; };
 
-  /* Métadonnées des placeholders (<upn>, <port>…) pour les modules externes :
-     label, hint, exemple. Utilisé par psforge-process.js pour rendre les
-     scripts/commandes des procédures interactifs (champs à remplir par le lecteur). */
-  window.pfGetBlocksConfig = function () { return loadBlocksConfig(); };
+  /* Crée un jeton paramètre <upn>… identique à celui du constructeur :
+     cliquable (sélection), remplissable par injection depuis les blocs de la
+     colonne de gauche (même flux activeParamTag / injectIntoActive).
+     Utilisé par psforge-process.js pour rendre les scripts/commandes des
+     procédures interactifs — comportement « tout pareil » que le builder. */
+  window.pfMakeParamTag = function (paramText, key) { return makeParamTag(paramText, key); };
 
 })();
