@@ -4073,4 +4073,9 @@
   /* Accès à la liste de commandes pour les modules externes (psforge-process.js). */
   window.pfGetCommandList = function () { return PF_COMMANDS; };
 
+  /* Métadonnées des placeholders (<upn>, <port>…) pour les modules externes :
+     label, hint, exemple. Utilisé par psforge-process.js pour rendre les
+     scripts/commandes des procédures interactifs (champs à remplir par le lecteur). */
+  window.pfGetBlocksConfig = function () { return loadBlocksConfig(); };
+
 })();

@@ -72,6 +72,163 @@
     return btn;
   }
 
+  /* ── Placeholders interactifs (<upn>, <port>…) ──────────────────
+     Les scripts/commandes d'une procédure conservent leurs paramètres :
+     le lecteur saisit ses propres valeurs, le rendu se met à jour en direct
+     et le bouton Copier copie la version remplie. */
+  const PARAM_TOKEN = /^<([a-zA-Z]+)>$/;
+
+  // Métadonnées (label, hint, exemple) des placeholders connus de PsForge.
+  function getBlocksMeta() {
+    const map = {};
+    const cfg = typeof window.pfGetBlocksConfig === 'function' ? window.pfGetBlocksConfig() : [];
+    if (Array.isArray(cfg)) {
+      for (const b of cfg) { if (b && b.id) map[b.id.toLowerCase()] = b; }
+    }
+    return map;
+  }
+
+  // Construit un bloc de code interactif et l'ajoute au conteneur.
+  function appendScriptBlock(rawCode, lang, container) {
+    const meta  = getBlocksMeta();
+    const lines = rawCode.split('\n');
+
+    // Repère les placeholders distincts (ordre d'apparition).
+    const order = [];
+    const seen  = {};
+    for (const part of rawCode.split(/(<[a-zA-Z]+>)/)) {
+      const m = part.match(PARAM_TOKEN);
+      if (m) {
+        const key = m[1].toLowerCase();
+        if (!seen[key]) { seen[key] = true; order.push(key); }
+      }
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'pf-proc-collapse-wrap pf-proc-pre-wrap';
+
+    const head = document.createElement('div');
+    head.className = 'pf-proc-block-head';
+    const lbl = document.createElement('span');
+    lbl.className = 'pf-proc-block-lbl';
+    lbl.textContent = '</> ' + (lang || 'code');
+    head.appendChild(lbl);
+
+    const actions = document.createElement('div');
+    actions.className = 'pf-proc-block-actions';
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'pf-proc-copy-btn';
+    copyBtn.dataset.action = 'copy-script';
+    copyBtn.textContent = '⧉ Copier';
+    actions.appendChild(copyBtn);
+    actions.appendChild(makeCollapseBtn('Afficher', 'Masquer'));
+    head.appendChild(actions);
+    wrap.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'pf-proc-block-body';
+
+    // Champs à remplir (un par placeholder distinct).
+    if (order.length) {
+      const fields = document.createElement('div');
+      fields.className = 'pf-proc-param-fields';
+      for (const key of order) {
+        const m = meta[key];
+        const field = document.createElement('label');
+        field.className = 'pf-proc-param-field';
+
+        const cap = document.createElement('span');
+        cap.className = 'pf-proc-param-field-lbl';
+        cap.textContent = m ? m.label : key;
+        if (m && m.hint) cap.title = m.hint;
+        field.appendChild(cap);
+
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'pf-proc-param-input';
+        inp.dataset.param = key;
+        inp.placeholder = m ? m.placeholder : '<' + key + '>';
+        if (m && m.inputmode) inp.inputMode = m.inputmode;
+        if (m && m.hint) inp.title = m.hint;
+        field.appendChild(inp);
+
+        fields.appendChild(field);
+      }
+      body.appendChild(fields);
+    }
+
+    // Code : placeholders rendus en jetons interactifs.
+    const pre  = document.createElement('pre');
+    pre.className = 'pf-proc-pre';
+    const code = document.createElement('code');
+    lines.forEach(function (lineText, idx) {
+      lineText.split(/(<[a-zA-Z]+>)/).forEach(function (part) {
+        const m = part.match(PARAM_TOKEN);
+        if (m) {
+          const key = m[1].toLowerCase();
+          const span = document.createElement('span');
+          span.className = 'pf-proc-param';
+          span.dataset.param = key;
+          span.dataset.ph = part;       // placeholder d'origine, ex. <upn>
+          span.textContent = part;
+          code.appendChild(span);
+        } else if (part) {
+          code.appendChild(document.createTextNode(part));
+        }
+      });
+      if (idx < lines.length - 1) code.appendChild(document.createTextNode('\n'));
+    });
+    pre.appendChild(code);
+    body.appendChild(pre);
+
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+  }
+
+  // Met à jour tous les jetons <param> d'un bloc avec la valeur saisie.
+  function applyParamValue(wrap, key, value) {
+    const spans = wrap.querySelectorAll('.pf-proc-param[data-param="' + key + '"]');
+    spans.forEach(function (span) {
+      if (value) {
+        span.textContent = value;
+        span.classList.add('filled');
+      } else {
+        span.textContent = span.dataset.ph;
+        span.classList.remove('filled');
+      }
+    });
+  }
+
+  // Copie le texte courant du bloc (valeurs remplies incluses).
+  function copyScriptBlock(wrap, btn) {
+    const code = wrap.querySelector('pre.pf-proc-pre code');
+    if (!code) return;
+    const text = code.textContent;
+    const done = function () {
+      const original = '⧉ Copier';
+      btn.textContent = '✓ Copié';
+      setTimeout(function () { btn.textContent = original; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    } else {
+      fallbackCopy(text); done();
+    }
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'absolute';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
   function renderMarkdown(text, container) {
     container.replaceChildren();
     if (!text) return;
@@ -140,28 +297,10 @@
       // Bloc de code (```)
       if (line.startsWith('```')) {
         const lang = line.slice(3).trim() || 'code';
-        const wrap = document.createElement('div');
-        wrap.className = 'pf-proc-collapse-wrap pf-proc-pre-wrap';
-
-        const head = document.createElement('div');
-        head.className = 'pf-proc-block-head';
-        const lbl = document.createElement('span');
-        lbl.className = 'pf-proc-block-lbl';
-        lbl.textContent = '</> ' + lang;
-        head.appendChild(lbl);
-        head.appendChild(makeCollapseBtn('Afficher', 'Masquer'));
-        wrap.appendChild(head);
-
-        const pre  = document.createElement('pre');
-        pre.className = 'pf-proc-block-body';
-        const code = document.createElement('code');
         i++;
         const buf = [];
         while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i++; }
-        code.textContent = buf.join('\n');
-        pre.appendChild(code);
-        wrap.appendChild(pre);
-        container.appendChild(wrap);
+        appendScriptBlock(buf.join('\n'), lang, container);
         i++; continue;
       }
 
@@ -660,6 +799,14 @@
       return;
     }
 
+    // Copier un script/commande (avec les valeurs remplies)
+    const copyBtn = e.target.closest('[data-action="copy-script"]');
+    if (copyBtn) {
+      const wrap = copyBtn.closest('.pf-proc-collapse-wrap');
+      if (wrap) copyScriptBlock(wrap, copyBtn);
+      return;
+    }
+
     // Collapse/Expand bloc image ou code dans le détail
     const collapseBtn = e.target.closest('[data-action="collapse-block"]');
     if (collapseBtn) {
@@ -692,6 +839,12 @@
     }
     if (e.target.id === 'pfProcCmdPickerInput') {
       renderCmdPickerList(e.target.value);
+      return;
+    }
+    // Remplissage d'un placeholder dans un bloc script/commande (vue détail)
+    if (e.target.classList && e.target.classList.contains('pf-proc-param-input')) {
+      const wrap = e.target.closest('.pf-proc-collapse-wrap');
+      if (wrap) applyParamValue(wrap, e.target.dataset.param, e.target.value.trim());
     }
   });
 

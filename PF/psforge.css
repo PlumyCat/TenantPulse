@@ -3155,3 +3155,73 @@ html:not([data-theme="dark"]) .pf-proc-card {
 .pf-proc-block-body { border: none; margin: 0; border-radius: 0; }
 .pf-proc-figure.pf-proc-block-body { padding: 10px; margin: 0; }
 .pf-proc-content pre.pf-proc-block-body { border-radius: 0; margin: 0; border: none; }
+
+/* ── Actions d'en-tête de bloc (Copier + Masquer) ── */
+.pf-proc-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.pf-proc-copy-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.pf-proc-copy-btn:hover { background: var(--bg); color: var(--blue); border-color: var(--blue); }
+
+/* ── Scripts/commandes interactifs : champs à remplir par le lecteur ── */
+.pf-proc-param-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  background: var(--hover);
+  border-bottom: 1px dashed var(--border);
+}
+.pf-proc-param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 150px;
+}
+.pf-proc-param-field-lbl {
+  font-size: 11px;
+  color: var(--soft);
+  font-weight: 600;
+}
+.pf-proc-param-input {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+}
+.pf-proc-param-input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+.pf-proc-content pre.pf-proc-pre {
+  border-radius: 0;
+  margin: 0;
+  border: none;
+}
+/* Jeton placeholder dans le code rendu */
+.pf-proc-param {
+  color: #d97706;
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.pf-proc-param.filled {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+}
