@@ -1769,7 +1769,8 @@ html:not([data-theme="dark"]) .app-tab-icon[src*="PSB"] { filter: invert(1); }
    Fond sombre dans tous les états → icônes toujours blanches.
    ════════════════════════════════════════ */
 .pf-script-toggle-icon,
-.pf-manager-toggle-icon {
+.pf-manager-toggle-icon,
+.pf-proc-toggle-icon {
   width: 13px;
   height: 13px;
   vertical-align: middle;
