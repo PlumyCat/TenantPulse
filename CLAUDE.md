@@ -140,9 +140,11 @@ env vars). Auth context is injected by the SWA runtime as the `x-ms-client-princ
 
 **Role hierarchy** (ascending permissions):
 ```
-user < moderator < manager < admin
+user < tech < moderator < manager < admin
 ```
 `hasRole(ctx, 'moderator')` returns true for moderator, manager, and admin.
+`tech` grants write access to internal procedures (`POST /api/process`) without
+moderation powers; managers and admins can assign it via `/api/roles`.
 
 **API endpoints:**
 
