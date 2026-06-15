@@ -16,6 +16,9 @@
   let allProcs         = [];
   let currentProc      = null;
   let cmdPickerOpen    = false;
+  let scriptPickerOpen = false;
+  let procRole         = 'user';   // rôle de l'utilisateur (GET /api/me)
+  let procRoleLoaded   = false;
 
   /* ═══════════════════════════════════════════════════════════
      UTILITAIRES API
@@ -408,6 +411,7 @@
     document.getElementById('pfProcSaveStatus').textContent = '';
 
     closeCmdPicker();
+    closeScriptPicker();
     updateImgStrip();
     showSub('editor');
     document.getElementById('pfProcTitre').focus();
@@ -662,6 +666,123 @@
   }
 
   /* ═══════════════════════════════════════════════════════════
+     PICKER DE SCRIPTS ENREGISTRÉS
+     Liste les scripts (kind === 'script') sauvegardés par l'utilisateur ;
+     un clic insère le script dans un bloc ```powershell```.
+     ═══════════════════════════════════════════════════════════ */
+  function openScriptPicker() {
+    const picker = document.getElementById('pfProcScriptPicker');
+    if (!picker) return;
+    closeCmdPicker();
+    picker.hidden = false;
+    scriptPickerOpen = true;
+    renderScriptPickerList('');
+    const inp = document.getElementById('pfProcScriptPickerInput');
+    if (inp) { inp.value = ''; inp.focus(); }
+  }
+
+  function closeScriptPicker() {
+    const picker = document.getElementById('pfProcScriptPicker');
+    if (picker) picker.hidden = true;
+    scriptPickerOpen = false;
+  }
+
+  function renderScriptPickerList(filter) {
+    const list = document.getElementById('pfProcScriptPickerList');
+    if (!list) return;
+    list.replaceChildren();
+
+    const scripts = typeof window.pfGetScriptList === 'function' ? window.pfGetScriptList() : [];
+    const q = filter.trim().toLowerCase();
+    const filtered = q
+      ? scripts.filter(s =>
+          (s.name || '').toLowerCase().includes(q) ||
+          (s.cmd || '').toLowerCase().includes(q) ||
+          (s.desc || '').toLowerCase().includes(q))
+      : scripts;
+
+    // Option permanente : insérer un bloc PowerShell vide.
+    const blank = document.createElement('div');
+    blank.className = 'pf-proc-cmd-picker-item';
+    blank.dataset.action = 'insert-script-blank';
+    const blankLbl = document.createElement('span');
+    blankLbl.className = 'pf-proc-cmd-picker-grp';
+    blankLbl.textContent = 'Bloc vide';
+    blank.appendChild(blankLbl);
+    const blankCode = document.createElement('code');
+    blankCode.className = 'pf-proc-cmd-picker-cmd';
+    blankCode.textContent = '```powershell``` (saisie libre)';
+    blank.appendChild(blankCode);
+    list.appendChild(blank);
+
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'pf-proc-cmd-picker-empty';
+      empty.textContent = q ? 'Aucun script correspondant.' : 'Aucun script enregistré.';
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const s of filtered.slice(0, 40)) {
+      const item = document.createElement('div');
+      item.className = 'pf-proc-cmd-picker-item';
+      item.dataset.action = 'insert-script';
+      item.dataset.ts = String(s.ts);
+
+      const name = document.createElement('span');
+      name.className = 'pf-proc-cmd-picker-grp';
+      name.textContent = s.name || 'Script';
+      item.appendChild(name);
+
+      // Aperçu : 1re ligne du script (tronquée).
+      const firstLine = (s.cmd || '').split('\n')[0];
+      const preview = document.createElement('code');
+      preview.className = 'pf-proc-cmd-picker-cmd';
+      preview.textContent = firstLine.length > 60 ? firstLine.slice(0, 59) + '…' : firstLine;
+      item.appendChild(preview);
+
+      list.appendChild(item);
+    }
+  }
+
+  // Insère un script (texte multi-ligne) dans un bloc ```powershell```.
+  function insertScriptByTs(ts) {
+    const scripts = typeof window.pfGetScriptList === 'function' ? window.pfGetScriptList() : [];
+    const script  = scripts.find(s => String(s.ts) === String(ts));
+    if (!script) return;
+    const ta = document.getElementById('pfProcMd');
+    insertAtCursor(ta, '\n```powershell\n' + (script.cmd || '') + '\n```\n');
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     RÔLE & PERMISSIONS (GET /api/me)
+     Création/édition d'une procédure : tech+ ; suppression : moderator+.
+     ═══════════════════════════════════════════════════════════ */
+  const PROC_HIER = { user: 0, tech: 1, moderator: 2, manager: 3, admin: 4 };
+  function procHasRole(required) {
+    return (PROC_HIER[procRole] ?? 0) >= (PROC_HIER[required] ?? 0);
+  }
+
+  async function loadProcRole() {
+    if (procRoleLoaded) return;
+    const { ok, data } = await apiFetch('/api/me');
+    if (ok && data && data.role) procRole = data.role;
+    procRoleLoaded = true;
+    applyProcPermissions();
+  }
+
+  function applyProcPermissions() {
+    const canCreate = procHasRole('tech');        // tech, moderator, manager, admin
+    const canDelete = procHasRole('moderator');   // moderator, manager, admin
+    const newBtn  = document.getElementById('pfProcNew');
+    const editBtn = document.getElementById('pfProcEdit');
+    const delBtn  = document.getElementById('pfProcDelete');
+    if (newBtn)  newBtn.hidden  = !canCreate;
+    if (editBtn) editBtn.hidden = !canCreate;
+    if (delBtn)  delBtn.hidden  = !canDelete;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
      AFFICHAGE / MASQUAGE DE LA VUE PRINCIPALE
      ═══════════════════════════════════════════════════════════ */
   function showProcessView() {
@@ -672,6 +793,7 @@
     document.getElementById('pfProcToggle').classList.add('active');
     procViewActive = true;
     showSub('list');
+    loadProcRole();
     loadList();
   }
 
@@ -704,6 +826,7 @@
     if (e.target.closest('#pfProcSave'))           { saveProc(); return; }
     if (e.target.closest('#pfProcBackFromEditor')) {
       closeCmdPicker();
+      closeScriptPicker();
       if (currentProc && currentProc.id) openDetail(currentProc.id);
       else showSub('list');
       return;
@@ -720,10 +843,10 @@
     if (insertBtn) {
       const ta  = document.getElementById('pfProcMd');
       const act = insertBtn.dataset.insert;
-      if (act === 'script')     { insertAtCursor(ta, '\n```powershell\n\n```\n'); return; }
-      if (act === 'section')    { insertAtCursor(ta, '\n## Nouvelle section\n\n'); return; }
-      if (act === 'sep')        { insertAtCursor(ta, '\n---\n\n'); return; }
-      if (act === 'cmd-toggle') { cmdPickerOpen ? closeCmdPicker() : openCmdPicker(); return; }
+      if (act === 'section')       { insertAtCursor(ta, '\n## Nouvelle section\n\n'); return; }
+      if (act === 'sep')           { insertAtCursor(ta, '\n---\n\n'); return; }
+      if (act === 'cmd-toggle')    { cmdPickerOpen ? closeCmdPicker() : openCmdPicker(); return; }
+      if (act === 'script-toggle') { scriptPickerOpen ? closeScriptPicker() : openScriptPicker(); return; }
     }
 
     // Picker : clic sur une commande
@@ -732,6 +855,20 @@
       const ta  = document.getElementById('pfProcMd');
       insertAtCursor(ta, '\n```powershell\n' + cmdItem.dataset.cmd + '\n```\n');
       closeCmdPicker();
+      return;
+    }
+
+    // Picker : clic sur un script enregistré
+    const scriptItem = e.target.closest('[data-action="insert-script"]');
+    if (scriptItem) {
+      insertScriptByTs(scriptItem.dataset.ts);
+      closeScriptPicker();
+      return;
+    }
+    // Picker : bloc PowerShell vide
+    if (e.target.closest('[data-action="insert-script-blank"]')) {
+      insertAtCursor(document.getElementById('pfProcMd'), '\n```powershell\n\n```\n');
+      closeScriptPicker();
       return;
     }
 
@@ -764,9 +901,12 @@
       return;
     }
 
-    // Fermer le picker si clic ailleurs
+    // Fermer les pickers si clic ailleurs
     if (cmdPickerOpen && !e.target.closest('#pfProcCmdPicker') && !e.target.closest('[data-insert="cmd-toggle"]')) {
       closeCmdPicker();
+    }
+    if (scriptPickerOpen && !e.target.closest('#pfProcScriptPicker') && !e.target.closest('[data-insert="script-toggle"]')) {
+      closeScriptPicker();
     }
   });
 
@@ -782,6 +922,10 @@
     }
     if (e.target.id === 'pfProcCmdPickerInput') {
       renderCmdPickerList(e.target.value);
+      return;
+    }
+    if (e.target.id === 'pfProcScriptPickerInput') {
+      renderScriptPickerList(e.target.value);
     }
   });
 
@@ -794,7 +938,10 @@
   });
 
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && cmdPickerOpen) { closeCmdPicker(); }
+    if (e.key === 'Escape') {
+      if (cmdPickerOpen)    closeCmdPicker();
+      if (scriptPickerOpen) closeScriptPicker();
+    }
   });
 
 })();

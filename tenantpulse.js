@@ -1343,9 +1343,10 @@ let currentState = { domain:null, ms:null, dns:null, goog:null, health:null, oth
 // ══════════════════════════════════════════════════════════════════════════
 //  AUTHENTIFICATION & RÔLES
 //  État applicatif de l'utilisateur connecté, alimenté par GET /api/me.
-//  Hiérarchie : user < moderator < manager < admin
+//  Hiérarchie : user < tech < moderator < manager < admin
+//  (tech = accès en écriture aux procédures internes, sans pouvoirs de modération)
 // ══════════════════════════════════════════════════════════════════════════
-const ROLE_HIERARCHY = { user: 0, moderator: 1, manager: 2, admin: 3 };
+const ROLE_HIERARCHY = { user: 0, tech: 1, moderator: 2, manager: 3, admin: 4 };
 
 const TP_AUTH = {
   email: null,
@@ -1419,6 +1420,7 @@ function roleLabel(role) {
     case 'admin':     return 'Admin';
     case 'manager':   return 'Manager';
     case 'moderator': return 'Modérateur';
+    case 'tech':      return 'Tech';
     default:          return 'Utilisateur';
   }
 }
@@ -2880,7 +2882,7 @@ async function loadAdminUsers() {
   } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
 
   const all = Array.isArray(roles) ? roles : [];
-  const privileged = all.filter(u => ['admin', 'manager', 'moderator'].includes(u.role));
+  const privileged = all.filter(u => ['admin', 'manager', 'moderator', 'tech'].includes(u.role));
   const blocked = all.filter(u => u.role === 'blocked');
 
   pane.replaceChildren();
@@ -2970,6 +2972,8 @@ function buildAddRoleForm() {
   email.type = 'email'; email.className = 'admin-input'; email.placeholder = 'prenom.nom@contoso.com';
 
   const select = document.createElement('select'); select.className = 'admin-input';
+  const optTech = document.createElement('option'); optTech.value = 'tech'; optTech.textContent = 'Tech (procédures)';
+  select.appendChild(optTech);
   const optMod = document.createElement('option'); optMod.value = 'moderator'; optMod.textContent = 'Modérateur';
   select.appendChild(optMod);
   if (TP_AUTH.role === 'admin') {
@@ -3004,7 +3008,7 @@ function buildRoleRow(u) {
   const role = document.createElement('span'); role.className = 'admin-role-badge admin-role-' + u.role; role.textContent = roleLabel(u.role);
   row.appendChild(email); row.appendChild(role);
 
-  const canDelete = (TP_AUTH.role === 'admin') || (TP_AUTH.role === 'manager' && u.role === 'moderator');
+  const canDelete = (TP_AUTH.role === 'admin') || (TP_AUTH.role === 'manager' && ['moderator', 'tech'].includes(u.role));
   if (canDelete) {
     const del = document.createElement('button');
     del.type = 'button'; del.className = 'admin-btn admin-btn-small admin-btn-reject'; del.textContent = 'Retirer';

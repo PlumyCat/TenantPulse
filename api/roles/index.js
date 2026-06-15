@@ -10,8 +10,8 @@ const { rolesClient } = require("../shared/tableClient");
  * Ajoute ou modifie le rôle d'un utilisateur.
  * Body : { email, role }
  * Règles :
- *   - Manager  → peut ajouter/modifier uniquement des moderators
- *   - Admin    → peut ajouter/modifier managers et moderators
+ *   - Manager  → peut ajouter/modifier des tech et des moderators
+ *   - Admin    → peut ajouter/modifier tech, managers et moderators
  *
  * DELETE /api/roles
  * Supprime le rôle d'un utilisateur (repasse en "user").
@@ -54,8 +54,8 @@ module.exports = async function (context, req) {
       }
 
       results.sort((a, b) => {
-        const order = { admin: 0, manager: 1, moderator: 2 };
-        return (order[a.role] ?? 3) - (order[b.role] ?? 3);
+        const order = { admin: 0, manager: 1, moderator: 2, tech: 3 };
+        return (order[a.role] ?? 4) - (order[b.role] ?? 4);
       });
 
       context.res = {
@@ -106,7 +106,7 @@ module.exports = async function (context, req) {
         try {
           const existing = await rolesClient.getEntity("role", email.toLowerCase());
           const cur = String(existing.role || "").trim().toLowerCase();
-          if (["moderator", "manager", "admin"].includes(cur)) {
+          if (["tech", "moderator", "manager", "admin"].includes(cur)) {
             context.res = {
               status: 403,
               headers: { "Content-Type": "application/json" },
@@ -132,21 +132,21 @@ module.exports = async function (context, req) {
         return;
       }
 
-      if (!["moderator", "manager", "admin"].includes(role)) {
+      if (!["tech", "moderator", "manager", "admin"].includes(role)) {
         context.res = {
           status: 400,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Rôle invalide. Valeurs acceptées : moderator, manager, admin" })
+          body: JSON.stringify({ error: "Rôle invalide. Valeurs acceptées : tech, moderator, manager, admin" })
         };
         return;
       }
 
-      // Manager ne peut attribuer que le rôle moderator
-      if (auth.role === "manager" && role !== "moderator") {
+      // Manager ne peut attribuer que les rôles tech et moderator
+      if (auth.role === "manager" && !["tech", "moderator"].includes(role)) {
         context.res = {
           status: 403,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Un manager ne peut attribuer que le rôle moderator" })
+          body: JSON.stringify({ error: "Un manager ne peut attribuer que les rôles tech ou moderator" })
         };
         return;
       }
@@ -214,12 +214,12 @@ module.exports = async function (context, req) {
         return;
       }
 
-      // Manager ne peut supprimer que des moderators ou débloquer des utilisateurs
-      if (auth.role === "manager" && !["moderator", "blocked"].includes(targetEntity.role)) {
+      // Manager ne peut supprimer que des tech/moderators ou débloquer des utilisateurs
+      if (auth.role === "manager" && !["tech", "moderator", "blocked"].includes(targetEntity.role)) {
         context.res = {
           status: 403,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Un manager ne peut supprimer que des moderators ou débloquer des utilisateurs" })
+          body: JSON.stringify({ error: "Un manager ne peut supprimer que des tech/moderators ou débloquer des utilisateurs" })
         };
         return;
       }

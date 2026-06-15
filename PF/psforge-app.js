@@ -4080,4 +4080,11 @@
      procédures interactifs — comportement « tout pareil » que le builder. */
   window.pfMakeParamTag = function (paramText, key) { return makeParamTag(paramText, key); };
 
+  /* Liste des scripts enregistrés par l'utilisateur (kind === 'script'), pour le
+     picker « Script PS » de l'éditeur de procédures (psforge-process.js).
+     Chaque élément : { ts, name, cmd, desc, kind }. */
+  window.pfGetScriptList = function () {
+    return loadSaved().filter(function (e) { return e.kind === 'script'; });
+  };
+
 })();

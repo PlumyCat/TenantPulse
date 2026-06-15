@@ -302,10 +302,15 @@
             <!-- Panneau d'insertion (droite) -->
             <div class="pf-proc-insert-panel">
               <span class="pf-proc-insert-label">Insérer</span>
-              <button class="pf-proc-insert-btn" type="button" data-insert="script" title="Bloc PowerShell">▶ Script PS</button>
+              <button class="pf-proc-insert-btn pf-proc-insert-btn--script" type="button" data-insert="script-toggle" title="Insérer un script enregistré">▶ Script PS</button>
               <button class="pf-proc-insert-btn pf-proc-insert-btn--cmd" type="button" data-insert="cmd-toggle" title="Choisir une commande PsForge">⌨ Commande</button>
               <button class="pf-proc-insert-btn" type="button" data-insert="section" title="Nouvelle section">§ Section</button>
               <button class="pf-proc-insert-btn" type="button" data-insert="sep" title="Séparateur horizontal">— Séparateur</button>
+              <!-- Picker de scripts enregistrés -->
+              <div class="pf-proc-cmd-picker" id="pfProcScriptPicker" hidden>
+                <input class="pf-proc-cmd-picker-input" type="search" id="pfProcScriptPickerInput" placeholder="Filtrer les scripts…" autocomplete="off" spellcheck="false">
+                <div class="pf-proc-cmd-picker-list" id="pfProcScriptPickerList"></div>
+              </div>
               <!-- Picker de commandes -->
               <div class="pf-proc-cmd-picker" id="pfProcCmdPicker" hidden>
                 <input class="pf-proc-cmd-picker-input" type="search" id="pfProcCmdPickerInput" placeholder="Filtrer les commandes…" autocomplete="off" spellcheck="false">

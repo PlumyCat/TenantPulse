@@ -30,12 +30,12 @@ function getClientPrincipal(req) {
 function normalizeRole(entity) {
   let r = entity.role ?? entity.Role ?? entity.ROLE ?? "";
   r = String(r).trim().toLowerCase();
-  return ["admin", "manager", "moderator"].includes(r) ? r : null;
+  return ["admin", "manager", "moderator", "tech"].includes(r) ? r : null;
 }
 
 /**
  * Retourne le rôle applicatif de l'utilisateur :
- * "admin" | "manager" | "moderator" | "user"
+ * "admin" | "manager" | "moderator" | "tech" | "user"
  * Cherche dans la table Roles via l'email.
  *
  * Robustesse : insensible à la casse sur l'email (RowKey), la valeur du rôle
@@ -121,10 +121,11 @@ async function getAuthContext(req) {
 
 /**
  * Vérifie que l'utilisateur a au moins le rôle requis.
- * Hiérarchie : admin > manager > moderator > user
+ * Hiérarchie : admin > manager > moderator > tech > user
+ * (tech = accès en écriture aux procédures internes, sans pouvoirs de modération)
  */
 function hasRole(userRole, requiredRole) {
-  const hierarchy = { user: 0, moderator: 1, manager: 2, admin: 3 };
+  const hierarchy = { user: 0, tech: 1, moderator: 2, manager: 3, admin: 4 };
   return (hierarchy[userRole] ?? 0) >= (hierarchy[requiredRole] ?? 0);
 }
 

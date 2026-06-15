@@ -42,7 +42,7 @@ async function readContent(id) {
  *   Body : { id?, titre, categorie, descriptionCourte, contentMarkdown }
  *   - id absent → création ; id présent → modification (404 si introuvable).
  *   - écrit l'entrée légère en Table Storage + le markdown en Blob Storage.
- *   Accessible : tous les utilisateurs connectés (base de connaissance collaborative).
+ *   Accessible : tech minimum (tech, moderator, manager, admin).
  *
  * DELETE /api/process?id=<uuid>  (ou body { id })
  *   Supprime l'entrée Table + le markdown + toutes les images du process.
@@ -100,6 +100,9 @@ module.exports = async function (context, req) {
 
     // ── POST (création / modification) ─────────────────────────────────────────
     if (req.method === "POST") {
+      if (!hasRole(auth.role, "tech")) {
+        return void (context.res = json(403, { error: "Accès refusé — rôle tech ou supérieur requis" }));
+      }
       const body = req.body || {};
       const id = (body.id || "").trim();
       const titre = typeof body.titre === "string" ? body.titre.trim() : "";
