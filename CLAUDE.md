@@ -152,7 +152,7 @@ moderation powers; managers and admins can assign it via `/api/roles`.
 |---|---|---|---|
 | GET | `/api/me` | any auth | `{email, name, role, blocked}` |
 | GET | `/api/classification?tenantId=` | any auth | Approved tags + pending count + lock status |
-| GET | `/api/classification?all=1` | manager | All assigned tags across tenants |
+| GET | `/api/classification?all=1` | any auth | Read-only directory: all assigned tags across tenants |
 | DELETE | `/api/classification` | moderator | Remove an approved tag |
 | POST | `/api/request` | any auth | Propose a tag (`action:"add"`) **or request its removal** (`action:"remove"`) |
 | GET | `/api/requests` | moderator | List pending proposals (each carries `action`: `add`/`remove`) |

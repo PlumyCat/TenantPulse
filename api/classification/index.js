@@ -11,7 +11,7 @@ function json(status, body) {
  * /api/classification
  *
  * GET  ?tenantId=xxx           → tags validés + en attente + verrou pour un tenant
- * GET  ?all=1                  → tous les tags assignés (manager+) : recherche/consultation
+ * GET  ?all=1                  → tous les tags assignés (annuaire, lecture seule) : tout utilisateur authentifié
  * DELETE { tenantId, type }    → supprime un tag validé (modérateur+)
  */
 module.exports = async function (context, req) {
@@ -43,10 +43,10 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // ── GET ?all=1 : tous les tags assignés (manager+) ──
+    // ── GET ?all=1 : tous les tags assignés (annuaire, lecture seule) ──
     if (req.query.all === "1") {
-      // Réservé aux managers et admins : vue globale de tous les tenants
-      if (!hasRole(auth.role, "manager")) { context.res = json(403, { error: "Accès refusé — manager minimum requis" }); return; }
+      // Annuaire des tenants : consultable par tout utilisateur authentifié
+      // (lecture seule ; mêmes données que le GET par tenant, déjà ouvert à tous).
       const items = [];
       for await (const e of classificationsClient.listEntities()) {
         items.push({
