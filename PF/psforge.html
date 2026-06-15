@@ -291,10 +291,37 @@
           <label class="pf-modal-label" for="pfProcDesc">Description courte <span class="pf-manager-optional">(utilisée pour la recherche intelligente)</span></label>
           <input class="pf-modal-input" type="text" id="pfProcDesc" placeholder="Résumé en 1–2 phrases du cas d'usage…" autocomplete="off" spellcheck="false" maxlength="300">
         </div>
+        <!-- Zone contenu : textarea + panneau d'insertion -->
         <div class="pf-manager-field pf-proc-md-field">
-          <label class="pf-modal-label" for="pfProcMd">Contenu <span class="pf-manager-optional">(Markdown)</span></label>
-          <textarea class="pf-modal-input pf-proc-md-textarea" id="pfProcMd" placeholder="# Titre&#10;&#10;## Étape 1&#10;Description de l'étape…" spellcheck="false"></textarea>
+          <label class="pf-modal-label">Contenu <span class="pf-manager-optional">(Markdown)</span></label>
+          <div class="pf-proc-content-split">
+
+            <!-- Textarea -->
+            <textarea class="pf-modal-input pf-proc-md-textarea" id="pfProcMd" placeholder="# Titre&#10;&#10;## Étape 1&#10;Description de l'étape…" spellcheck="false"></textarea>
+
+            <!-- Panneau d'insertion (droite) -->
+            <div class="pf-proc-insert-panel">
+              <span class="pf-proc-insert-label">Insérer</span>
+              <button class="pf-proc-insert-btn" type="button" data-insert="script" title="Bloc PowerShell">▶ Script PS</button>
+              <button class="pf-proc-insert-btn pf-proc-insert-btn--cmd" type="button" data-insert="cmd-toggle" title="Choisir une commande PsForge">⌨ Commande</button>
+              <button class="pf-proc-insert-btn" type="button" data-insert="section" title="Nouvelle section">§ Section</button>
+              <button class="pf-proc-insert-btn" type="button" data-insert="sep" title="Séparateur horizontal">— Séparateur</button>
+              <!-- Picker de commandes -->
+              <div class="pf-proc-cmd-picker" id="pfProcCmdPicker" hidden>
+                <input class="pf-proc-cmd-picker-input" type="search" id="pfProcCmdPickerInput" placeholder="Filtrer les commandes…" autocomplete="off" spellcheck="false">
+                <div class="pf-proc-cmd-picker-list" id="pfProcCmdPickerList"></div>
+              </div>
+            </div>
+
+          </div>
         </div>
+
+        <!-- Prévisualisation des images attachées -->
+        <div class="pf-proc-img-strip" id="pfProcImgStrip" hidden>
+          <span class="pf-proc-img-strip-label">Images :</span>
+          <div class="pf-proc-img-chips" id="pfProcImgChips"></div>
+        </div>
+
         <div class="pf-proc-img-row">
           <button class="pf-mgr-io-btn" type="button" id="pfProcImgBtn">+ Image</button>
           <span class="pf-proc-img-status" id="pfProcImgStatus"></span>

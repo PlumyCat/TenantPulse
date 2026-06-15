@@ -1,8 +1,8 @@
 /* ──────────────────────────────────────────────────────────────
    PsForge — Module Process internes
-   Appels vers /api/process et /api/process-image (même origine SWA).
-   CSP-compliant : connect-src 'self', img-src 'self', pas d'innerHTML
-   sur données réseau, DOM construit exclusivement via createElement.
+   Appels /api/process et /api/process-image (même origine SWA).
+   CSP-compliant : connect-src 'self', img-src 'self'.
+   DOM exclusivement via createElement — jamais innerHTML réseau.
    ────────────────────────────────────────────────────────────── */
 
 (function () {
@@ -11,22 +11,34 @@
   /* ═══════════════════════════════════════════════════════════
      ÉTAT
      ═══════════════════════════════════════════════════════════ */
-  let procViewActive = false;
-  let procSubView    = 'list';   // 'list' | 'detail' | 'editor'
-  let allProcs       = [];       // cache liste légère
-  let currentProc    = null;     // objet process courant (détail/éditeur)
+  let procViewActive   = false;
+  let procSubView      = 'list';
+  let allProcs         = [];
+  let currentProc      = null;
+  let cmdPickerOpen    = false;
 
   /* ═══════════════════════════════════════════════════════════
      UTILITAIRES API
      ═══════════════════════════════════════════════════════════ */
   async function apiFetch(url, opts) {
-    const res = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
-    const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, data };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res  = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal }, opts));
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    } catch (e) {
+      return { ok: false, status: 0, data: { error: e.name === 'AbortError' ? 'Délai dépassé.' : 'Erreur réseau.' } };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════
-     RENDU MARKDOWN (safe — jamais d'innerHTML sur données réseau)
+     RENDU MARKDOWN
+     Safe : tout le texte via textContent / createTextNode.
+     Images : uniquement les URLs /api/process-image (même origine).
+     Blocs image et code : collapsibles (bouton Masquer/Afficher).
      ═══════════════════════════════════════════════════════════ */
   function renderInline(text, parent) {
     const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/);
@@ -49,11 +61,23 @@
     }
   }
 
+  function makeCollapseBtn(labelShow, labelHide) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pf-proc-collapse-btn';
+    btn.dataset.action = 'collapse-block';
+    btn.dataset.labelShow = labelShow;
+    btn.dataset.labelHide = labelHide;
+    btn.textContent = labelHide;
+    return btn;
+  }
+
   function renderMarkdown(text, container) {
     container.replaceChildren();
     if (!text) return;
     const lines = text.split('\n');
     let i = 0;
+
     while (i < lines.length) {
       const line = lines[i];
 
@@ -71,8 +95,20 @@
       // Image — seules les URLs /api/process-image sont autorisées
       const imgM = line.match(/^!\[(.*?)\]\((\/api\/process-image\?[^)]+)\)\s*$/);
       if (imgM) {
+        const wrap = document.createElement('div');
+        wrap.className = 'pf-proc-collapse-wrap';
+
+        const head = document.createElement('div');
+        head.className = 'pf-proc-block-head';
+        const lbl = document.createElement('span');
+        lbl.className = 'pf-proc-block-lbl';
+        lbl.textContent = '🖼 ' + (imgM[1] || 'Image');
+        head.appendChild(lbl);
+        head.appendChild(makeCollapseBtn('Afficher', 'Masquer'));
+        wrap.appendChild(head);
+
         const fig = document.createElement('figure');
-        fig.className = 'pf-proc-figure';
+        fig.className = 'pf-proc-figure pf-proc-block-body';
         const img = document.createElement('img');
         img.src = imgM[2];
         img.alt = imgM[1];
@@ -83,7 +119,8 @@
           cap.textContent = imgM[1];
           fig.appendChild(cap);
         }
-        container.appendChild(fig);
+        wrap.appendChild(fig);
+        container.appendChild(wrap);
         i++; continue;
       }
 
@@ -102,14 +139,29 @@
 
       // Bloc de code (```)
       if (line.startsWith('```')) {
+        const lang = line.slice(3).trim() || 'code';
+        const wrap = document.createElement('div');
+        wrap.className = 'pf-proc-collapse-wrap pf-proc-pre-wrap';
+
+        const head = document.createElement('div');
+        head.className = 'pf-proc-block-head';
+        const lbl = document.createElement('span');
+        lbl.className = 'pf-proc-block-lbl';
+        lbl.textContent = '</> ' + lang;
+        head.appendChild(lbl);
+        head.appendChild(makeCollapseBtn('Afficher', 'Masquer'));
+        wrap.appendChild(head);
+
         const pre  = document.createElement('pre');
+        pre.className = 'pf-proc-block-body';
         const code = document.createElement('code');
         i++;
         const buf = [];
         while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i++; }
         code.textContent = buf.join('\n');
         pre.appendChild(code);
-        container.appendChild(pre);
+        wrap.appendChild(pre);
+        container.appendChild(wrap);
         i++; continue;
       }
 
@@ -167,12 +219,12 @@
   }
 
   function renderCards(filter) {
-    const cards = document.getElementById('pfProcCards');
+    const cards   = document.getElementById('pfProcCards');
     const loading = document.getElementById('pfProcLoading');
     cards.replaceChildren();
     if (loading) { loading.hidden = true; cards.appendChild(loading); }
 
-    const q = filter.trim().toLowerCase();
+    const q     = filter.trim().toLowerCase();
     const items = q
       ? allProcs.filter(p =>
           p.titre.toLowerCase().includes(q) ||
@@ -183,7 +235,9 @@
     if (!items.length) {
       const empty = document.createElement('div');
       empty.className = 'pf-proc-empty';
-      empty.textContent = q ? 'Aucune procédure correspondante.' : 'Aucune procédure. Cliquez sur « + Nouvelle procédure » pour commencer.';
+      empty.textContent = q
+        ? 'Aucune procédure correspondante.'
+        : "Aucune procédure. Cliquez sur « + Nouvelle procédure » pour commencer.";
       cards.appendChild(empty);
       return;
     }
@@ -195,12 +249,10 @@
 
       const header = document.createElement('div');
       header.className = 'pf-proc-card-header';
-
       const titre = document.createElement('span');
       titre.className = 'pf-proc-card-titre';
       titre.textContent = proc.titre;
       header.appendChild(titre);
-
       if (proc.categorie) {
         const cat = document.createElement('span');
         cat.className = 'pf-proc-card-cat';
@@ -222,7 +274,6 @@
         ? 'Modifié le ' + new Date(proc.updatedAt).toLocaleDateString('fr-FR')
         : '';
       card.appendChild(footer);
-
       cards.appendChild(card);
     }
   }
@@ -236,15 +287,11 @@
     showSub('detail');
 
     const { ok, data } = await apiFetch('/api/process?id=' + encodeURIComponent(id));
-    if (!ok) {
-      showSub('list');
-      return;
-    }
+    if (!ok) { showSub('list'); return; }
     currentProc = data;
 
     if (titleEl) titleEl.textContent = data.titre;
 
-    // Méta
     const meta = document.getElementById('pfProcMeta');
     meta.replaceChildren();
     if (data.categorie) {
@@ -260,7 +307,6 @@
       meta.appendChild(upd);
     }
 
-    // Contenu markdown
     renderMarkdown(data.contentMarkdown || '', document.getElementById('pfProcContent'));
   }
 
@@ -272,20 +318,22 @@
     const titleEl = document.getElementById('pfProcEditorTitle');
     if (titleEl) titleEl.textContent = proc ? 'Modifier la procédure' : 'Nouvelle procédure';
 
-    document.getElementById('pfProcTitre').value     = proc ? proc.titre             : '';
-    document.getElementById('pfProcCategorie').value = proc ? (proc.categorie || '')  : '';
+    document.getElementById('pfProcTitre').value     = proc ? proc.titre                  : '';
+    document.getElementById('pfProcCategorie').value = proc ? (proc.categorie || '')       : '';
     document.getElementById('pfProcDesc').value      = proc ? (proc.descriptionCourte || '') : '';
-    document.getElementById('pfProcMd').value        = proc ? (proc.contentMarkdown || '')   : '';
+    document.getElementById('pfProcMd').value        = proc ? (proc.contentMarkdown || '')  : '';
     document.getElementById('pfProcImgStatus').textContent = '';
     document.getElementById('pfProcSaveStatus').textContent = '';
 
+    closeCmdPicker();
+    updateImgStrip();
     showSub('editor');
     document.getElementById('pfProcTitre').focus();
   }
 
   async function saveProc() {
-    const titre   = document.getElementById('pfProcTitre').value.trim();
-    const status  = document.getElementById('pfProcSaveStatus');
+    const titre  = document.getElementById('pfProcTitre').value.trim();
+    const status = document.getElementById('pfProcSaveStatus');
 
     if (!titre) {
       status.textContent = '⚠ Le titre est obligatoire.';
@@ -305,23 +353,16 @@
     };
     if (currentProc && currentProc.id) body.id = currentProc.id;
 
-    const { ok, data } = await apiFetch('/api/process', {
-      method: 'POST',
-      body: JSON.stringify(body)
-    });
+    const { ok, data } = await apiFetch('/api/process', { method: 'POST', body: JSON.stringify(body) });
 
     if (!ok) {
-      status.textContent = '✗ ' + (data.error || "Erreur lors de l’enregistrement.");
+      status.textContent = '✗ ' + (data.error || "Erreur lors de l'enregistrement.");
       status.className = 'pf-proc-save-status pf-proc-status--error';
       return;
     }
 
-    // Met à jour currentProc avec le nouvel id pour l'upload d'images
     currentProc = Object.assign({}, body, { id: data.id });
-
-    // Rafraîchit la liste en cache
     await loadListSilent();
-
     await openDetail(data.id);
   }
 
@@ -338,13 +379,81 @@
     if (!confirm('Supprimer la procédure « ' + currentProc.titre + ' » ? Cette action est irréversible.')) return;
 
     const { ok, data } = await apiFetch('/api/process?id=' + encodeURIComponent(currentProc.id), { method: 'DELETE' });
-    if (!ok) {
-      alert('Erreur : ' + (data.error || 'suppression impossible.'));
-      return;
-    }
+    if (!ok) { alert('Erreur : ' + (data.error || 'suppression impossible.')); return; }
+
     currentProc = null;
     await loadList();
     showSub('list');
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     BANDE DE PRÉVISUALISATION DES IMAGES
+     ═══════════════════════════════════════════════════════════ */
+  const IMG_RE = /!\[([^\]]*)\]\((\/api\/process-image\?[^)]+)\)/g;
+
+  function truncateName(name, max) {
+    if (name.length <= max) return name;
+    return name.slice(0, max - 1) + '…';
+  }
+
+  function updateImgStrip() {
+    const ta    = document.getElementById('pfProcMd');
+    const strip = document.getElementById('pfProcImgStrip');
+    const chips = document.getElementById('pfProcImgChips');
+    if (!ta || !strip || !chips) return;
+
+    const text    = ta.value;
+    const matches = [];
+    let m;
+    IMG_RE.lastIndex = 0;
+    while ((m = IMG_RE.exec(text)) !== null) {
+      matches.push({ alt: m[1], url: m[2], full: m[0] });
+    }
+
+    chips.replaceChildren();
+    strip.hidden = matches.length === 0;
+
+    for (const img of matches) {
+      // Extrait le nom de fichier depuis ?name=xxx
+      const nameParam = new URLSearchParams(img.url.split('?')[1] || '').get('name') || img.alt || 'image';
+      const chip = document.createElement('div');
+      chip.className = 'pf-proc-img-chip';
+
+      const thumb = document.createElement('img');
+      thumb.src = img.url;
+      thumb.alt = img.alt;
+      thumb.className = 'pf-proc-img-chip-thumb';
+      chip.appendChild(thumb);
+
+      const name = document.createElement('span');
+      name.className = 'pf-proc-img-chip-name';
+      name.textContent = truncateName(nameParam, 22);
+      name.title = nameParam;
+      chip.appendChild(name);
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'pf-proc-img-chip-del';
+      del.textContent = '×';
+      del.title = 'Retirer cette image du contenu';
+      del.dataset.action = 'remove-img';
+      del.dataset.imgFull = img.full;
+      chip.appendChild(del);
+
+      chips.appendChild(chip);
+    }
+  }
+
+  function removeImgFromMarkdown(fullMatch) {
+    const ta = document.getElementById('pfProcMd');
+    if (!ta) return;
+    // Supprime la ligne contenant le snippet (et les éventuelles lignes vides autour)
+    ta.value = ta.value
+      .split('\n')
+      .filter(line => !line.includes(fullMatch))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n');
+    updateImgStrip();
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -358,9 +467,8 @@
       status.className = 'pf-proc-img-status pf-proc-status--error';
       return;
     }
-
-    if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) {
-      status.textContent = '⚠ Format non supporté (png, jpg, gif, webp uniquement).';
+    if (!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type)) {
+      status.textContent = '⚠ Format non supporté (png, jpg, gif, webp).';
       status.className = 'pf-proc-img-status pf-proc-status--error';
       return;
     }
@@ -375,7 +483,6 @@
 
     const reader = new FileReader();
     reader.onload = async function (e) {
-      // dataURL = "data:<type>;base64,<data>" → on extrait la partie base64
       const dataBase64 = e.target.result.split(',')[1];
       const { ok, data } = await apiFetch('/api/process-image', {
         method: 'POST',
@@ -386,9 +493,8 @@
         status.className = 'pf-proc-img-status pf-proc-status--error';
         return;
       }
-      // Insère le snippet markdown dans le textarea à la position du curseur
-      const ta  = document.getElementById('pfProcMd');
-      const alt = file.name.replace(/\.[^.]+$/, '');
+      const ta    = document.getElementById('pfProcMd');
+      const alt   = file.name.replace(/\.[^.]+$/, '');
       const snippet = '\n![' + alt + '](' + data.url + ')\n';
       const start = ta.selectionStart;
       const end   = ta.selectionEnd;
@@ -397,8 +503,80 @@
       ta.focus();
       status.textContent = '✓ Image insérée.';
       status.className = 'pf-proc-img-status pf-proc-status--ok';
+      updateImgStrip();
     };
     reader.readAsDataURL(file);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     INSERTION DANS LE TEXTAREA
+     ═══════════════════════════════════════════════════════════ */
+  function insertAtCursor(ta, text) {
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+    ta.selectionStart = ta.selectionEnd = start + text.length;
+    ta.focus();
+    updateImgStrip();
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     PICKER DE COMMANDES PSFORGE
+     ═══════════════════════════════════════════════════════════ */
+  function openCmdPicker() {
+    const picker = document.getElementById('pfProcCmdPicker');
+    if (!picker) return;
+    picker.hidden = false;
+    cmdPickerOpen = true;
+    renderCmdPickerList('');
+    const inp = document.getElementById('pfProcCmdPickerInput');
+    if (inp) { inp.value = ''; inp.focus(); }
+  }
+
+  function closeCmdPicker() {
+    const picker = document.getElementById('pfProcCmdPicker');
+    if (picker) picker.hidden = true;
+    cmdPickerOpen = false;
+  }
+
+  function renderCmdPickerList(filter) {
+    const list = document.getElementById('pfProcCmdPickerList');
+    if (!list) return;
+    list.replaceChildren();
+
+    const commands = typeof window.pfGetCommandList === 'function' ? window.pfGetCommandList() : [];
+    const q = filter.trim().toLowerCase();
+    const filtered = q
+      ? commands.filter(c => c.cmd.toLowerCase().includes(q) || (c.g || '').toLowerCase().includes(q))
+      : commands;
+    const shown = filtered.slice(0, 40);
+
+    if (!shown.length) {
+      const empty = document.createElement('div');
+      empty.className = 'pf-proc-cmd-picker-empty';
+      empty.textContent = 'Aucune commande trouvée.';
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const c of shown) {
+      const item = document.createElement('div');
+      item.className = 'pf-proc-cmd-picker-item';
+      item.dataset.action = 'insert-cmd';
+      item.dataset.cmd = c.cmd;
+
+      const grp = document.createElement('span');
+      grp.className = 'pf-proc-cmd-picker-grp';
+      grp.textContent = c.g || '';
+      item.appendChild(grp);
+
+      const cmd = document.createElement('code');
+      cmd.className = 'pf-proc-cmd-picker-cmd';
+      cmd.textContent = c.cmd;
+      item.appendChild(cmd);
+
+      list.appendChild(item);
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -422,7 +600,6 @@
     procViewActive = false;
   }
 
-  // Exposé globalement pour psforge-app.js
   window.pfProcToggleView = function () {
     procViewActive ? hideProcessView() : showProcessView();
   };
@@ -433,26 +610,73 @@
   document.addEventListener('click', function (e) {
     if (!procViewActive) return;
 
-    // Clic sur une card
+    // Card → détail
     const card = e.target.closest('.pf-proc-card');
     if (card && card.dataset.id) { openDetail(card.dataset.id); return; }
 
     // Boutons toolbar
-    if (e.target.closest('#pfProcNew'))             { openEditor(null); return; }
-    if (e.target.closest('#pfProcBackToList'))       { showSub('list'); currentProc = null; return; }
+    if (e.target.closest('#pfProcNew'))           { openEditor(null); return; }
+    if (e.target.closest('#pfProcBackToList'))     { showSub('list'); currentProc = null; return; }
     if (e.target.closest('#pfProcEdit') && currentProc) { openEditor(currentProc); return; }
-    if (e.target.closest('#pfProcDelete'))           { deleteProc(); return; }
-    if (e.target.closest('#pfProcSave'))             { saveProc(); return; }
+    if (e.target.closest('#pfProcDelete'))         { deleteProc(); return; }
+    if (e.target.closest('#pfProcSave'))           { saveProc(); return; }
     if (e.target.closest('#pfProcBackFromEditor')) {
+      closeCmdPicker();
       if (currentProc && currentProc.id) openDetail(currentProc.id);
       else showSub('list');
       return;
     }
 
-    // Bouton image
+    // Upload image
     if (e.target.closest('#pfProcImgBtn')) {
       document.getElementById('pfProcImgFile').click();
       return;
+    }
+
+    // Boutons d'insertion
+    const insertBtn = e.target.closest('[data-insert]');
+    if (insertBtn) {
+      const ta  = document.getElementById('pfProcMd');
+      const act = insertBtn.dataset.insert;
+      if (act === 'script')     { insertAtCursor(ta, '\n```powershell\n\n```\n'); return; }
+      if (act === 'section')    { insertAtCursor(ta, '\n## Nouvelle section\n\n'); return; }
+      if (act === 'sep')        { insertAtCursor(ta, '\n---\n\n'); return; }
+      if (act === 'cmd-toggle') { cmdPickerOpen ? closeCmdPicker() : openCmdPicker(); return; }
+    }
+
+    // Picker : clic sur une commande
+    const cmdItem = e.target.closest('[data-action="insert-cmd"]');
+    if (cmdItem) {
+      const ta  = document.getElementById('pfProcMd');
+      insertAtCursor(ta, '\n```powershell\n' + cmdItem.dataset.cmd + '\n```\n');
+      closeCmdPicker();
+      return;
+    }
+
+    // Supprimer image depuis la bande de prévisualisation
+    const delBtn = e.target.closest('[data-action="remove-img"]');
+    if (delBtn) {
+      removeImgFromMarkdown(delBtn.dataset.imgFull);
+      return;
+    }
+
+    // Collapse/Expand bloc image ou code dans le détail
+    const collapseBtn = e.target.closest('[data-action="collapse-block"]');
+    if (collapseBtn) {
+      const wrap    = collapseBtn.closest('.pf-proc-collapse-wrap');
+      const body    = wrap && wrap.querySelector('.pf-proc-block-body');
+      if (!wrap || !body) return;
+      const collapsed = body.hidden;
+      body.hidden = !collapsed;
+      collapseBtn.textContent = collapsed
+        ? collapseBtn.dataset.labelHide
+        : collapseBtn.dataset.labelShow;
+      return;
+    }
+
+    // Fermer le picker si clic ailleurs
+    if (cmdPickerOpen && !e.target.closest('#pfProcCmdPicker') && !e.target.closest('[data-insert="cmd-toggle"]')) {
+      closeCmdPicker();
     }
   });
 
@@ -460,6 +684,14 @@
     if (!procViewActive) return;
     if (e.target.id === 'pfProcSearch') {
       renderCards(e.target.value);
+      return;
+    }
+    if (e.target.id === 'pfProcMd') {
+      updateImgStrip();
+      return;
+    }
+    if (e.target.id === 'pfProcCmdPickerInput') {
+      renderCmdPickerList(e.target.value);
     }
   });
 
@@ -469,6 +701,10 @@
       if (f) handleImgUpload(f);
       e.target.value = '';
     }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && cmdPickerOpen) { closeCmdPicker(); }
   });
 
 })();

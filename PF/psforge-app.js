@@ -4070,4 +4070,7 @@
   /* Embarqué : 1ers instantanés poussés au shell dès l'init (anti-course) */
   if (window.self !== window.top) { postPfStats(); postPfStorage(); }
 
+  /* Accès à la liste de commandes pour les modules externes (psforge-process.js). */
+  window.pfGetCommandList = function () { return PF_COMMANDS; };
+
 })();
