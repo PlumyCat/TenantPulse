@@ -104,7 +104,7 @@ const ADMIN_SHORTCUTS = {
     { label: 'Machines virtuelles',   url: 'https://portal.azure.com/{tenantId}#view/Microsoft_Azure_ComputeHub/ComputeHubMenuBlade/~/virtualMachinesBrowse' },
   ],
   defender: [
-    { label: 'Stratégies et règles', url: 'https://security.microsoft.com/securitypoliciesandrules?tid={tenantId}' },
+    { label: 'Stratégie de menace', url: 'https://security.microsoft.com/threatpolicy?tid={tenantId}' },
     { label: 'Entités restreintes',  url: 'https://security.microsoft.com/restrictedentities?tid={tenantId}' },
     { label: 'Quarantaine',          url: 'https://security.microsoft.com/quarantine?viewid=Email&tid={tenantId}' },
     { label: 'Liens fiables',        url: 'https://security.microsoft.com/safelinksv2?tid={tenantId}' },
@@ -1426,8 +1426,8 @@ function roleLabel(role) {
 function panelTitle(src, cls, text) { const img = document.createElement('img'); img.src=src; img.className=cls; img.alt=''; return [img, document.createTextNode(' '+text)]; }
 // ══════════════════════════════════════════════════════════════════════════
 //  TAGS DU HERO — bouton (+) et menu contextuel selon le rôle
-//  - Utilisateur / Modérateur : proposent un tag → POST /api/request (en attente)
-//  - Manager / Admin          : appliquent directement (le backend valide seul)
+//  - Utilisateur          : propose un tag → POST /api/request (en attente)
+//  - Modérateur / Manager / Admin : appliquent directement (le backend valide seul)
 //  L'utilisateur peut aussi DEMANDER la suppression d'un tag validé (action "remove",
 //  bouton « − » sur le badge) → demande en attente, validée par un modérateur+.
 //  L'affichage des badges (validés / en attente / verrouillé) est géré à l'étape 13.

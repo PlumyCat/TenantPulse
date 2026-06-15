@@ -14,8 +14,9 @@ function esc(v) { return String(v).replace(/'/g, "''"); }
  * - action : "add" (défaut, ajout/proposition) | "remove" (demande de suppression)
  *
  * Comportement selon le rôle :
- * - user / moderator : crée une demande en statut "pending"
- * - manager / admin  : applique directement (status "approved" pour add, "removed" pour remove)
+ * - user             : crée une demande en statut "pending"
+ * - moderator+       : applique directement (status "approved" pour add, "removed" pour remove)
+ *                      Le modérateur reste soumis au verrou du tenant (voir plus bas).
  *
  * Retourne : { requestId, status }
  */
@@ -120,8 +121,8 @@ module.exports = async function (context, req) {
     const now = new Date().toISOString();
     const requestId = uuidv4();
 
-    // Manager / Admin → application directe sans validation
-    if (hasRole(auth.role, "manager")) {
+    // Modérateur / Manager / Admin → application directe sans validation
+    if (hasRole(auth.role, "moderator")) {
       if (action === "remove") {
         const result = await removeApprovedTag({ tenantId, type });
         if (!result.existed) {
