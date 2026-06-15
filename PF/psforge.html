@@ -90,6 +90,7 @@
         <div class="pf-search-top-btns">
           <button class="pf-manager-toggle" type="button" id="pfManagerToggle"><img src="../assets/option.png" class="pf-manager-toggle-icon" alt=""> Gérer</button>
           <button class="pf-script-toggle" type="button" id="pfScriptToggle"><img src="../assets/tool.png" class="pf-script-toggle-icon" alt=""> Script Builder</button>
+          <button class="pf-proc-toggle" type="button" id="pfProcToggle">📋 Procédures</button>
         </div>
       </div>
       <input class="pf-cmd-search" id="pfCmdSearch" type="search" placeholder="Rechercher une commande…" autocomplete="off" spellcheck="false">
@@ -232,6 +233,79 @@
 
     </div>
 
+  <!-- ── Vue Process internes ── -->
+  <div class="pf-process-view" id="pfProcessView" hidden>
+
+    <!-- Toolbar liste -->
+    <div class="pf-proc-toolbar" id="pfProcListToolbar">
+      <span class="pf-proc-title">Procédures internes</span>
+      <span class="pf-script-spacer"></span>
+      <button class="pf-btn-validate" type="button" id="pfProcNew">+ Nouvelle procédure</button>
+    </div>
+
+    <!-- Toolbar détail -->
+    <div class="pf-proc-toolbar" id="pfProcDetailToolbar" hidden>
+      <button class="pf-script-back" type="button" id="pfProcBackToList">← Liste</button>
+      <span class="pf-proc-title" id="pfProcDetailTitle"></span>
+      <span class="pf-script-spacer"></span>
+      <button class="pf-proc-btn-edit pf-btn-validate" type="button" id="pfProcEdit">Modifier</button>
+      <button class="pf-proc-btn-delete" type="button" id="pfProcDelete">Supprimer</button>
+    </div>
+
+    <!-- Toolbar éditeur -->
+    <div class="pf-proc-toolbar" id="pfProcEditorToolbar" hidden>
+      <button class="pf-script-back" type="button" id="pfProcBackFromEditor">← Annuler</button>
+      <span class="pf-proc-title" id="pfProcEditorTitle">Nouvelle procédure</span>
+      <span class="pf-script-spacer"></span>
+      <button class="pf-btn-validate" type="button" id="pfProcSave">Enregistrer</button>
+    </div>
+
+    <!-- Sous-vue : liste -->
+    <div id="pfProcListView">
+      <div class="pf-proc-search-bar">
+        <input class="pf-cmd-search" type="search" id="pfProcSearch" placeholder="Filtrer les procédures…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="pf-proc-cards" id="pfProcCards">
+        <div class="pf-proc-loading" id="pfProcLoading">Chargement…</div>
+      </div>
+    </div>
+
+    <!-- Sous-vue : détail (lecture) -->
+    <div class="pf-proc-detail-view" id="pfProcDetailView" hidden>
+      <div class="pf-proc-meta" id="pfProcMeta"></div>
+      <div class="pf-proc-content" id="pfProcContent"></div>
+    </div>
+
+    <!-- Sous-vue : éditeur -->
+    <div class="pf-proc-editor-view" id="pfProcEditorView" hidden>
+      <div class="pf-proc-form">
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfProcTitre">Titre <span class="pf-manager-required">*</span></label>
+          <input class="pf-modal-input" type="text" id="pfProcTitre" placeholder="Ex. Réinitialiser un compte M365…" autocomplete="off" spellcheck="false" maxlength="120">
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfProcCategorie">Catégorie</label>
+          <input class="pf-modal-input" type="text" id="pfProcCategorie" placeholder="Ex. M365, Windows, Réseau…" autocomplete="off" spellcheck="false" maxlength="64">
+        </div>
+        <div class="pf-manager-field">
+          <label class="pf-modal-label" for="pfProcDesc">Description courte <span class="pf-manager-optional">(utilisée pour la recherche intelligente)</span></label>
+          <input class="pf-modal-input" type="text" id="pfProcDesc" placeholder="Résumé en 1–2 phrases du cas d'usage…" autocomplete="off" spellcheck="false" maxlength="300">
+        </div>
+        <div class="pf-manager-field pf-proc-md-field">
+          <label class="pf-modal-label" for="pfProcMd">Contenu <span class="pf-manager-optional">(Markdown)</span></label>
+          <textarea class="pf-modal-input pf-proc-md-textarea" id="pfProcMd" placeholder="# Titre&#10;&#10;## Étape 1&#10;Description de l'étape…" spellcheck="false"></textarea>
+        </div>
+        <div class="pf-proc-img-row">
+          <button class="pf-mgr-io-btn" type="button" id="pfProcImgBtn">+ Image</button>
+          <span class="pf-proc-img-status" id="pfProcImgStatus"></span>
+          <input type="file" id="pfProcImgFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+        </div>
+        <div class="pf-proc-save-status" id="pfProcSaveStatus"></div>
+      </div>
+    </div>
+
+  </div>
+
   </main>
 
   <!-- ── Modal sauvegarde ── -->
@@ -323,5 +397,6 @@
 </div>
 
 <script src="psforge-app.js"></script>
+<script src="psforge-process.js"></script>
 </body>
 </html>

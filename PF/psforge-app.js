@@ -676,9 +676,12 @@
     document.getElementById('pfCmdView').hidden    = true;
     document.getElementById('pfScriptView').hidden = true;
     document.getElementById('pfManagerView').hidden = false;
+    const pfProcV = document.getElementById('pfProcessView');
+    if (pfProcV) pfProcV.hidden = true;
     document.getElementById('pfSearchBar').classList.add('pf-search-bar--manager');
     document.getElementById('pfManagerToggle').classList.add('active');
     document.getElementById('pfScriptToggle').classList.remove('active');
+    document.getElementById('pfProcToggle')?.classList.remove('active');
     managerViewActive = true;
     scriptViewActive  = false;
     managerFilter     = '';
@@ -2997,8 +3000,11 @@
   function showScriptView() {
     document.getElementById('pfCmdView').hidden    = true;
     document.getElementById('pfScriptView').hidden = false;
+    const pfProcV2 = document.getElementById('pfProcessView');
+    if (pfProcV2) pfProcV2.hidden = true;
     document.getElementById('pfSearchBar').classList.add('pf-search-bar--script');
     document.getElementById('pfScriptToggle').classList.add('active');
+    document.getElementById('pfProcToggle')?.classList.remove('active');
     scriptViewActive = true;
     renderScriptChips();
     /* Si la barre de recherche contient déjà du texte, afficher le dropdown */
@@ -3790,6 +3796,14 @@
     if (e.target.closest('#pfScriptToggle')) {
       if (managerViewActive) hideManagerView();
       scriptViewActive ? hideScriptView() : showScriptView();
+      return;
+    }
+
+    /* Process internes — bascule */
+    if (e.target.closest('#pfProcToggle')) {
+      if (managerViewActive) hideManagerView();
+      if (scriptViewActive)  hideScriptView();
+      if (typeof window.pfProcToggleView === 'function') window.pfProcToggleView();
       return;
     }
     if (e.target.closest('#pfScriptBack'))  { hideScriptView(); return; }
