@@ -678,6 +678,8 @@
     document.getElementById('pfManagerView').hidden = false;
     const pfProcV = document.getElementById('pfProcessView');
     if (pfProcV) pfProcV.hidden = true;
+    const pfAssistV = document.getElementById('pfAssistView');
+    if (pfAssistV) pfAssistV.hidden = true;
     document.getElementById('pfSearchBar').classList.add('pf-search-bar--manager');
     document.getElementById('pfManagerToggle').classList.add('active');
     document.getElementById('pfScriptToggle').classList.remove('active');
@@ -3002,6 +3004,8 @@
     document.getElementById('pfScriptView').hidden = false;
     const pfProcV2 = document.getElementById('pfProcessView');
     if (pfProcV2) pfProcV2.hidden = true;
+    const pfAssistV2 = document.getElementById('pfAssistView');
+    if (pfAssistV2) pfAssistV2.hidden = true;
     document.getElementById('pfSearchBar').classList.add('pf-search-bar--script');
     document.getElementById('pfScriptToggle').classList.add('active');
     document.getElementById('pfProcToggle')?.classList.remove('active');
@@ -3760,8 +3764,18 @@
       hideScriptSearchDropdown();
     }
 
+    /* Assistant (diagnostic IA) — bascule */
+    if (e.target.closest('#pfAssistToggle')) {
+      if (managerViewActive) hideManagerView();
+      if (scriptViewActive)  hideScriptView();
+      if (typeof window.pfHideProcessView === 'function') window.pfHideProcessView();
+      if (typeof window.pfAssistToggleView === 'function') window.pfAssistToggleView();
+      return;
+    }
+
     /* Gestionnaire de commandes */
     if (e.target.closest('#pfManagerToggle')) {
+      if (typeof window.pfHideAssistView === 'function') window.pfHideAssistView();
       managerViewActive ? hideManagerView() : showManagerView();
       return;
     }
@@ -3794,6 +3808,7 @@
 
     /* Script Builder — bascule */
     if (e.target.closest('#pfScriptToggle')) {
+      if (typeof window.pfHideAssistView === 'function') window.pfHideAssistView();
       if (managerViewActive) hideManagerView();
       scriptViewActive ? hideScriptView() : showScriptView();
       return;
@@ -3801,6 +3816,7 @@
 
     /* Process internes — bascule */
     if (e.target.closest('#pfProcToggle')) {
+      if (typeof window.pfHideAssistView === 'function') window.pfHideAssistView();
       if (managerViewActive) hideManagerView();
       if (scriptViewActive)  hideScriptView();
       if (typeof window.pfProcToggleView === 'function') window.pfProcToggleView();
@@ -4079,6 +4095,11 @@
      Utilisé par psforge-process.js pour rendre les scripts/commandes des
      procédures interactifs — comportement « tout pareil » que le builder. */
   window.pfMakeParamTag = function (paramText, key) { return makeParamTag(paramText, key); };
+
+  /* Injecte une valeur dans le jeton paramètre actuellement sélectionné (colonne
+     de gauche du builder). Réutilisé par l'assistant : un clic sur une entité
+     extraite remplit le <param> actif. Sans effet si aucun jeton n'est actif. */
+  window.pfInjectIntoActive = function (value) { injectIntoActive(value); };
 
   /* Liste des scripts enregistrés par l'utilisateur (kind === 'script'), pour le
      picker « Script PS » de l'éditeur de procédures (psforge-process.js).

@@ -88,6 +88,7 @@
           <span class="pf-brand-badge">&lt;/Alpha&gt;</span>
         </div>
         <div class="pf-search-top-btns">
+          <button class="pf-assist-toggle" type="button" id="pfAssistToggle"><img src="../assets/Analyse.png" class="pf-assist-toggle-icon" alt=""> Assistant</button>
           <button class="pf-manager-toggle" type="button" id="pfManagerToggle"><img src="../assets/option.png" class="pf-manager-toggle-icon" alt=""> Gérer</button>
           <button class="pf-script-toggle" type="button" id="pfScriptToggle"><img src="../assets/tool.png" class="pf-script-toggle-icon" alt=""> Script Builder</button>
           <button class="pf-proc-toggle" type="button" id="pfProcToggle"><img src="../assets/Analyse.png" class="pf-proc-toggle-icon" alt=""> Procédures</button>
@@ -338,6 +339,25 @@
 
   </div>
 
+  <!-- ── Vue Assistant (diagnostic IA) ── -->
+  <div class="pf-assist-view" id="pfAssistView" hidden>
+    <div class="pf-assist-intro">
+      <span class="pf-assist-eyebrow">Assistant de support</span>
+      <h2 class="pf-assist-title">Décrivez l'incident</h2>
+      <p class="pf-assist-sub">L'assistant recherche une <strong>procédure connue</strong> dans la base interne. Il n'invente jamais de réponse : si rien ne correspond précisément, il le dit.</p>
+    </div>
+
+    <div class="pf-assist-input-zone">
+      <textarea class="pf-assist-ticket" id="pfAssistTicket" rows="4" spellcheck="false" placeholder="Ex. : L'utilisateur ne parvient pas à se connecter au VPN, erreur 809 sur son poste Windows…"></textarea>
+      <div class="pf-assist-input-actions">
+        <span class="pf-assist-hint" id="pfAssistHint"></span>
+        <button class="pf-btn-validate" type="button" id="pfAssistAnalyze">Analyser</button>
+      </div>
+    </div>
+
+    <div class="pf-assist-result" id="pfAssistResult" aria-live="polite"></div>
+  </div>
+
   </main>
 
   <!-- ── Modal sauvegarde ── -->
@@ -430,5 +450,6 @@
 
 <script src="psforge-app.js"></script>
 <script src="psforge-process.js"></script>
+<script src="psforge-assist.js"></script>
 </body>
 </html>

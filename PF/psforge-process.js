@@ -789,6 +789,8 @@
     document.getElementById('pfCmdView').hidden     = true;
     document.getElementById('pfScriptView').hidden  = true;
     document.getElementById('pfManagerView').hidden = true;
+    // L'assistant (autre module) peut être ouvert : on le masque aussi.
+    if (typeof window.pfHideAssistView === 'function') window.pfHideAssistView();
     document.getElementById('pfProcessView').hidden = false;
     document.getElementById('pfProcToggle').classList.add('active');
     procViewActive = true;
@@ -806,6 +808,15 @@
 
   window.pfProcToggleView = function () {
     procViewActive ? hideProcessView() : showProcessView();
+  };
+  // Permet à un autre module (assistant) de fermer la vue Process proprement.
+  window.pfHideProcessView = function () {
+    if (procViewActive) hideProcessView();
+  };
+  // Réutilisé par l'assistant : ouvre une procédure dans la vue Process (rendu riche).
+  window.pfOpenProcedure = function (id) {
+    if (!procViewActive) showProcessView();
+    openDetail(id);
   };
 
   /* ═══════════════════════════════════════════════════════════
