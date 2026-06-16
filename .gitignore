@@ -12,3 +12,14 @@ desktop.ini
 # Azure Functions - config locale (contient la connection string)
 api/local.settings.json
 api/node_modules/
+
+# Outils locaux (CodeGraph, MCP, Puppeteer screenshots)
+.codegraph/
+.mcp.json
+node_modules/
+graphify-out/
+_shot_*.js
+_shots_*.js
+_shots.js
+_review_shots/
+*.rej
