@@ -13,6 +13,9 @@ desktop.ini
 api/local.settings.json
 api/node_modules/
 
+# Vault Obsidian (généré par graphify, non versionné)
+vault/
+
 # Outils locaux (CodeGraph, MCP, Puppeteer screenshots)
 .codegraph/
 .mcp.json
