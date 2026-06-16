@@ -17,7 +17,10 @@
   let assistRole       = 'user';
   let assistRoleLoaded = false;
   let lastDiagnosticId = null;   // pour le feedback
+  let lastTicket       = '';     // texte du ticket (affiché en bulle utilisateur)
   let inFlight         = false;  // un diagnostic est en cours
+
+  const LOGO_SRC = '../assets/PSB.png';
 
   const HIER = { user: 0, tech: 1, moderator: 2, manager: 3, admin: 4 };
   function assistHasRole(required) {
@@ -47,6 +50,36 @@
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
+  }
+
+  // Ajuste la hauteur du textarea à son contenu (composer extensible style Claude).
+  function autoGrow(ta) {
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 220) + 'px';
+  }
+
+  // Bulle « utilisateur » : reprend le texte du ticket (look chat, aligné à droite).
+  function appendUserMessage(root, text) {
+    if (!text) return;
+    const wrap = el('div', 'pf-assist-user');
+    wrap.appendChild(el('div', 'pf-assist-user-bubble', text));
+    root.appendChild(wrap);
+  }
+
+  // Message « assistant » signé du logo PsForge ; retourne le corps où écrire.
+  function appendAssistantMessage(root) {
+    const msg = el('div', 'pf-assist-msg');
+    const avatar = el('div', 'pf-assist-msg-avatar');
+    const img = document.createElement('img');
+    img.src = LOGO_SRC;
+    img.alt = 'PsForge';
+    avatar.appendChild(img);
+    const body = el('div', 'pf-assist-msg-body');
+    msg.appendChild(avatar);
+    msg.appendChild(body);
+    root.appendChild(msg);
+    return body;
   }
 
   // Rendu inline minimal (gras, italique, code) — texte via textContent uniquement.
@@ -131,13 +164,15 @@
   function setLoading() {
     const root = document.getElementById('pfAssistResult');
     root.replaceChildren();
+    appendUserMessage(root, lastTicket);
+    const body = appendAssistantMessage(root);
     const card = el('div', 'pf-assist-loading');
     card.appendChild(el('span', 'pf-assist-spinner'));
     const txt = el('div', 'pf-assist-loading-txt');
     txt.appendChild(el('strong', null, 'Analyse en cours…'));
     txt.appendChild(el('span', 'pf-assist-loading-sub', 'Compréhension du ticket puis recherche d’une procédure connue.'));
     card.appendChild(txt);
-    root.appendChild(card);
+    body.appendChild(card);
   }
 
   /* ── Récapitulatif d'analyse (catégorie + entités cliquables) ─────────────── */
@@ -207,6 +242,8 @@
   function renderTrouve(analysis, res) {
     const root = document.getElementById('pfAssistResult');
     root.replaceChildren();
+    appendUserMessage(root, lastTicket);
+    const body = appendAssistantMessage(root);
 
     const card = el('div', 'pf-assist-card pf-assist-card--found');
 
@@ -288,14 +325,16 @@
     }
 
     appendFeedback(card, res.procedureId);
-    root.appendChild(card);
-    appendAnalysis(root, analysis);
+    body.appendChild(card);
+    appendAnalysis(body, analysis);
   }
 
   /* ── État « aucune » (affichage à part entière) ───────────────────────────── */
   function renderAucune(analysis, res) {
     const root = document.getElementById('pfAssistResult');
     root.replaceChildren();
+    appendUserMessage(root, lastTicket);
+    const body = appendAssistantMessage(root);
 
     const card = el('div', 'pf-assist-card pf-assist-card--none');
     const head = el('div', 'pf-assist-card-head');
@@ -320,14 +359,16 @@
         'Si cette situation est connue, créez la procédure depuis l’onglet « Procédures » pour la rendre trouvable.'));
     }
 
-    root.appendChild(card);
-    appendAnalysis(root, analysis);
+    body.appendChild(card);
+    appendAnalysis(body, analysis);
   }
 
   /* ── État « erreur » ──────────────────────────────────────────────────────── */
   function renderErreur(message, status) {
     const root = document.getElementById('pfAssistResult');
     root.replaceChildren();
+    appendUserMessage(root, lastTicket);
+    const body = appendAssistantMessage(root);
     const card = el('div', 'pf-assist-card pf-assist-card--error');
     card.appendChild(el('span', 'pf-assist-status pf-assist-status--error', 'Erreur'));
     let msg = message || 'Une erreur est survenue.';
@@ -340,7 +381,7 @@
       retry.dataset.action = 'assist-retry';
       card.appendChild(retry);
     }
-    root.appendChild(card);
+    body.appendChild(card);
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -350,6 +391,7 @@
     if (inFlight) return;
     const ticketEl = document.getElementById('pfAssistTicket');
     const ticket = (ticketEl && ticketEl.value || '').trim();
+    lastTicket = ticket;
 
     if (!assistHasRole('tech')) { renderErreur(null, 403); return; }
     if (!ticket) {
@@ -361,6 +403,8 @@
 
     inFlight = true;
     lastDiagnosticId = null;
+    // Vide la saisie après envoi (le ticket reste visible en bulle utilisateur).
+    if (ticketEl) { ticketEl.value = ''; autoGrow(ticketEl); }
     const analyzeBtn = document.getElementById('pfAssistAnalyze');
     if (analyzeBtn) analyzeBtn.disabled = true;
     setLoading();
@@ -437,6 +481,7 @@
   document.addEventListener('input', function (e) {
     if (!assistViewActive) return;
     if (e.target.id === 'pfAssistTicket') {
+      autoGrow(e.target);
       const hint = document.getElementById('pfAssistHint');
       if (hint && hint.classList.contains('pf-assist-hint--warn')) {
         hint.textContent = ''; hint.className = 'pf-assist-hint';
@@ -444,10 +489,10 @@
     }
   });
 
-  // Ctrl/⌘ + Entrée dans la zone de saisie → lance le diagnostic.
+  // Entrée → envoyer ; Maj+Entrée → nouvelle ligne (comportement chat).
   document.addEventListener('keydown', function (e) {
     if (!assistViewActive) return;
-    if (e.target.id === 'pfAssistTicket' && (e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (e.target.id === 'pfAssistTicket' && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       runDiagnostic();
     }
