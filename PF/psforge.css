@@ -3211,14 +3211,13 @@ html:not([data-theme="dark"]) .pf-proc-card {
   padding: 22px clamp(16px, 3vw, 32px) 48px;
 }
 
-/* Deux colonnes : saisie à gauche, résultat à droite. */
+/* Deux colonnes plein écran : saisie à gauche, résultat à droite. */
 .pf-assist-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 28px;
   align-items: start;
-  max-width: 1240px;
-  margin: 0 auto;
+  width: 100%;
 }
 /* La colonne de saisie reste visible pendant qu'on fait défiler le résultat. */
 .pf-assist-left { position: sticky; top: 0; align-self: start; }
@@ -3360,6 +3359,10 @@ html:not([data-theme="dark"]) .pf-proc-card {
 .pf-assist-steps { margin: 0 0 16px; padding-left: 22px; }
 .pf-assist-steps li { font-size: var(--text-sm); line-height: 1.55; color: var(--text); margin-bottom: 6px; }
 .pf-assist-steps code { font-size: .92em; }
+
+/* Procédure rendue richement (réutilise .pf-proc-content). */
+.pf-assist-proc { margin: 0 0 14px; }
+.pf-assist-proc > :first-child { margin-top: 0; }
 
 .pf-assist-open { margin: 2px 0 14px; }
 

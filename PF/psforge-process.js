@@ -818,12 +818,19 @@
     if (!procViewActive) showProcessView();
     openDetail(id);
   };
+  // Réutilisé par l'assistant : rendu markdown riche (titres, blocs de code, jetons).
+  window.pfRenderProcMarkdown = function (text, container) {
+    renderMarkdown(text, container);
+  };
 
   /* ═══════════════════════════════════════════════════════════
      ÉVÉNEMENTS
      ═══════════════════════════════════════════════════════════ */
   document.addEventListener('click', function (e) {
-    if (!procViewActive) return;
+    // On gère aussi les blocs (copier / replier) rendus dans le résultat de
+    // l'assistant, même hors de la vue Procédures.
+    const inAssistResult = e.target.closest('#pfAssistResult');
+    if (!procViewActive && !inAssistResult) return;
 
     // Card → détail
     const card = e.target.closest('.pf-proc-card');

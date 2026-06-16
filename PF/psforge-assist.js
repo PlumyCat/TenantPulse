@@ -227,16 +227,26 @@
       card.appendChild(p);
     }
 
-    // Étapes (reprises fidèlement de la procédure)
+    // Étapes (reprises fidèlement de la procédure).
+    // Rendu RICHE via le moteur des Procédures : titres, blocs de code (avec
+    // bouton Copier), jetons <param>. On reconstitue le markdown (les étapes
+    // sont les lignes de la procédure) puis on le rend dans .pf-proc-content.
     if (Array.isArray(res.etapes) && res.etapes.length) {
       card.appendChild(el('div', 'pf-assist-sec-label', 'Étapes'));
-      const ol = el('ol', 'pf-assist-steps');
-      for (const step of res.etapes) {
-        const li = el('li');
-        renderInline(step, li);
-        ol.appendChild(li);
+      if (typeof window.pfRenderProcMarkdown === 'function') {
+        const proc = el('div', 'pf-proc-content pf-assist-proc');
+        window.pfRenderProcMarkdown(res.etapes.join('\n'), proc);
+        card.appendChild(proc);
+      } else {
+        // Repli : liste numérotée simple (rendu inline gras/code).
+        const ol = el('ol', 'pf-assist-steps');
+        for (const step of res.etapes) {
+          const li = el('li');
+          renderInline(step, li);
+          ol.appendChild(li);
+        }
+        card.appendChild(ol);
       }
-      card.appendChild(ol);
     }
 
     // Ouvrir la procédure complète (rendu riche de la vue Procédures)
