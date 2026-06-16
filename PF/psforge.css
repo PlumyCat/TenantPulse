@@ -263,6 +263,20 @@ html:not([data-theme="dark"]) .pf-bubble:hover { background: var(--bg); }
   to   { opacity: 1; transform: scale(1); }
 }
 
+/* Bulle AUTO (entité détectée par l'assistant) — accent bleu pour la distinguer
+   des saisies manuelles du technicien. */
+.pf-bubble--auto {
+  background: rgba(37,99,235,.16);
+  border-left: 2px solid var(--blue, #2563eb);
+  box-shadow: inset 2px 0 0 var(--blue, #2563eb);
+}
+.pf-bubble--auto:hover { background: rgba(37,99,235,.26); }
+[data-theme="light"] .pf-bubble--auto,
+html:not([data-theme="dark"]) .pf-bubble--auto { background: rgba(37,99,235,.10); }
+[data-theme="light"] .pf-bubble--auto:hover,
+html:not([data-theme="dark"]) .pf-bubble--auto:hover { background: rgba(37,99,235,.18); }
+.pf-bubble--auto .pf-bubble-text { color: var(--blue, #2563eb); }
+
 .pf-bubble-text {
   flex: 1;
   min-width: 0;

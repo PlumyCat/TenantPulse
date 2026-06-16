@@ -3564,10 +3564,12 @@
      BULLES
      ════════════════════════════════════════════════════════════ */
 
-  function createBubble(value, bubblesContainer) {
+  function createBubble(value, bubblesContainer, opts) {
     const bubble = document.createElement('div');
-    bubble.className = 'pf-bubble';
-    bubble.title = 'Cliquer pour copier';
+    bubble.className = 'pf-bubble' + (opts && opts.auto ? ' pf-bubble--auto' : '');
+    bubble.title = (opts && opts.auto)
+      ? 'Entité détectée par l’assistant — cliquer pour copier'
+      : 'Cliquer pour copier';
 
     const txt = document.createElement('span');
     txt.className = 'pf-bubble-text';
@@ -3612,6 +3614,48 @@
 
     bubblesContainer.insertBefore(bubble, bubblesContainer.firstChild);
   }
+
+  /* ════════════════════════════════════════════════════════════
+     AUTO-REMPLISSAGE DEPUIS LES ENTITÉS DU DIAGNOSTIC (assistant)
+     ════════════════════════════════════════════════════════════ */
+
+  // Entité analysée → bloc de la colonne de gauche (alias inclus : serveur→host,
+  // identifiantTechnique→id). Les blocs cibles existent dans DEFAULT_BLOCKS.
+  const ENTITY_BLOCK_MAP = {
+    utilisateur:          'utilisateur',
+    ip:                   'ip',
+    email:                'email',
+    domaine:              'domaine',
+    serveur:              'host',
+    identifiantTechnique: 'id'
+  };
+
+  // Pousse les entités d'un diagnostic dans la colonne de gauche sous forme de
+  // bulles BLEUES (.pf-bubble--auto), distinctes des saisies manuelles. Les
+  // bulles auto précédentes sont effacées à chaque appel (le manuel est gardé) ;
+  // pas de doublon avec une valeur déjà présente dans le bloc.
+  function fillBlocksFromEntities(entites) {
+    if (!entites || typeof entites !== 'object') return;
+    document.querySelectorAll('.pf-bubble--auto').forEach(function (b) { b.remove(); });
+
+    Object.keys(ENTITY_BLOCK_MAP).forEach(function (entKey) {
+      const container = document.getElementById('bubbles-' + ENTITY_BLOCK_MAP[entKey]);
+      if (!container) return;
+      let values = entites[entKey];
+      if (typeof values === 'string') values = values ? [values] : [];
+      if (!Array.isArray(values)) return;
+      const existing = new Set(
+        Array.from(container.querySelectorAll('.pf-bubble-text')).map(function (t) { return t.textContent; })
+      );
+      values.forEach(function (v) {
+        const val = String(v == null ? '' : v).trim();
+        if (!val || existing.has(val)) return;
+        existing.add(val);
+        createBubble(val, container, { auto: true });
+      });
+    });
+  }
+  window.pfFillBlocks = function (entites) { fillBlocksFromEntities(entites); };
 
   /* ════════════════════════════════════════════════════════════
      VALIDATION

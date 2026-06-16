@@ -503,6 +503,13 @@
 
     lastDiagnosticId = data.diagnosticId || null;
     const res = data.resultat || {};
+
+    // Auto-remplit la colonne de gauche (bulles bleues) depuis les entités
+    // détectées — utile que la procédure soit trouvée ou non.
+    if (typeof window.pfFillBlocks === 'function' && data.analysis && data.analysis.entites) {
+      window.pfFillBlocks(data.analysis.entites);
+    }
+
     if (res.statut === 'aucune' || !res.procedureId && res.statut !== 'trouve' && res.statut !== 'ambigu') {
       renderAucune(data.analysis, res);
     } else {
