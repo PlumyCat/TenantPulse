@@ -228,14 +228,18 @@ jamais à Foundry ni à AI Search directement. Les clés restent côté Function
 
 ## 8. Conformité
 
-- **Pseudonymisation** : personnes → `utilisateur1/2…` dans le JSON analysé, les logs
-  et les feedbacks. La vraie valeur peut s'afficher au technicien (volatile, en
-  mémoire navigateur) pour remplir la colonne gauche.
+- **Entités au technicien, jamais journalisées** : le champ `utilisateur` (et e-mail,
+  IP, serveur…) est renvoyé **en clair** au navigateur du technicien — il en a besoin
+  pour agir et remplir la colonne gauche. La confidentialité est garantie côté serveur,
+  pas par pseudonymisation : `context.log` ne reçoit que `diagnosticId + categorie +
+  statut`, et aucune entité n'est jamais écrite en table.
 - **Aucune conservation du ticket** : le texte n'est jamais passé à une opération
   d'écriture (`upload`/`upsert`).
 - **Logs minimaux** : `context.log` ne reçoit que `diagnosticId` + `categorie` +
-  `statut` — jamais le texte ni les entités brutes.
-- **Feedback ≤ 7 jours** : purge quotidienne (Function timer) des entrées expirées.
+  `statut` — jamais le texte ni les entités.
+- **Feedback ≤ 7 jours** : purge opportuniste à chaque écriture (les Functions managées
+  SWA ne supportent pas de timerTrigger fiable ; un vrai timer quotidien demanderait une
+  Function App autonome).
 - **Pas de réentraînement** : le modèle Foundry ne bouge jamais. On améliore l'index
   et des règles de correspondance, pas les poids.
 
