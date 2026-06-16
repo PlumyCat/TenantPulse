@@ -22,6 +22,8 @@ const SEARCH_API_VERSION     = process.env.SEARCH_API_VERSION || "2024-07-01";
 // d'Azure Search. Surchargeables si l'index a été créé différemment.
 const SEARCH_VECTOR_FIELD    = process.env.SEARCH_VECTOR_FIELD || "text_vector";
 const SEARCH_SEMANTIC_CONFIG = process.env.SEARCH_SEMANTIC_CONFIG || "procedures-semantic-configuration";
+// Nom de l'indexer généré par l'assistant « Importer et vectoriser » d'Azure Search.
+const SEARCH_INDEXER         = process.env.SEARCH_INDEXER || "procedures-indexer";
 
 // Enlève un éventuel slash final pour composer les URLs proprement.
 function trimSlash(s) {
@@ -130,9 +132,41 @@ async function searchProcedures(searchText, top = 5) {
   }));
 }
 
+/**
+ * Force l'indexer Azure Search à ingérer immédiatement le Blob des procédures.
+ *
+ * Un indexer ne se rafraîchit PAS « à chaque écriture » : il tourne sur une
+ * planification (intervalle ≥ 5 min) ou sur déclenchement manuel. On l'appelle
+ * donc en fire-and-forget après chaque enregistrement de procédure pour réduire
+ * la latence d'apparition (~planning → ~quelques dizaines de secondes).
+ *
+ * Tolérant aux pannes : ne lève jamais (l'enregistrement ne doit pas échouer
+ * parce que l'indexer est indisponible). Un 409 signifie « run déjà en cours »
+ * → bénin, on l'ignore. L'ingestion reste asynchrone côté Search.
+ *
+ * @returns {Promise<{ok:boolean, status:number}>}
+ */
+async function runIndexer() {
+  if (!searchConfigured()) return { ok: false, status: 0 };
+
+  const url = `${trimSlash(SEARCH_ENDPOINT)}/indexers/${SEARCH_INDEXER}` +
+              `/run?api-version=${SEARCH_API_VERSION}`;
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "api-key": SEARCH_KEY }
+    });
+    // 202 = accepté ; 409 = un run est déjà actif (bénin).
+    return { ok: r.ok || r.status === 409, status: r.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+}
+
 module.exports = {
   foundryConfigured,
   searchConfigured,
   chatJson,
-  searchProcedures
+  searchProcedures,
+  runIndexer
 };

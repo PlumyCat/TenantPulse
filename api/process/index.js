@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const { getAuthContext, hasRole } = require("../shared/auth");
 const { processesClient } = require("../shared/tableClient");
 const { processesContainer, ensureContainer } = require("../shared/blobClient");
+const { runIndexer } = require("../shared/foundry");
 
 // Limites de validation (un process ≈ 4 pages Word → ~200 Ko de markdown suffisent).
 const MAX_TITRE     = 120;
@@ -151,6 +152,16 @@ module.exports = async function (context, req) {
         updatedBy:    auth.email,
         updatedAt:    now
       }, "Replace");
+
+      // Déclenche l'indexer Search pour rendre la procédure trouvable par l'IA
+      // sans attendre la planification. Fire-and-forget : ne bloque pas et ne
+      // fait jamais échouer l'enregistrement (l'ingestion reste asynchrone).
+      try {
+        const idx = await runIndexer();
+        context.log(`process ${isUpdate ? "maj" : "creation"} ${pid} → indexer run status=${idx.status}`);
+      } catch (e) {
+        context.log.error(`process ${pid} : déclenchement indexer échoué : ${e.message}`);
+      }
 
       context.res = json(200, { success: true, id: pid });
       return;

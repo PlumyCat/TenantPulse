@@ -247,9 +247,15 @@ jamais à Foundry ni à AI Search directement. Les clés restent côté Function
 
 ## 9. Amélioration continue
 
-- **Index sémantique** : un *indexer* Azure Search branché sur le Blob des procédures
-  se rafraîchit automatiquement à chaque écriture via `/api/process`. Vectorisation
-  via `text-embedding-3-large`.
+- **Index sémantique** : un *indexer* Azure Search est branché sur le Blob des
+  procédures. Un indexer ne se rafraîchit **pas** tout seul à chaque écriture : il
+  tourne sur planification (intervalle ≥ 5 min) ou sur déclenchement manuel. Pour
+  éviter qu'une procédure fraîchement enregistrée reste invisible, `POST /api/process`
+  appelle l'API `Run Indexer` (`runIndexer()` dans `shared/foundry.js`, indexer nommé
+  via `SEARCH_INDEXER`, défaut `procedures-indexer`) en fire-and-forget après chaque
+  enregistrement. L'ingestion reste **asynchrone** : la procédure devient trouvable en
+  quelques dizaines de secondes, pas instantanément. Vectorisation via
+  `text-embedding-3-large`.
 - **Boucle de feedback** : ✅/❌ du technicien → table `Feedback` → un modérateur
   corrige (édite la procédure ou crée une règle « incident X → procédure Y » dans une
   éventuelle table `Mappings` consultée avant la recherche).
