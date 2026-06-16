@@ -2,6 +2,7 @@ const { getAuthContext, hasRole } = require("../shared/auth");
 const { processesClient } = require("../shared/tableClient");
 const { processesContainer, ensureContainer } = require("../shared/blobClient");
 const { foundryConfigured, searchConfigured, chatJson, searchProcedures } = require("../shared/foundry");
+const { webSearchConfigured, searchMicrosoftDocs } = require("../shared/webSearch");
 
 // ── Limites / réglages (surchargeables par variables d'environnement) ────────
 const MAX_TICKET            = 8000;   // longueur max du texte de ticket accepté
@@ -114,6 +115,38 @@ function passesThreshold(hit) {
   return false;
 }
 
+// Transforme des hits Search en candidats : seuil d'ancrage, dédoublonnage par
+// procédure (un chunk = un fragment, on garde le meilleur score), vérification
+// d'existence en table + lecture du markdown. Réutilisé par la recherche
+// initiale ET la re-vérification (termes Microsoft).
+async function buildCandidates(hits) {
+  const byProc = new Map(); // uuid -> meilleur hit
+  for (const hit of hits) {
+    if (!passesThreshold(hit)) continue;
+    const id = extractProcedureId(hit.raw);
+    if (!id || !UUID_RE.test(id)) continue;
+    const best = byProc.get(id);
+    const rank = (h) => (typeof h.rerankerScore === "number" ? h.rerankerScore : (h.score || 0));
+    if (!best || rank(hit) > rank(best)) byProc.set(id, hit);
+  }
+
+  const candidates = [];
+  for (const [id, hit] of byProc) {
+    if (candidates.length >= MAX_CANDIDATES) break;
+    let entity;
+    try { entity = await processesClient.getEntity("process", id); }
+    catch { continue; } // chunk orphelin (procédure supprimée) → on ignore
+    const contenu = (await readProcedureContent(id)).slice(0, MAX_CONTENT_PER_PROC);
+    candidates.push({
+      procedureId: id,
+      titre: entity.titre || "",
+      score: typeof hit.rerankerScore === "number" ? hit.rerankerScore : hit.score,
+      contenu
+    });
+  }
+  return candidates;
+}
+
 /**
  * POST /api/diagnose — rôle minimum : tech.
  * Body : { "ticket": "<texte libre>" }
@@ -185,50 +218,73 @@ module.exports = async function (context, req) {
       return void (context.res = json(502, { error: "Échec de la recherche documentaire", diagnosticId }));
     }
 
-    // Dédoublonne par procédure (un chunk = un fragment), garde le meilleur score,
-    // ne conserve que ce qui passe le seuil d'ancrage et existe dans la table.
-    const byProc = new Map(); // uuid -> meilleur hit
-    for (const hit of hits) {
-      if (!passesThreshold(hit)) continue;
-      const id = extractProcedureId(hit.raw);
-      if (!id || !UUID_RE.test(id)) continue;
-      const best = byProc.get(id);
-      const rank = (h) => (typeof h.rerankerScore === "number" ? h.rerankerScore : (h.score || 0));
-      if (!best || rank(hit) > rank(best)) byProc.set(id, hit);
-    }
+    // Dédoublonne + seuil + existence en table (réutilisé pour la re-vérification).
+    let candidates = await buildCandidates(hits);
 
-    const candidates = [];
-    for (const [id, hit] of byProc) {
-      if (candidates.length >= MAX_CANDIDATES) break;
-      let entity;
-      try { entity = await processesClient.getEntity("process", id); }
-      catch { continue; } // chunk orphelin (procédure supprimée) → on ignore
-      const contenu = (await readProcedureContent(id)).slice(0, MAX_CONTENT_PER_PROC);
-      candidates.push({
-        procedureId: id,
-        titre: entity.titre || "",
-        score: typeof hit.rerankerScore === "number" ? hit.rerankerScore : hit.score,
-        contenu
-      });
-    }
-
-    // Aucune procédure au-dessus du seuil → "aucune" sans appel LLM n°2 (coût + ancrage).
+    // Aucune procédure au-dessus du seuil → secours web + re-vérification interne.
     if (candidates.length === 0) {
-      context.log(`diagnose ${diagnosticId} categorie=${categorie} statut=aucune`);
-      return void (context.res = json(200, {
-        analysis,
-        resultat: {
-          statut: "aucune",
-          procedureId: null,
-          titre: "",
-          confiance: 0,
-          resume: "Aucune procédure connue ne correspond précisément à cet incident.",
-          etapes: [],
-          alternatives: [],
-          informationsManquantes: []
-        },
-        diagnosticId
-      }));
+      // SECOURS : recherche web Microsoft (Learn / forums) si configurée.
+      // Requête STRICTEMENT assainie : catégorie + sousCatégorie + motsCles.
+      // JAMAIS d'entité (utilisateur, ip, email, domaine, serveur, identifiants)
+      // ni le ticket brut → conformité ARCHITECTURE-IA.md §8.
+      let pisteExterne = null;
+      if (webSearchConfigured()) {
+        const webQuery = [
+          categorie,
+          analysis && analysis.sousCategorie,
+          ...(Array.isArray(analysis && analysis.motsCles) ? analysis.motsCles : [])
+        ].filter(Boolean).join(" ").trim();
+        try {
+          pisteExterne = await searchMicrosoftDocs(webQuery);
+        } catch (err) {
+          context.log.error(`diagnose ${diagnosticId} secours web: ${err.message}`);
+        }
+      }
+
+      // RE-VÉRIFICATION : les termes Microsoft (souvent normalisés) peuvent faire
+      // ressortir une procédure interne ratée par la 1ʳᵉ recherche. Si c'est le
+      // cas, on PRIORISE l'interne et on abandonne le secours web.
+      if (pisteExterne) {
+        const reText = [
+          ...(Array.isArray(pisteExterne.liens) ? pisteExterne.liens.map((l) => l && l.titre) : []),
+          pisteExterne.resume
+        ].filter(Boolean).join(" ").slice(0, 500).trim();
+        if (reText) {
+          try {
+            const candidates2 = await buildCandidates(await searchProcedures(reText, SEARCH_TOP));
+            if (candidates2.length) {
+              candidates = candidates2;   // procédure interne finalement trouvée
+              pisteExterne = null;        // on n'affiche pas le secours web
+              context.log(`diagnose ${diagnosticId} re-verif: procedure interne trouvee via termes Microsoft`);
+            }
+          } catch (err) {
+            context.log.error(`diagnose ${diagnosticId} re-verif: ${err.message}`);
+          }
+        }
+      }
+
+      // Toujours rien en interne → "aucune" (+ éventuelle piste Microsoft).
+      if (candidates.length === 0) {
+        context.log(`diagnose ${diagnosticId} categorie=${categorie} statut=aucune web=${pisteExterne ? "oui" : "non"}`);
+        return void (context.res = json(200, {
+          analysis,
+          resultat: {
+            statut: "aucune",
+            procedureId: null,
+            titre: "",
+            confiance: 0,
+            resume: pisteExterne
+              ? "Aucune procédure interne ne correspond. Piste issue de la documentation Microsoft officielle ci-dessous — à vérifier avant application."
+              : "Aucune procédure connue ne correspond précisément à cet incident.",
+            etapes: [],
+            alternatives: [],
+            informationsManquantes: [],
+            pisteExterne
+          },
+          diagnosticId
+        }));
+      }
+      // candidates repeuplé par la re-vérification → on enchaîne sur l'étape 3 normale.
     }
 
     // ── Étape 3 : réponse cadrée (ancrée sur les seules procédures retenues) ──

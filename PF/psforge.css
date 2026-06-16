@@ -3495,6 +3495,26 @@ html:not([data-theme="dark"]) .pf-assist-msg-avatar img { filter: invert(1); }
 
 .pf-assist-none-hint { font-size: var(--text-xs); color: var(--muted); margin: 8px 0 0; line-height: 1.5; }
 
+/* ── Piste externe de secours (Microsoft Learn / forums) — non vérifiée ── */
+.pf-assist-piste {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface-2, rgba(127,127,127,.05));
+}
+.pf-assist-piste-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.pf-assist-piste-badge {
+  font-size: var(--text-xs); font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  color: var(--blue); border: 1px solid var(--blue);
+}
+.pf-assist-piste-src { font-size: var(--text-xs); color: var(--muted); }
+.pf-assist-piste-resume { font-size: var(--text-sm); color: var(--text); margin: 0 0 8px; line-height: 1.55; }
+.pf-assist-piste-liens { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.pf-assist-piste-lien { color: var(--blue); text-decoration: none; font-size: var(--text-sm); }
+.pf-assist-piste-lien:hover { text-decoration: underline; }
+
 /* ── Récap d'analyse (entités) ── */
 .pf-assist-analysis {
   margin-top: 14px;

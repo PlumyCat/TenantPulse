@@ -72,9 +72,24 @@ FOUNDRY_KEY           = <secret>
 FOUNDRY_DEPLOY_CHAT   = gpt-4.1-mini
 FOUNDRY_DEPLOY_EMBED  = text-embedding-3-large
 SEARCH_ENDPOINT       = https://<service>.search.windows.net
-SEARCH_KEY            = <secret>
+SEARCH_KEY            = <secret>  (clé ADMIN : requise pour runIndexer)
 SEARCH_INDEX          = procedures
+SEARCH_INDEXER        = procedures-indexer   (déclenché à chaque POST /api/process)
+
+# Secours web (optionnel) — « Grounding with Bing Search » via Foundry Agents.
+# Si l'une manque, le secours web est simplement désactivé (diagnostic inchangé).
+FOUNDRY_AGENTS_ENDPOINT    = https://<ressource>.services.ai.azure.com/api/projects/<projet>
+FOUNDRY_AGENTS_KEY         = <secret>          (à défaut, FOUNDRY_KEY est réutilisée)
+FOUNDRY_AGENT_ID           = asst_xxx          (agent pré-créé avec l'outil bing_grounding)
+FOUNDRY_AGENTS_API_VERSION = 2025-05-01
 ```
+
+> **Mise en place du secours web** : créer une ressource **« Grounding with Bing
+> Search »**, la connecter au projet Foundry, puis créer **un agent** dans le portail
+> Foundry muni de l'outil *bing_grounding* (instructions : « réponds en français à
+> partir de Microsoft Learn et des forums Microsoft, cite tes sources »). Copier son
+> ID dans `FOUNDRY_AGENT_ID`. Tant que ces variables sont absentes, la fonctionnalité
+> reste éteinte sans impact. Voir `api/shared/webSearch.js`.
 
 ---
 
@@ -127,6 +142,37 @@ Réponse :
 
 `statut` ∈ `trouve` | `aucune` | `ambigu`. Quand `aucune`, `procedureId` vaut
 `null` et `resume` explique pourquoi.
+
+**Secours web (Microsoft Learn / forums)** — déclenché UNIQUEMENT quand aucune
+procédure interne ne passe le seuil (`statut="aucune"`). Si configuré (`shared/webSearch.js`,
+variables d'env au §3), `/api/diagnose` interroge Microsoft Learn / answers.microsoft.com via
+« Grounding with Bing Search » et renvoie un champ `pisteExterne` **distinct** des
+procédures internes :
+```json
+"pisteExterne": {
+  "resume": "<2-3 phrases issues des sources Microsoft>",
+  "liens": [{ "titre": "<titre>", "url": "https://learn.microsoft.com/..." }]
+}
+```
+`pisteExterne` vaut `null` si la recherche est désactivée, échoue, ou ne ramène
+aucun lien Microsoft fiable. Le frontend l'affiche dans une section séparée
+étiquetée « Piste externe — à vérifier » : ce n'est jamais une procédure validée.
+
+**Re-vérification interne** : quand la recherche Microsoft ramène une piste, on
+relance UNE recherche interne avec les termes Microsoft (titres + résumé, souvent
+« normalisés » : ex. « messagerie » au lieu de « mail bloqué »). Si une procédure
+interne ressort cette fois au-dessus du seuil, on **priorise l'interne** (statut
+`trouve`/`ambigu`, `pisteExterne` ignorée) — l'étape 3 LLM s'exécute normalement.
+Sinon on renvoie `statut="aucune"` + `pisteExterne`, en indiquant explicitement
+qu'aucune procédure interne n'a été trouvée. La construction des candidats
+(`buildCandidates`) est partagée entre la recherche initiale et la re-vérification.
+
+**Confidentialité du secours web** : la requête envoyée au web ne contient QUE
+`categorie + sousCategorie + motsCles` (mots-clés génériques). Le ticket brut et
+TOUTES les entités (`utilisateur`, `ip`, `email`, `domaine`, `serveur`,
+`identifiantTechnique`) sont exclus. Les citations sont filtrées côté serveur pour
+ne garder que les domaines `learn.microsoft.com` / `answers.microsoft.com` /
+`techcommunity.microsoft.com`.
 
 **`POST /api/feedback`** — rôle minimum `tech`
 ```json

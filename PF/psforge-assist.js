@@ -376,8 +376,45 @@
         'Si cette situation est connue, créez la procédure depuis l’onglet « Procédures » pour la rendre trouvable.'));
     }
 
+    // Piste externe de secours (Microsoft Learn / forums) — clairement séparée,
+    // étiquetée « à vérifier » : ce n'est PAS une procédure interne validée.
+    if (res && res.pisteExterne && Array.isArray(res.pisteExterne.liens) && res.pisteExterne.liens.length) {
+      appendPisteExterne(card, res.pisteExterne);
+    }
+
     body.appendChild(card);
     appendAnalysis(body, analysis);
+  }
+
+  /* ── Piste externe (Microsoft Learn / forums) — secours, non vérifiée ─────── */
+  function appendPisteExterne(root, piste) {
+    const box = el('div', 'pf-assist-piste');
+    const head = el('div', 'pf-assist-piste-head');
+    head.appendChild(el('span', 'pf-assist-piste-badge', 'Piste externe'));
+    head.appendChild(el('span', 'pf-assist-piste-src', 'Microsoft Learn / forums — à vérifier'));
+    box.appendChild(head);
+
+    if (piste.resume) {
+      const p = el('p', 'pf-assist-piste-resume');
+      renderInline(piste.resume, p);
+      box.appendChild(p);
+    }
+
+    const ul = el('ul', 'pf-assist-piste-liens');
+    for (const lien of piste.liens) {
+      if (!lien || !lien.url) continue;
+      const li = el('li');
+      const a = document.createElement('a');
+      a.href = lien.url;            // navigation externe ; aucun fetch → CSP connect-src non concerné
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.className = 'pf-assist-piste-lien';
+      a.textContent = lien.titre || lien.url;
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    box.appendChild(ul);
+    root.appendChild(box);
   }
 
   /* ── État « erreur » ──────────────────────────────────────────────────────── */
