@@ -3208,7 +3208,7 @@ html:not([data-theme="dark"]) .pf-proc-card {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 22px clamp(16px, 3vw, 32px) 48px;
+  padding: 24px clamp(16px, 3vw, 32px) 24px;
 }
 
 /* Colonne centrée, style chat. */
@@ -3220,6 +3220,25 @@ html:not([data-theme="dark"]) .pf-proc-card {
   flex-direction: column;
   gap: 18px;
 }
+
+/* État vide (avant 1re question) : accueil centré verticalement, fil masqué. */
+.pf-assist-view:not(.is-chatting) .pf-assist-scroll {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.pf-assist-view:not(.is-chatting) .pf-assist-result { display: none; }
+/* En discussion : l'accueil disparaît, le fil prend la place. */
+.pf-assist-view.is-chatting .pf-assist-hero { display: none; }
+
+/* Composer ancré en bas (le layout « change » une fois la discussion lancée). */
+.pf-assist-dock {
+  flex-shrink: 0;
+  padding: 12px clamp(16px, 3vw, 32px) 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.pf-assist-dock .pf-assist-composer { max-width: 760px; margin: 0 auto; }
 
 /* ── Accueil : logo PsForge + intro ── */
 .pf-assist-hero { text-align: center; padding: 18px 0 2px; }

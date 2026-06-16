@@ -59,6 +59,17 @@
     ta.style.height = Math.min(ta.scrollHeight, 220) + 'px';
   }
 
+  // Bascule la vue en mode « discussion » : l'accueil disparaît, le fil prend la
+  // place, le composer reste ancré en bas (la mise en page change au 1er message).
+  function setChatting() {
+    const v = document.getElementById('pfAssistView');
+    if (v) v.classList.add('is-chatting');
+  }
+  function scrollAssistToBottom() {
+    const sc = document.querySelector('.pf-assist-scroll');
+    if (sc) sc.scrollTop = sc.scrollHeight;
+  }
+
   // Bulle « utilisateur » : reprend le texte du ticket (look chat, aligné à droite).
   function appendUserMessage(root, text) {
     if (!text) return;
@@ -163,6 +174,8 @@
 
   function setLoading() {
     const root = document.getElementById('pfAssistResult');
+    setChatting();
+    setChatting();
     root.replaceChildren();
     appendUserMessage(root, lastTicket);
     const body = appendAssistantMessage(root);
@@ -173,13 +186,15 @@
     txt.appendChild(el('span', 'pf-assist-loading-sub', 'Compréhension du ticket puis recherche d’une procédure connue.'));
     card.appendChild(txt);
     body.appendChild(card);
+    scrollAssistToBottom();
   }
 
   /* ── Récapitulatif d'analyse (catégorie + entités cliquables) ─────────────── */
   function appendAnalysis(root, analysis) {
     if (!analysis) return;
     const box = el('details', 'pf-assist-analysis');
-    const sum = el('summary', 'pf-assist-analysis-sum', 'Analyse du ticket');
+    box.open = true;   // entités visibles par défaut (« remontent » à l'écran)
+    const sum = el('summary', 'pf-assist-analysis-sum', 'Analyse du ticket — entités extraites');
     box.appendChild(sum);
 
     const body = el('div', 'pf-assist-analysis-body');
@@ -241,6 +256,7 @@
   /* ── État « trouvé » / « ambigu » ─────────────────────────────────────────── */
   function renderTrouve(analysis, res) {
     const root = document.getElementById('pfAssistResult');
+    setChatting();
     root.replaceChildren();
     appendUserMessage(root, lastTicket);
     const body = appendAssistantMessage(root);
@@ -332,6 +348,7 @@
   /* ── État « aucune » (affichage à part entière) ───────────────────────────── */
   function renderAucune(analysis, res) {
     const root = document.getElementById('pfAssistResult');
+    setChatting();
     root.replaceChildren();
     appendUserMessage(root, lastTicket);
     const body = appendAssistantMessage(root);
@@ -366,6 +383,7 @@
   /* ── État « erreur » ──────────────────────────────────────────────────────── */
   function renderErreur(message, status) {
     const root = document.getElementById('pfAssistResult');
+    setChatting();
     root.replaceChildren();
     appendUserMessage(root, lastTicket);
     const body = appendAssistantMessage(root);
@@ -382,6 +400,7 @@
       card.appendChild(retry);
     }
     body.appendChild(card);
+    scrollAssistToBottom();
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -426,6 +445,7 @@
     } else {
       renderTrouve(data.analysis, res);
     }
+    scrollAssistToBottom();
   }
 
   /* ═══════════════════════════════════════════════════════════

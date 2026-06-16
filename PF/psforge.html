@@ -344,25 +344,27 @@
     <div class="pf-assist-scroll">
       <div class="pf-assist-col">
 
-        <!-- Accueil : logo PsForge + intro -->
-        <div class="pf-assist-hero">
+        <!-- Accueil : logo PsForge + intro (masqué une fois la discussion démarrée) -->
+        <div class="pf-assist-hero" id="pfAssistHero">
           <img class="pf-assist-logo" src="../assets/PSB.png" alt="PsForge">
           <h2 class="pf-assist-title">Décrivez l'incident</h2>
           <p class="pf-assist-sub">L'assistant recherche une <strong>procédure connue</strong> dans la base interne. Il n'invente jamais de réponse : si rien ne correspond précisément, il le dit.</p>
         </div>
 
-        <!-- Composer (style Claude) -->
-        <div class="pf-assist-composer">
-          <textarea class="pf-assist-ticket" id="pfAssistTicket" rows="1" spellcheck="false" placeholder="Décrivez l'incident…"></textarea>
-          <div class="pf-assist-composer-bar">
-            <span class="pf-assist-hint" id="pfAssistHint"></span>
-            <button class="pf-assist-send" type="button" id="pfAssistAnalyze" title="Analyser" aria-label="Analyser">↑</button>
-          </div>
-        </div>
-
         <!-- Fil de réponse -->
         <div class="pf-assist-result" id="pfAssistResult" aria-live="polite"></div>
 
+      </div>
+    </div>
+
+    <!-- Composer ancré en bas (style chat) -->
+    <div class="pf-assist-dock">
+      <div class="pf-assist-composer">
+        <textarea class="pf-assist-ticket" id="pfAssistTicket" rows="1" spellcheck="false" placeholder="Décrivez l'incident…"></textarea>
+        <div class="pf-assist-composer-bar">
+          <span class="pf-assist-hint" id="pfAssistHint"></span>
+          <button class="pf-assist-send" type="button" id="pfAssistAnalyze" title="Analyser" aria-label="Analyser">↑</button>
+        </div>
       </div>
     </div>
   </div>
