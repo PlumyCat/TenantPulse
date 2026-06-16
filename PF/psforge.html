@@ -241,8 +241,10 @@
     <div class="pf-proc-toolbar" id="pfProcListToolbar">
       <span class="pf-proc-title">Procédures internes</span>
       <span class="pf-script-spacer"></span>
+      <button class="pf-mgr-io-btn" type="button" id="pfProcImport" title="Importer une procédure depuis un fichier Word (.docx)">↑ Importer Word</button>
       <button class="pf-btn-validate" type="button" id="pfProcNew">+ Nouvelle procédure</button>
     </div>
+    <input type="file" id="pfProcImportFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
 
     <!-- Toolbar détail -->
     <div class="pf-proc-toolbar" id="pfProcDetailToolbar" hidden>

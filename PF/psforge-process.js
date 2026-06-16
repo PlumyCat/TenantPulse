@@ -23,9 +23,9 @@
   /* ═══════════════════════════════════════════════════════════
      UTILITAIRES API
      ═══════════════════════════════════════════════════════════ */
-  async function apiFetch(url, opts) {
+  async function apiFetch(url, opts, timeoutMs) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs || 10000);
     try {
       const res  = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal }, opts));
       const data = await res.json().catch(() => ({}));
@@ -458,6 +458,53 @@
   }
 
   /* ═══════════════════════════════════════════════════════════
+     IMPORT WORD (.docx → brouillon de procédure)
+     POST /api/process-import → l'éditeur s'ouvre prérempli pour relecture.
+     Le brouillon n'est PAS enregistré : le technicien relit puis enregistre.
+     ═══════════════════════════════════════════════════════════ */
+  function handleDocxImport(file) {
+    if (!file) return;
+    if (!/\.docx$/i.test(file.name)) { alert('Choisissez un fichier Word .docx.'); return; }
+    if (file.size > 10 * 1024 * 1024) { alert('Fichier trop volumineux (10 Mo max).'); return; }
+
+    // Ouvre l'éditeur en état « conversion en cours ».
+    openEditor(null);
+    document.getElementById('pfProcEditorTitle').textContent = 'Import Word — conversion…';
+    const status = document.getElementById('pfProcSaveStatus');
+    status.textContent = 'Conversion du document et reformatage par l’IA en cours… (quelques secondes)';
+    status.className = 'pf-proc-save-status';
+
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+      const fileBase64 = String(e.target.result || '').split(',')[1] || '';
+      // L'import enchaîne une conversion + un appel LLM → délai généreux.
+      const { ok, data } = await apiFetch('/api/process-import',
+        { method: 'POST', body: JSON.stringify({ fileBase64, fileName: file.name }) }, 90000);
+
+      if (!ok) {
+        document.getElementById('pfProcEditorTitle').textContent = 'Import Word';
+        status.textContent = '✗ ' + (data.error || 'Import impossible.');
+        status.className = 'pf-proc-save-status pf-proc-status--error';
+        return;
+      }
+
+      // Préremplit l'éditeur avec le brouillon (pas d'id → enregistrement = création).
+      openEditor({
+        titre:             data.titre || '',
+        categorie:         data.categorie || '',
+        descriptionCourte: data.descriptionCourte || '',
+        contentMarkdown:   data.contentMarkdown || ''
+      });
+      document.getElementById('pfProcEditorTitle').textContent = 'Procédure importée — à relire puis enregistrer';
+      const st   = document.getElementById('pfProcSaveStatus');
+      const warn = (data.warnings || []).join(' ');
+      st.textContent = warn ? ('⚠ ' + warn) : '✓ Brouillon prêt : relisez le contenu puis enregistrez.';
+      st.className   = 'pf-proc-save-status ' + (warn ? 'pf-proc-status--error' : 'pf-proc-status--ok');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
      SUPPRESSION
      ═══════════════════════════════════════════════════════════ */
   async function deleteProc() {
@@ -775,9 +822,11 @@
     const canCreate = procHasRole('tech');        // tech, moderator, manager, admin
     const canDelete = procHasRole('moderator');   // moderator, manager, admin
     const newBtn  = document.getElementById('pfProcNew');
+    const impBtn  = document.getElementById('pfProcImport');
     const editBtn = document.getElementById('pfProcEdit');
     const delBtn  = document.getElementById('pfProcDelete');
     if (newBtn)  newBtn.hidden  = !canCreate;
+    if (impBtn)  impBtn.hidden  = !canCreate;
     if (editBtn) editBtn.hidden = !canCreate;
     if (delBtn)  delBtn.hidden  = !canDelete;
   }
@@ -837,6 +886,7 @@
     if (card && card.dataset.id) { openDetail(card.dataset.id); return; }
 
     // Boutons toolbar
+    if (e.target.closest('#pfProcImport'))         { document.getElementById('pfProcImportFile').click(); return; }
     if (e.target.closest('#pfProcNew'))           { openEditor(null); return; }
     if (e.target.closest('#pfProcBackToList'))     { showSub('list'); currentProc = null; return; }
     if (e.target.closest('#pfProcEdit') && currentProc) { openEditor(currentProc); return; }
@@ -951,6 +1001,11 @@
     if (e.target.id === 'pfProcImgFile') {
       const f = e.target.files && e.target.files[0];
       if (f) handleImgUpload(f);
+      e.target.value = '';
+    }
+    if (e.target.id === 'pfProcImportFile') {
+      const f = e.target.files && e.target.files[0];
+      if (f) handleDocxImport(f);
       e.target.value = '';
     }
   });
