@@ -341,21 +341,31 @@
 
   <!-- ── Vue Assistant (diagnostic IA) ── -->
   <div class="pf-assist-view" id="pfAssistView" hidden>
-    <div class="pf-assist-intro">
-      <span class="pf-assist-eyebrow">Assistant de support</span>
-      <h2 class="pf-assist-title">Décrivez l'incident</h2>
-      <p class="pf-assist-sub">L'assistant recherche une <strong>procédure connue</strong> dans la base interne. Il n'invente jamais de réponse : si rien ne correspond précisément, il le dit.</p>
-    </div>
+    <div class="pf-assist-scroll">
+      <div class="pf-assist-grid">
 
-    <div class="pf-assist-input-zone">
-      <textarea class="pf-assist-ticket" id="pfAssistTicket" rows="4" spellcheck="false" placeholder="Ex. : L'utilisateur ne parvient pas à se connecter au VPN, erreur 809 sur son poste Windows…"></textarea>
-      <div class="pf-assist-input-actions">
-        <span class="pf-assist-hint" id="pfAssistHint"></span>
-        <button class="pf-btn-validate" type="button" id="pfAssistAnalyze">Analyser</button>
+        <!-- Colonne gauche : saisie (reste visible en sticky) -->
+        <div class="pf-assist-left">
+          <div class="pf-assist-intro">
+            <span class="pf-assist-eyebrow">Assistant de support</span>
+            <h2 class="pf-assist-title">Décrivez l'incident</h2>
+            <p class="pf-assist-sub">L'assistant recherche une <strong>procédure connue</strong> dans la base interne. Il n'invente jamais de réponse : si rien ne correspond précisément, il le dit.</p>
+          </div>
+
+          <div class="pf-assist-input-zone">
+            <textarea class="pf-assist-ticket" id="pfAssistTicket" rows="5" spellcheck="false" placeholder="Ex. : L'utilisateur ne parvient pas à se connecter au VPN, erreur 809 sur son poste Windows…"></textarea>
+            <div class="pf-assist-input-actions">
+              <span class="pf-assist-hint" id="pfAssistHint"></span>
+              <button class="pf-btn-validate" type="button" id="pfAssistAnalyze">Analyser</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colonne droite : résultat -->
+        <div class="pf-assist-result" id="pfAssistResult" aria-live="polite"></div>
+
       </div>
     </div>
-
-    <div class="pf-assist-result" id="pfAssistResult" aria-live="polite"></div>
   </div>
 
   </main>

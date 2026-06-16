@@ -3197,11 +3197,36 @@ html:not([data-theme="dark"]) .pf-proc-card {
    ════════════════════════════════════════ */
 .pf-assist-view[hidden] { display: none !important; }
 
+/* La vue remplit #centerMain (overflow:hidden) ; le scroll est interne. */
 .pf-assist-view {
-  padding: 22px clamp(16px, 4vw, 40px) 48px;
-  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.pf-assist-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px clamp(16px, 3vw, 32px) 48px;
+}
+
+/* Deux colonnes : saisie à gauche, résultat à droite. */
+.pf-assist-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  max-width: 1240px;
   margin: 0 auto;
-  width: 100%;
+}
+/* La colonne de saisie reste visible pendant qu'on fait défiler le résultat. */
+.pf-assist-left { position: sticky; top: 0; align-self: start; }
+
+/* Empilement sur écran étroit. */
+@media (max-width: 820px) {
+  .pf-assist-grid { grid-template-columns: 1fr; }
+  .pf-assist-left { position: static; }
 }
 
 .pf-assist-intro { margin-bottom: 18px; }
