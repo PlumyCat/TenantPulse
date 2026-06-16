@@ -3418,6 +3418,7 @@ html:not([data-theme="dark"]) .pf-assist-msg-avatar img { filter: invert(1); }
 /* Procédure rendue richement (réutilise .pf-proc-content). */
 .pf-assist-proc { margin: 0 0 14px; }
 .pf-assist-proc > :first-child { margin-top: 0; }
+.pf-assist-proc-loading { font-size: var(--text-sm); color: var(--muted); padding: 6px 0; }
 
 .pf-assist-open { margin: 2px 0 14px; }
 

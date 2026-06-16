@@ -280,25 +280,19 @@
       card.appendChild(p);
     }
 
-    // Étapes (reprises fidèlement de la procédure).
-    // Rendu RICHE via le moteur des Procédures : titres, blocs de code (avec
-    // bouton Copier), jetons <param>. On reconstitue le markdown (les étapes
-    // sont les lignes de la procédure) puis on le rend dans .pf-proc-content.
-    if (Array.isArray(res.etapes) && res.etapes.length) {
+    // Étapes — on affiche le MARKDOWN RÉEL de la procédure (images, blocs de code
+    // avec bouton Copier, jetons <param> injectables), chargé depuis
+    // GET /api/process?id=. Le LLM (res.etapes) aplatissait les blocs et perdait
+    // les images : on ne s'en sert plus que comme repli si le chargement échoue.
+    if (res.procedureId || (Array.isArray(res.etapes) && res.etapes.length)) {
       card.appendChild(el('div', 'pf-assist-sec-label', 'Étapes'));
-      if (typeof window.pfRenderProcMarkdown === 'function') {
-        const proc = el('div', 'pf-proc-content pf-assist-proc');
-        window.pfRenderProcMarkdown(res.etapes.join('\n'), proc);
-        card.appendChild(proc);
+      const proc = el('div', 'pf-proc-content pf-assist-proc');
+      card.appendChild(proc);
+      if (res.procedureId) {
+        proc.appendChild(el('div', 'pf-assist-proc-loading', 'Chargement de la procédure…'));
+        loadProcedureBody(res.procedureId, proc, res.etapes);
       } else {
-        // Repli : liste numérotée simple (rendu inline gras/code).
-        const ol = el('ol', 'pf-assist-steps');
-        for (const step of res.etapes) {
-          const li = el('li');
-          renderInline(step, li);
-          ol.appendChild(li);
-        }
-        card.appendChild(ol);
+        renderEtapesFallback(res.etapes, proc);
       }
     }
 
@@ -343,6 +337,38 @@
     appendFeedback(card, res.procedureId);
     body.appendChild(card);
     appendAnalysis(body, analysis);
+  }
+
+  // Charge le markdown RÉEL de la procédure et le rend richement (réutilise le
+  // moteur des Procédures : images, blocs de code + Copier, jetons <param>
+  // cliquables → injectables depuis les entités). Repli sur les étapes du LLM
+  // si le chargement échoue.
+  async function loadProcedureBody(procedureId, container, fallbackEtapes) {
+    const { ok, data } = await apiFetch('/api/process?id=' + encodeURIComponent(procedureId), null, 15000);
+    if (ok && data && typeof data.contentMarkdown === 'string' && data.contentMarkdown.trim()
+        && typeof window.pfRenderProcMarkdown === 'function') {
+      window.pfRenderProcMarkdown(data.contentMarkdown, container); // vide + rend
+    } else {
+      container.replaceChildren();
+      renderEtapesFallback(fallbackEtapes, container);
+    }
+    scrollAssistToBottom();
+  }
+
+  // Repli : étapes reformulées par le LLM (quand le markdown réel est indisponible).
+  function renderEtapesFallback(etapes, container) {
+    if (!Array.isArray(etapes) || !etapes.length) return;
+    if (typeof window.pfRenderProcMarkdown === 'function') {
+      window.pfRenderProcMarkdown(etapes.join('\n'), container);
+    } else {
+      const ol = el('ol', 'pf-assist-steps');
+      for (const step of etapes) {
+        const li = el('li');
+        renderInline(step, li);
+        ol.appendChild(li);
+      }
+      container.appendChild(ol);
+    }
   }
 
   /* ── État « aucune » (affichage à part entière) ───────────────────────────── */

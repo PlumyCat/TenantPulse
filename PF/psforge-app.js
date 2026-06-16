@@ -158,7 +158,9 @@
 
   /* ── Config par défaut des blocs sidebar ── */
   const DEFAULT_BLOCKS = [
+    { id: 'utilisateur', label: 'Utilisateur', hint: 'Nom ou login de la personne (ex. Jean Dupont · jdupont)', placeholder: 'jdupont'                       },
     { id: 'upn',      label: 'UPN',        hint: 'ex. john.doe@contoso.com',                           placeholder: 'john.doe@contoso.com'                 },
+    { id: 'email',    label: 'Email',      hint: 'Adresse e-mail (ex. john.doe@contoso.com)',          placeholder: 'john.doe@contoso.com'                 },
     { id: 'groupid',  label: 'Groupe ID',  hint: 'GUID du groupe Entra ID',                            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
     { id: 'objectid', label: 'Object ID',  hint: "GUID de l'objet ou utilisateur Entra ID",            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
     { id: 'skuid',    label: 'SKU ID',     hint: 'GUID de la licence (Get-MgSubscribedSku)',            placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
@@ -173,11 +175,20 @@
   ];
 
   function loadBlocksConfig() {
+    let saved = null;
     try {
-      const saved = JSON.parse(localStorage.getItem(BLOCKS_KEY));
-      if (Array.isArray(saved) && saved.length > 0) return saved;
+      const raw = JSON.parse(localStorage.getItem(BLOCKS_KEY));
+      if (Array.isArray(raw) && raw.length > 0) saved = raw;
     } catch {}
-    return DEFAULT_BLOCKS.map(function (b) { return Object.assign({}, b); });
+    if (!saved) return DEFAULT_BLOCKS.map(function (b) { return Object.assign({}, b); });
+    // Migration douce : ajoute les blocs par défaut récents (Utilisateur, Email…)
+    // absents d'une config déjà enregistrée, sans toucher à l'ordre ni aux perso.
+    const have = new Set(saved.map(function (b) { return b && b.id; }));
+    const merged = saved.slice();
+    DEFAULT_BLOCKS.forEach(function (def) {
+      if (!have.has(def.id)) merged.push(Object.assign({}, def));
+    });
+    return merged;
   }
   function saveBlocksConfig(config) {
     try { localStorage.setItem(BLOCKS_KEY, JSON.stringify(config)); } catch {}
