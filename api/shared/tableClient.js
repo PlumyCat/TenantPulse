@@ -11,17 +11,11 @@ const classificationsClient = TableClient.fromConnectionString(connectionString,
 const requestsClient      = TableClient.fromConnectionString(connectionString, "Requests");
 const tagsClient          = TableClient.fromConnectionString(connectionString, "Tags");
 const locksClient         = TableClient.fromConnectionString(connectionString, "Locks");
-// Entrées légères des process internes (le contenu markdown + images vivent dans Blob Storage).
-const processesClient     = TableClient.fromConnectionString(connectionString, "Processes");
-// Verdicts ✅/❌ des techniciens sur les diagnostics (TTL applicatif 7 j).
-const feedbackClient      = TableClient.fromConnectionString(connectionString, "Feedback");
 
 module.exports = {
   rolesClient,
   classificationsClient,
   requestsClient,
   tagsClient,
-  locksClient,
-  processesClient,
-  feedbackClient
+  locksClient
 };

@@ -243,7 +243,7 @@ function makeInfoIcon(variant) {
 const PROFILE_KEY = 'tenantpulse_profile_v1';
 const MHAELLE_PROFILE_KEY = 'mhaelle_profile_v1';
 
-/* Origine cible des postMessage vers les iframes (Mhaelle, PsForge).
+/* Origine cible des postMessage vers l'iframe Mhaelle.
    En prod (http/https) les iframes sont même origine → on restreint à location.origin.
    Sur file:// : Chrome retourne 'null', Edge retourne 'file://' — dans les deux cas
    les iframes ont une origine opaque ('null') distincte, donc on utilise le wildcard. */
@@ -663,8 +663,8 @@ function copyHistoryGuid(guid, btn) {
   navigator.clipboard.writeText(guid).then(() => { btn.replaceChildren(); const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; btn.appendChild(ck); setTimeout(() => { btn.replaceChildren(); const img = document.createElement('img'); img.src = 'assets/copy.png'; img.className = 'icon-adaptive'; img.alt = ''; btn.appendChild(img); }, 1500); });
 }
 
-// ── Onglets TenantPulse / Mhaelle / PsForge (vue type navigateur) ──
-// Les iframes sont lazy-loaded au premier clic puis restent montées,
+// ── Onglets TenantPulse / Mhaelle (vue type navigateur) ──
+// L'iframe Mhaelle est lazy-loaded au premier clic puis reste montée,
 // ce qui préserve l'état de l'analyse des deux côtés au switch.
 function switchAppTab(target) {
   const tabs = document.querySelectorAll('.app-tab');
@@ -674,18 +674,11 @@ function switchAppTab(target) {
     t.setAttribute('aria-selected', active ? 'true' : 'false');
   });
   const mlFrame = document.getElementById('mhaelleFrame');
-  const pfFrame = document.getElementById('psforgeFrame');
   if (target === 'ml') {
     if (!mlFrame.src) mlFrame.src = 'ML/mhaelle.html?embedded=1';
     document.body.classList.add('view-ml');
-    document.body.classList.remove('view-pf');
-  } else if (target === 'pf') {
-    if (!pfFrame.src) pfFrame.src = 'PF/psforge.html?embedded=1';
-    document.body.classList.add('view-pf');
-    document.body.classList.remove('view-ml');
   } else {
     document.body.classList.remove('view-ml');
-    document.body.classList.remove('view-pf');
   }
 }
 
@@ -775,7 +768,6 @@ function bindEvents() {
   });
   document.getElementById('profilesTabTP').addEventListener('click', () => switchProfilesTab('tp'));
   document.getElementById('profilesTabML').addEventListener('click', () => switchProfilesTab('ml'));
-  document.getElementById('profilesTabPF').addEventListener('click', () => switchProfilesTab('pf'));
   document.querySelectorAll('#analysisModeSeg .analysis-mode-opt').forEach(opt => {
     opt.addEventListener('click', () => {
       document.querySelectorAll('#analysisModeSeg .analysis-mode-opt').forEach(o => {
@@ -786,7 +778,6 @@ function bindEvents() {
       updateAnalysisModeHint(opt.dataset.mode);
     });
   });
-  document.getElementById('btnPFClearAll').addEventListener('click', clearAllPsForgeData);
   document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
     saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
     renderMhaelleProfilePane();
@@ -858,17 +849,13 @@ let _profilesActiveTab = 'tp';
 
 function openProfilesModal() {
   /* Auto-sélection de l'onglet selon l'outil visible en arrière-plan */
-  if (document.body.classList.contains('view-pf')) {
-    _profilesActiveTab = 'pf';
-  } else if (document.body.classList.contains('view-ml')) {
+  if (document.body.classList.contains('view-ml')) {
     _profilesActiveTab = 'ml';
   } else {
     _profilesActiveTab = 'tp';
   }
   renderTpProfilePane();
   renderMhaelleProfilePane();
-  renderPsForgeProfilePane();
-  requestPsForgeStats();   /* compteurs PsForge demandés à l'iframe (async) */
   switchProfilesTab(_profilesActiveTab);
   document.getElementById('profilesModal').classList.add('open');
 }
@@ -879,15 +866,10 @@ function switchProfilesTab(tab) {
   _profilesActiveTab = tab;
   document.getElementById('profilesPaneTP').classList.toggle('profiles-pane-hidden', tab !== 'tp');
   document.getElementById('profilesPaneML').classList.toggle('profiles-pane-hidden', tab !== 'ml');
-  document.getElementById('profilesPanePF').classList.toggle('profiles-pane-hidden', tab !== 'pf');
   document.getElementById('profilesFooterTP').classList.toggle('profiles-footer-hidden', tab !== 'tp');
   document.getElementById('profilesFooterML').classList.toggle('profiles-footer-hidden', tab !== 'ml');
-  document.getElementById('profilesFooterPF').classList.toggle('profiles-footer-hidden', tab !== 'pf');
-  /* Masquer "Enregistrer" sur l'onglet PsForge — les actions sont immédiates */
-  document.getElementById('btnProfilesSave').classList.toggle('profiles-save-btn-hidden', tab === 'pf');
   document.getElementById('profilesTabTP').classList.toggle('active', tab === 'tp');
   document.getElementById('profilesTabML').classList.toggle('active', tab === 'ml');
-  document.getElementById('profilesTabPF').classList.toggle('active', tab === 'pf');
 }
 
 /* ── Onglet TenantPulse : toggles + drag-to-reorder ── */
@@ -1109,158 +1091,11 @@ function setupMlCrossColDrag(cols) {
 
 /* ── Sauvegarde commune ── */
 function saveProfilesModal() {
-  if (_profilesActiveTab === 'pf') return; /* PsForge : actions immédiates, rien à sauvegarder */
   if (_profilesActiveTab === 'ml') {
     saveMhaelleProfileFromModal();
   } else {
     saveTpProfileFromModal();
   }
-}
-
-/* ── Onglet PsForge : compteurs + effacements délégués à l'iframe (postMessage) ── */
-let _pfProfileStats = null;   /* dernier instantané reçu (null = en attente) */
-let _pfFrameReady   = false;  /* iframe PsForge chargée (load émis) */
-
-function pfPostToFrame(msg) {
-  const f = document.getElementById('psforgeFrame');
-  if (f && f.contentWindow) {
-    try { f.contentWindow.postMessage(msg, FRAME_TARGET_ORIGIN); } catch (e) {}
-  }
-}
-
-/* Poste un message à l'iframe PsForge ; attend son chargement si nécessaire
-   (et la charge si l'onglet n'a jamais été ouvert). */
-function pfEnsureThenPost(type) {
-  const f = document.getElementById('psforgeFrame');
-  if (!f) return;
-  if (_pfFrameReady && f.src) { pfPostToFrame({ type }); return; }
-  f.addEventListener('load', function once() {
-    f.removeEventListener('load', once);
-    pfPostToFrame({ type });
-  });
-  if (!f.src) f.src = 'PF/psforge.html?embedded=1';
-}
-function requestPsForgeStats()   { pfEnsureThenPost('pf-profile-query'); }
-function requestPsForgeStorage() { pfEnsureThenPost('pf-storage-list'); }
-
-/* Réception des compteurs PsForge → re-render du panneau.
-   Vérification de l'origine : on n'accepte que les messages venant de la
-   même origine (ou de 'null' sur file://, où les iframes ont une origine opaque). */
-window.addEventListener('message', function (e) {
-  const trusted = location.origin === 'null' || location.origin === 'file://'
-    ? (e.origin === 'null' || e.origin === location.origin)
-    : e.origin === location.origin;
-  if (!trusted) return;
-  const d = e.data;
-  if (!d || d.type !== 'pf-profile-stats') return;
-  _pfProfileStats = d.stats || {};
-  renderPsForgeProfilePane();
-});
-
-function renderPsForgeProfilePane() {
-  const pane = document.getElementById('psforgeDataPane');
-  if (!pane) return;
-  pane.replaceChildren();
-
-  const s          = _pfProfileStats || {};
-  const savedCnt   = s.saved      || 0;
-  const favsCnt    = s.favorites  || 0;
-  const importsCnt = (s.customCmds || 0) + (s.overrides || 0) + (s.groups || 0) + (s.groupOverrides || 0);
-  const blocksCnt  = (s.blocksCount != null) ? s.blocksCount : 12;
-  const hasCustomBlocks = !!s.blocksCustom;
-
-  const sections = [
-    {
-      label:    'Commandes sauvegardées',
-      iconSrc:  'assets/save.png',
-      count:    savedCnt,
-      desc:     savedCnt === 0 ? 'Aucune commande sauvegardée.' : savedCnt + ' commande(s) en mémoire.',
-      btnLabel: 'Effacer les commandes',
-      danger:   savedCnt > 0,
-      action:   function () { pfPostToFrame({ type: 'pf-profile-clear', target: 'saved' }); }
-    },
-    {
-      label:    'Commandes importées & personnalisées',
-      iconSrc:  'assets/option.png',
-      iconClass:'icon-adaptive-inv',  /* option.png est blanc → inversion en mode clair */
-      count:    importsCnt,
-      desc:     importsCnt === 0 ? 'Aucune commande importée ou personnalisée.' : importsCnt + ' élément(s) importé(s) / modifié(s).',
-      btnLabel: 'Effacer les imports',
-      danger:   importsCnt > 0,
-      action:   function () { pfPostToFrame({ type: 'pf-profile-clear', target: 'imports' }); }
-    },
-    {
-      label:    'Favoris',
-      iconSrc:  'assets/history.png',
-      count:    favsCnt,
-      desc:     favsCnt === 0 ? 'Aucun favori enregistré.' : favsCnt + ' favori(s) enregistré(s).',
-      btnLabel: 'Effacer les favoris',
-      danger:   favsCnt > 0,
-      action:   function () { pfPostToFrame({ type: 'pf-profile-clear', target: 'favorites' }); }
-    },
-    {
-      label:    'Blocs de saisie',
-      iconSrc:  'assets/option.png',
-      iconClass:'icon-adaptive-inv',  /* option.png est blanc → inversion en mode clair */
-      count:    blocksCnt,
-      desc:     hasCustomBlocks ? 'Configuration personnalisée active.' : 'Configuration par défaut (12 blocs).',
-      btnLabel: 'Réinitialiser les blocs',
-      danger:   false,
-      action:   function () { pfPostToFrame({ type: 'pf-profile-clear', target: 'blocks' }); }
-    }
-  ];
-
-  sections.forEach(function (sec) {
-    /* En-tête de section (collapsible — fermé par défaut) */
-    const hd = document.createElement('button');
-    hd.className = 'drop-section-btn';
-    hd.setAttribute('data-drop-section', '');
-    const hdLbl = document.createElement('span'); hdLbl.textContent = sec.label;
-    const hdArr = document.createElement('span'); hdArr.className = 'ds-arrow'; hdArr.textContent = '▾';
-    hd.appendChild(hdLbl); hd.appendChild(hdArr);
-    hd.addEventListener('click', function () {
-      hd.classList.toggle('open');
-      body.classList.toggle('open');
-    });
-    pane.appendChild(hd);
-
-    /* Corps */
-    const body = document.createElement('div');
-    body.className = 'drop-section-body';
-
-    /* Ligne stats */
-    const statsRow = document.createElement('div');
-    statsRow.className = 'pf-prof-stats-row';
-
-    const iconEl = document.createElement('img');
-    iconEl.src = sec.iconSrc; iconEl.className = (sec.iconClass || 'icon-adaptive') + ' pf-prof-icon'; iconEl.alt = '';
-
-    const descEl = document.createElement('span');
-    descEl.className = 'pf-prof-desc'; descEl.textContent = sec.desc;
-
-    const badge = document.createElement('span');
-    badge.className = 'pf-prof-count' + (sec.count > 0 ? ' has-data' : '');
-    badge.textContent = sec.count;
-
-    statsRow.appendChild(iconEl);
-    statsRow.appendChild(descEl);
-    statsRow.appendChild(badge);
-    body.appendChild(statsRow);
-
-    /* Bouton d'action */
-    const actionBtn = document.createElement('button');
-    actionBtn.type = 'button';
-    actionBtn.className = 'pf-prof-action-btn' + (sec.danger ? ' pf-prof-action-danger' : '');
-    actionBtn.textContent = sec.btnLabel;
-    actionBtn.addEventListener('click', sec.action);
-    body.appendChild(actionBtn);
-
-    pane.appendChild(body);
-  });
-}
-
-function clearAllPsForgeData() {
-  pfPostToFrame({ type: 'pf-profile-clear', target: 'all' });
 }
 
 function saveTpProfileFromModal() {
@@ -1317,19 +1152,15 @@ window.addEventListener('load', () => {
   initAuth();
   bindAdminEvents();
 
-  // ── Synchronisation thème clair/sombre → iframes Mhaelle & PsForge ──
+  // ── Synchronisation thème clair/sombre → iframe Mhaelle ──
   // Utilise postMessage (fonctionne même avec le protocole file://)
   const mhaelleFrame = document.getElementById('mhaelleFrame');
-  const psforgeFrame = document.getElementById('psforgeFrame');
   function postThemeToFrames() {
     const msg = { type: 'tp-theme', theme: document.documentElement.getAttribute('data-theme') || 'light' };
-    [mhaelleFrame, psforgeFrame].forEach(f => {
-      if (f && f.contentWindow) try { f.contentWindow.postMessage(msg, FRAME_TARGET_ORIGIN); } catch(e) {}
-    });
+    if (mhaelleFrame && mhaelleFrame.contentWindow) try { mhaelleFrame.contentWindow.postMessage(msg, FRAME_TARGET_ORIGIN); } catch(e) {}
   }
-  // Envoie le thème dès que chaque iframe est chargée (1er accès ou rechargement)
+  // Envoie le thème dès que l'iframe est chargée (1er accès ou rechargement)
   mhaelleFrame.addEventListener('load', postThemeToFrames);
-  psforgeFrame.addEventListener('load', () => { _pfFrameReady = true; postThemeToFrames(); });
   // Suit tous les changements ultérieurs de data-theme sur le document parent
   new MutationObserver(postThemeToFrames)
     .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -3294,7 +3125,7 @@ function updateStorageSummary() {
   else sum.textContent = entries.length + (entries.length > 1 ? ' entrées' : ' entrée') + ' · ' + fmtStorageSize(total) + ' au total';
 }
 /* Entrée d'inspecteur (header dépliable + valeur + ×). onDelete(entry) décide
-   de la suppression (locale pour le shell, postMessage pour l'iframe PsForge). */
+   de la suppression. */
 function buildStorageEntry(key, raw, onDelete) {
   raw = raw || '';
   const sizeBytes = new Blob([raw]).size;
@@ -3339,36 +3170,14 @@ function refreshStorageEmptyState() {
   else if (!existing) { body.appendChild(buildStorageEmptyMsg()); }
 }
 
-/* Réception du dump de stockage PsForge → (re)rendu de son groupe.
-   Vérification de l'origine : rejet de tout message externe. */
-window.addEventListener('message', function (e) {
-  const trusted = location.origin === 'null' || location.origin === 'file://'
-    ? (e.origin === 'null' || e.origin === location.origin)
-    : e.origin === location.origin;
-  if (!trusted) return;
-  const d = e.data;
-  if (!d || d.type !== 'pf-storage-data') return;
-  const group = document.getElementById('storagePfGroup');
-  if (!group) return;
-  group.replaceChildren();
-  (d.entries || []).forEach(en => {
-    group.appendChild(buildStorageEntry(en.key, en.value, () => {
-      pfPostToFrame({ type: 'pf-storage-remove', key: en.key });   /* suppression + re-render via pf-storage-data */
-    }));
-  });
-  refreshStorageEmptyState();
-  updateStorageSummary();
-});
-
 function showStoragePanel() {
   document.getElementById('mainDropdown').classList.remove('open');
   const body = document.getElementById('storageInspectorBody');
   body.replaceChildren();
 
-  /* Clés du shell (TenantPulse + profil Mhaelle). Les clés psforge_* vivent
-     dans l'iframe (partition séparée en file://) → récupérées via postMessage. */
+  /* Clés du shell (TenantPulse + profil Mhaelle). */
   const keys = [];
-  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('psforge') !== 0) keys.push(k); } } catch {}
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k) keys.push(k); } } catch {}
   keys.sort().forEach(key => {
     let raw = ''; try { raw = localStorage.getItem(key) || ''; } catch {}
     body.appendChild(buildStorageEntry(key, raw, entry => {
@@ -3378,11 +3187,6 @@ function showStoragePanel() {
       updateStorageSummary(); refreshStorageEmptyState();
     }));
   });
-
-  /* Groupe PsForge — rempli en asynchrone par le listener pf-storage-data */
-  const pfGroup = document.createElement('div'); pfGroup.id = 'storagePfGroup';
-  body.appendChild(pfGroup);
-  requestPsForgeStorage();
 
   refreshStorageEmptyState();
   updateStorageSummary();
@@ -3398,8 +3202,6 @@ function clearAllStorage() {
     for (let i = 0; i < localStorage.length; i++) ks.push(localStorage.key(i));
     ks.forEach(k => { try { localStorage.removeItem(k); } catch {} });
   } catch {}
-  /* PsForge : iframe (partition séparée en file://) */
-  pfPostToFrame({ type: 'pf-storage-clear' });
 
   syncCacheIndicator(); syncHistoryToggleUI(); renderHistory();
   if (document.getElementById('storageModal').classList.contains('open')) showStoragePanel();
