@@ -13,7 +13,6 @@ The app bundles three tools in a single interface:
 |---|---|---|---|
 | **M365 Diagnostic** | `/` (root) | Microsoft Tenant ID, Google Workspace detection, DNS (MX/SPF/DKIM/DMARC), WHOIS/RDAP, hosting provider | External public APIs |
 | **Email headers** | `ML/` | Header analysis (SPF/DKIM/DMARC/EOP, SMTP chain, URLs), `.eml` import, client & technical reports | 100% local |
-| **Commands (PsForge)** | `PF/` | Catalog of PowerShell/CMD commands for N1 support, favorites, Script Builder | 100% local |
 
 Two analysis depths for the M365 diagnostic:
 - **Fast**: Tenant ID + basic DNS
@@ -37,9 +36,9 @@ No build step: these are static files (HTML + CSS + JS + images).
 ## Architecture (summary)
 
 - `index.html` + `tenantpulse.js` + `tenantpulse.css`: the shell (M365 Diagnostic).
-- `ML/` and `PF/`: sub-apps loaded as `<iframe ...?embedded=1>` inside the shell. They share
-  `tenantpulse.css` and communicate with the shell via `postMessage` (theme sync `tp-theme`,
-  Mhaelle profile `ml-profile`). They also work standalone.
+- `ML/`: sub-app loaded as `<iframe ...?embedded=1>` inside the shell. Shares
+  `tenantpulse.css` and communicates with the shell via `postMessage` (theme sync `tp-theme`,
+  Mhaelle profile `ml-profile`). Also works standalone.
 - **Strict CSP** (`script-src 'self'`, no `unsafe-inline`): no inline scripts, no `onclick`
   handlers, no `innerHTML` from input — the DOM is built via `createElement`/`textContent`.
 

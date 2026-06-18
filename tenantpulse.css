@@ -21,7 +21,7 @@
   --acc-hover:#fafbff;
   --step-bg:#f7f8fc;
   --panel-w:420px;
-  /* Échelle de rayons — design-system partagé (shell + ML + PF).
+  /* Échelle de rayons — design-system partagé (shell + ML).
      Collapse des valeurs ad-hoc 2..16px en 5 paliers cohérents. */
   --r-xs:4px;    /* badges, chips, petits tags */
   --r-sm:6px;    /* boutons compacts, inputs denses */

@@ -15,7 +15,7 @@ Single-page app à 3 colonnes, encadrée par une topbar noire et une nav violett
 │  TOPBAR  #121212 — Report Bug | tagline | Admin | Déco  │
 ├─────────────────────────────────────────────────────────┤
 │  NAV  #4B3FBE                                            │
-│  [TP] [Diagnostic M365] [Mhaelle dev] [PsForge Alpha]   │
+│  [TP] [Diagnostic M365] [Mhaelle dev]                    │
 │            [cache] [v1.5] [Profils ▾] [Paramètres ▾]    │
 ├──────────────┬──────────────────────┬───────────────────┤
 │  SIDEBAR     │  CENTRE (Résultats)  │  PANNEAU DÉTAIL   │
@@ -25,9 +25,9 @@ Single-page app à 3 colonnes, encadrée par une topbar noire et une nav violett
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Mhaelle** (`ML/`) et **PsForge** (`PF/`) sont des iframes lazy-loaded qui
-  remplacent `.app` au changement d'onglet (`body.view-ml` / `body.view-pf`).
-  Elles partagent `../tenantpulse.css` et reçoivent le thème par `postMessage`.
+- **Mhaelle** (`ML/`) est une iframe lazy-loaded qui
+  remplace `.app` au changement d'onglet (`body.view-ml`).
+  Elle partage `../tenantpulse.css` et reçoit le thème par `postMessage`.
 
 ---
 

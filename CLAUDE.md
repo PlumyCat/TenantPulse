@@ -27,11 +27,6 @@ Project App tenant pulse push to github/
 │   ├── mhaelle.html
 │   ├── mhaelle.js
 │   └── mhaelle.css
-├── PF/                      # PsForge sub-app (PowerShell command catalog)
-│   ├── psforge.html
-│   ├── psforge.js
-│   ├── psforge-app.js       # 150+ command templates
-│   └── psforge.css
 └── api/                     # Azure Functions v2.0 (Node.js) — optional backend
     ├── host.json
     ├── shared/
@@ -79,9 +74,6 @@ cd api && func start
   diagnostic tool and shell.
 - **Mhaelle** (`ML/`): email-header analyzer. Loaded into `#mhaelleFrame` as
   `ML/mhaelle.html?embedded=1`. Status: `dev`.
-- **PsForge** (`PF/`): PowerShell command catalog. Loaded into `#psforgeFrame` as
-  `PF/psforge.html?embedded=1`. Status: `dev`/`Alpha`.
-
 Tab switching (`switchAppTab`) lazily sets the iframe `src` on first open. The shell talks to
 frames via `postMessage`:
 - `{type:'tp-theme', theme}` → push light/dark theme into frames.
@@ -121,7 +113,6 @@ Opt-in by design. Keys:
   `tenantIdHistory_retentionMs`. Retention uses `RETENTION_STEPS` ladder (13 intervals);
   `pruneExpiredHistory` runs on open, on each save, and on retention change.
 - Profiles: `tenantpulse_profile_v1` (TP button order), `mhaelle_profile_v1` (ML block layout).
-- PsForge: `psforge_saved_v1`, `psforge_favorites_v1`, `psforge_blocks_v1` (`PF_LS_KEYS`).
 
 ### Optional backend — Azure Functions + Azure Table Storage
 
@@ -199,8 +190,8 @@ CSP is declared via `<meta http-equiv>` in each HTML file with `script-src 'self
   from user/network input. Use `replaceChildren()` to clear nodes.
 - **Adding any new external API/origin requires editing the `connect-src` (or `img-src`)
   list in `index.html`'s CSP meta AND in `staticwebapp.config.json`.**
-- **Sub-apps (`ML/`, `PF/`) are `connect-src 'self'` only — they must stay network-free.**
-  Do not add external fetch calls to `mhaelle.js` or `psforge*.js`.
+- **`ML/` is `connect-src 'self'` only — it must stay network-free.**
+  Do not add external fetch calls to `mhaelle.js`.
 
 ### No build step — no bundlers, no transpilation
 
