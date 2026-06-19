@@ -3,63 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!--
-  CSP : 'unsafe-inline' supprimé — le JS est externalisé dans tenantpulse.js.
-  script-src 'self' est actif : seuls les scripts chargés depuis la même origine sont autorisés.
--->
+
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
   script-src 'self';
   style-src 'self';
   img-src 'self' https://www.google.com https://*.gstatic.com data:;
-  connect-src 'self'
-    https://dns.google
-    https://login.microsoftonline.com
-    https://accounts.google.com
-    https://rdap.org
-    https://rdap.publicinterestregistry.org
-    https://rdap.verisign.com
-    https://rdap.nominet.uk
-    https://rdap.nic.fr
-    https://rdap.denic.de
-    https://rdap.dns.be
-    https://rdap.sidn.nl
-    https://rdap.switch.ch
-    https://rdap.nic.ch
-    https://rdap.nic.it
-    https://rdap.nic.es
-    https://rdap.eu
-    https://rdap.cira.ca
-    https://rdap.auda.org.au
-    https://rdap.centralnic.com
-    https://rdap.donuts.co
-    https://rdap.afilias.net
-    https://rdap.identitydigital.services
-    https://rdap.arin.net
-    https://rdap.apnic.net
-    https://rdap.lacnic.net
-    https://rdap.afrinic.net
-    https://rdap.ripe.net
-    https://rdap.nic.tv 
-    https://rdap.nic.io 
-    https://lookup.icann.org;
+  connect-src 'self' https://login.microsoftonline.com https://accounts.google.com;
   font-src 'self';
   object-src 'none';
   base-uri 'self';
   form-action 'none';
   frame-src 'self';
 ">
-<title>WIP — v1.5</title>
-<link rel="icon" type="image/png" href="assets/TP.png" id="favicon">
 
+<title>Application en attente</title>
 <link rel="stylesheet" href="tenantpulse.css">
+</head>
+
 <body>
 
+<div style="display:flex;justify-content:center;align-items:center;height:100vh;text-align:center;font-family:Arial,sans-serif;">
+  <div>
+    <h1 style="margin-bottom:20px;">Application en attente</h1>
+    <p>
+      L’application est actuellement en attente de retours internes permettant de poursuivre son développement.
+    </p>
+  </div>
+</div>
 
-<!--
-  Le JS est externalisé dans tenantpulse.js — script-src 'self' est actif.
--->
-<script src="tenantpulse.js" defer></script>
-<div class="conf-tooltip" id="confTooltip"></div>
 </body>
 </html>
