@@ -3355,21 +3355,28 @@ async function checkDNS(domain) {
 
 async function checkHealth(domain) {
   const checks = []; let score = 0;
+  // Barème recentré sur l'authentification e-mail M365 (trio SPF/DKIM/DMARC = 75 pts).
   const mxA = await dnsQuery(domain, 'MX');
-  if (mxA.length > 0) { score += 15; checks.push({ t:'ok',    icon:'assets/checked.png', title:'MX Records présents', desc: mxA.map(a => a.data).join(' | ') }); }
+  if (mxA.length > 0) { score += 10; checks.push({ t:'ok',    icon:'assets/checked.png', title:'MX Records présents', desc: mxA.map(a => a.data).join(' | ') }); }
   else                              checks.push({ t:'error', icon:'assets/warning.png', title:'MX Records manquants',  desc: 'Aucun enregistrement MX.' });
 
   const txtA = await dnsQuery(domain, 'TXT'), allTxt = txtA.map(a => a.data).filter(Boolean), spf = allTxt.find(t => t.includes('v=spf1'));
-  if (spf) { score += 15; checks.push({ t: spf.includes('-all') ? 'ok' : 'warn', icon: spf.includes('-all') ? 'assets/checked.png' : 'assets/warning.png', title: spf.includes('-all') ? 'SPF strict (-all)' : 'SPF (softfail ~all)', desc: spf }); }
-  else     checks.push({ t:'error', icon:'assets/warning.png', title:'SPF manquant', desc:'Risque de spoofing.' });
+  if (spf) {
+    const m365Spf = /spf\.protection\.outlook\.com/i.test(spf);
+    const spfNote = m365Spf ? ' — inclut spf.protection.outlook.com (M365)' : '';
+    if (spf.includes('-all'))      { score += 20; checks.push({ t:'ok',   icon:'assets/checked.png', title:'SPF strict (-all)',           desc: spf + spfNote }); }
+    else if (spf.includes('~all')) { score += 12; checks.push({ t:'warn', icon:'assets/warning.png', title:'SPF softfail (~all)',         desc: spf + spfNote + ' — -all (hardfail) recommandé.' }); }
+    else                           { score += 6;  checks.push({ t:'warn', icon:'assets/warning.png', title:'SPF permissif (pas de -all)', desc: spf + spfNote + ' — terminez par -all pour bloquer le spoofing.' }); }
+  }
+  else checks.push({ t:'error', icon:'assets/warning.png', title:'SPF manquant', desc:'Risque de spoofing.' });
 
   const dmarcA = await dnsQuery(`_dmarc.${domain}`, 'TXT'), dmarc = dmarcA.map(a => a.data).find(d => d.includes('v=DMARC1'));
   let dmarcIsQuarantine = false;
   if (dmarc) {
     const p = (dmarc.match(/p=([^;]+)/i) || [])[1]?.trim().toLowerCase();
-    if (p === 'reject')     { score += 20; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=reject', desc: dmarc }); }
-    else if (p === 'quarantine') { score += 20; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=quarantine (*)', desc: dmarc + ' — Niveau équivalent à reject. (*) p=reject serait préférable.' }); }
-    else                    { score += 5;  checks.push({ t:'warn', icon:'assets/warning.png', title:'DMARC p=none',   desc: dmarc }); }
+    if (p === 'reject')          { score += 30; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=reject', desc: dmarc }); }
+    else if (p === 'quarantine') { score += 24; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=quarantine', desc: dmarc + ' — bonne protection ; p=reject pour le score maximal.' }); }
+    else                         { score += 10; checks.push({ t:'warn', icon:'assets/warning.png', title:'DMARC p=none (surveillance seule)', desc: dmarc + ' — aucune application : passez à quarantine puis reject.' }); }
   } else checks.push({ t:'error', icon:'assets/warning.png', title:'DMARC manquant', desc: `Aucun _dmarc.${domain}` });
 
   const dkimSelectors = ['selector1','selector2','default','google','microsoft','k1','mail','dkim','smtp','email','mailjet','sendgrid','mandrill','amazonses','postmark','sparkpost','mxroute','zoho','protonmail','brevo','s1','s2','sig1'];
@@ -3380,15 +3387,19 @@ async function checkHealth(domain) {
   }
   const foundSelectors = Object.entries(dkimResults).filter(([, v]) => v !== null);
   const hasSel1 = dkimResults['selector1'] !== null, hasSel2 = dkimResults['selector2'] !== null;
-  if (foundSelectors.length > 0) {
+  const selNames = foundSelectors.map(([k]) => k).join(', ');
+  if (hasSel1 && hasSel2) {
     score += 25;
-    const selNames = foundSelectors.map(([k]) => k).join(', ');
-    let dkimDesc = `Sélecteurs actifs : ${selNames}`;
-    if (hasSel1 && hasSel2)   dkimDesc += ' — (OK) Rotation Microsoft 365 (selector1 + selector2 actifs)';
-    else if (hasSel1)          dkimDesc += ' — (!) selector1 actif, selector2 absent';
-    else if (hasSel2)          dkimDesc += ' — (!) selector2 actif, selector1 absent';
-    checks.push({ t:'ok', icon:'assets/checked.png', title:`DKIM actif (${selNames})`, desc: dkimDesc, dkimResults, hasSel1, hasSel2 });
-  } else checks.push({ t:'error', icon:'assets/warning.png', title:'DKIM non détecté', desc:'Aucun DKIM sur les sélecteurs testés.', dkimResults, hasSel1:false, hasSel2:false });
+    checks.push({ t:'ok', icon:'assets/checked.png', title:'DKIM M365 (selector1 + selector2)', desc: `Rotation Microsoft 365 active — sélecteurs : ${selNames}.`, dkimResults, hasSel1, hasSel2 });
+  } else if (hasSel1 || hasSel2) {
+    score += 18;
+    checks.push({ t:'warn', icon:'assets/warning.png', title:'DKIM M365 partiel', desc: (hasSel1 ? 'selector1 actif, selector2 absent' : 'selector2 actif, selector1 absent') + ' — rotation M365 incomplète.', dkimResults, hasSel1, hasSel2 });
+  } else if (foundSelectors.length > 0) {
+    score += 14;
+    checks.push({ t:'warn', icon:'assets/warning.png', title:'DKIM actif (hors M365)', desc: `Sélecteurs : ${selNames} — pas selector1/selector2 (rotation M365).`, dkimResults, hasSel1, hasSel2 });
+  } else {
+    checks.push({ t:'error', icon:'assets/warning.png', title:'DKIM non détecté', desc:'Aucun DKIM sur les sélecteurs testés.', dkimResults, hasSel1:false, hasSel2:false });
+  }
 
   // Nom de tenant SharePoint : le CNAME DKIM selector1 pointe vers « ...<tenant>.onmicrosoft.com ».
   // Ex. selector1._domainkey.contoso.fr → selector1-contoso-fr._domainkey.contoso75.onmicrosoft.com → spTenant = contoso75.
@@ -3401,21 +3412,22 @@ async function checkHealth(domain) {
     }
   } catch { /* CNAME absent ou DKIM non Microsoft : SharePoint direct restera indisponible */ }
 
+  // www : web, hors score hygiène e-mail → affiché en info seulement.
   const cnA = await dnsQuery(`www.${domain}`, 'CNAME'), aA = await dnsQuery(`www.${domain}`, 'A');
-  if      (cnA.length > 0) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'CNAME www',          desc: cnA.map(a => a.data).join(', ') }); }
-  else if (aA.length  > 0) { score += 4; checks.push({ t:'info', icon:'assets/information.png', title:'www via A record',   desc: aA.map(a  => a.data).join(', ') }); }
-  else                              checks.push({ t:'warn', icon:'assets/warning.png', title:'www non résolu',           desc: `Aucun CNAME ni A pour www.${domain}.` });
+  if      (cnA.length > 0) checks.push({ t:'info', icon:'assets/information.png', title:'www (CNAME)',    desc: cnA.map(a => a.data).join(', ') + ' — web, hors score.' });
+  else if (aA.length  > 0) checks.push({ t:'info', icon:'assets/information.png', title:'www (A record)', desc: aA.map(a => a.data).join(', ') + ' — web, hors score.' });
+  else                     checks.push({ t:'info', icon:'assets/information.png', title:'www non résolu', desc: `Aucun CNAME ni A pour www.${domain} (web, hors score).` });
 
   const dsA = await dnsQuery(domain, 'DS'), dkA = await dnsQuery(domain, 'DNSKEY');
-  if (dsA.length > 0 || dkA.length > 0) { score += 10; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DNSSEC activé',          desc: `${dsA.length} DS, ${dkA.length} DNSKEY.` }); }
-  else                                               checks.push({ t:'warn', icon:'assets/warning.png', title:'DNSSEC non activé',         desc: 'Vulnérable au DNS spoofing.' });
+  if (dsA.length > 0 || dkA.length > 0) { score += 4; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DNSSEC activé (bonus)', desc: `${dsA.length} DS, ${dkA.length} DNSKEY.` }); }
+  else                                               checks.push({ t:'info', icon:'assets/information.png', title:'DNSSEC non activé', desc: 'Bonus optionnel — peu répandu sur les domaines M365.' });
 
   const mtaSts = await dnsQuery(`_mta-sts.${domain}`, 'TXT'), mtaRec = mtaSts.map(a => a.data).find(d => d.includes('v=STSv1'));
-  if (mtaRec) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'MTA-STS activé',         desc: mtaRec }); }
+  if (mtaRec) { score += 8; checks.push({ t:'ok',   icon:'assets/checked.png', title:'MTA-STS activé',         desc: mtaRec }); }
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'MTA-STS non configuré',  desc: 'Recommandé pour les domaines pro.' });
 
   const bimiA = await dnsQuery(`default._bimi.${domain}`, 'TXT'), bimiRec = bimiA.map(a => a.data).find(d => d.includes('v=BIMI1'));
-  if (bimiRec) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'BIMI configuré',          desc: bimiRec }); }
+  if (bimiRec) { score += 3; checks.push({ t:'ok',   icon:'assets/checked.png', title:'BIMI configuré',          desc: bimiRec }); }
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'BIMI absent',              desc: 'Nécessite DMARC p=quarantine ou reject.' });
 
   // ── Prêt pour M365 : enregistrements de service mappés sur les tickets RUN ──
@@ -3699,7 +3711,7 @@ function buildScoreRing(score, dmarcIsQuarantine) {
   const title = document.createElement('div'); title.className = 'score-title'; title.style.color = lblClr; title.textContent = 'Sécurité : ' + lbl;
   const desc  = document.createElement('div'); desc.className  = 'score-desc';  desc.textContent  = 'MX · SPF · DMARC · DKIM · DNSSEC · MTA-STS · BIMI';
   info.appendChild(title); info.appendChild(desc);
-  if (dmarcIsQuarantine) { const star = document.createElement('div'); star.style.cssText = 'font-size:9.5px;font-weight:500;color:#b45309;margin-top:3px'; star.textContent = '* DMARC p=quarantine — score plein, p=reject recommandé'; info.appendChild(star); }
+  if (dmarcIsQuarantine) { const star = document.createElement('div'); star.style.cssText = 'font-size:9.5px;font-weight:500;color:#b45309;margin-top:3px'; star.textContent = '* DMARC p=quarantine — p=reject pour le score maximal'; info.appendChild(star); }
 
   el.appendChild(ring); el.appendChild(info);
   return el;
