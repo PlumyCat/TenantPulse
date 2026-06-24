@@ -489,7 +489,15 @@ function pruneExpiredHistory() {
   const now = Date.now();
   const items = loadHistory();
   const kept = items.filter(it => (now - (it.at || 0)) < ms);
-  if (kept.length !== items.length) saveHistory(kept);
+  if (kept.length !== items.length) {
+    saveHistory(kept);
+    // Les marqueurs "compte admin" suivent la rétention : on purge ceux dont le tenant a expiré.
+    const keepIds = new Set(kept.map(it => it.tenantId));
+    const accounts = loadAdminAccounts();
+    let changed = false;
+    for (const id of Object.keys(accounts)) { if (!keepIds.has(id)) { delete accounts[id]; changed = true; } }
+    if (changed) saveAdminAccounts(accounts);
+  }
 }
 
 function isHistoryEnabled() {
@@ -610,7 +618,19 @@ function relativeTime(ts) {
   if (s < 86400) return Math.floor(s / 3600)  + 'h';
   return Math.floor(s / 86400) + 'j';
 }
+// Compteur de comptes admin (puces actives) affiché dans l'en-tête de l'historique.
+// Ne compte que les tenants encore présents dans l'historique → respecte la rétention configurée.
+function refreshAdminAccountCount() {
+  const badge = document.getElementById('historyAdminCount');
+  if (!badge) return;
+  let n = 0;
+  if (isHistoryEnabled()) { pruneExpiredHistory(); n = loadHistory().filter(it => hasAdminAccount(it.tenantId)).length; }
+  badge.textContent = String(n);
+  badge.hidden = n === 0;
+  badge.title = n + ' tenant' + (n > 1 ? 's' : '') + ' avec compte admin créé';
+}
 function renderHistory() {
+  refreshAdminAccountCount();
   const list = document.getElementById('historyList'); if (!list) return;
   list.textContent = '';
   if (!isHistoryEnabled()) {
@@ -2425,6 +2445,10 @@ function buildKnownRow(t) {
   const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'admin-btn admin-btn-small'; copy.textContent = 'Copier ID';
   copy.addEventListener('click', () => copyTenantId(t.tenantId, copy));
   head.appendChild(dom); head.appendChild(tid);
+  if (hasAdminAccount(t.tenantId)) {
+    const adminDot = document.createElement('span'); adminDot.className = 'history-admin-dot'; adminDot.title = 'Compte admin créé sur ce tenant';
+    head.appendChild(adminDot);
+  }
   if (t.domain) {
     const analyze = document.createElement('button'); analyze.type = 'button'; analyze.className = 'admin-btn admin-btn-small admin-btn-analyze'; analyze.textContent = 'Analyser';
     analyze.title = 'Ouvrir la recherche / analyse pour ' + t.domain;

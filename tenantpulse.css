@@ -1083,6 +1083,8 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .history-item-copy.copied{border-color:#16a34a;color:#16a34a}
 .history-item-time{font-size:var(--text-xs);font-weight:400;color:var(--muted);flex-shrink:0}
 .history-admin-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;border:1.5px solid var(--row);flex-shrink:0}
+.history-admin-count{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:16px;padding:0 5px;margin-left:4px;border-radius:var(--r-pill);background:#ef4444;color:#fff;font-size:10px;font-weight:700;vertical-align:middle}
+.history-admin-count[hidden]{display:none}
 .history-item-icon{font-size:var(--text-base);flex-shrink:0;display:flex;align-items:center;width:16px}
 /* Liste d'historique défilante : évite le rognage de .collapsible-body (max-height) quand il y a beaucoup d'entrées */
 #historyList{max-height:50vh;overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.18) transparent}
