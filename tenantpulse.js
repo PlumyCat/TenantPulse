@@ -650,7 +650,12 @@ function renderHistory() {
     const copyBtn = document.createElement('button'); copyBtn.className = 'history-item-copy'; const copyImg = document.createElement('img'); copyImg.src = 'assets/copy.png'; copyImg.className = 'icon-adaptive'; copyImg.alt = ''; copyBtn.appendChild(copyImg);
     copyBtn.addEventListener('click', e => { e.stopPropagation(); copyHistoryGuid(item.tenantId, copyBtn); });
 
-    row.appendChild(iconSpan); row.appendChild(textWrap); row.appendChild(timeEl); row.appendChild(copyBtn);
+    row.appendChild(iconSpan); row.appendChild(textWrap); row.appendChild(timeEl);
+    if (hasAdminAccount(item.tenantId)) {
+      const adminDot = document.createElement('span'); adminDot.className = 'history-admin-dot'; adminDot.title = 'Compte admin créé sur ce tenant';
+      row.appendChild(adminDot);
+    }
+    row.appendChild(copyBtn);
     list.appendChild(row);
   });
 }
@@ -661,6 +666,18 @@ function loadFromHistory(domain) {
 }
 function copyHistoryGuid(guid, btn) {
   navigator.clipboard.writeText(guid).then(() => { btn.replaceChildren(); const ck = document.createElement('img'); ck.src='assets/checked.png'; ck.className='icon-adaptive'; ck.alt=''; btn.appendChild(ck); setTimeout(() => { btn.replaceChildren(); const img = document.createElement('img'); img.src = 'assets/copy.png'; img.className = 'icon-adaptive'; img.alt = ''; btn.appendChild(img); }, 1500); });
+}
+
+// ── Comptes admin créés (gestion indépendante de l'historique/cache) ──
+const ADMIN_ACCOUNTS_KEY = 'tenantAdminAccounts_v1';
+function loadAdminAccounts() { try { return JSON.parse(localStorage.getItem(ADMIN_ACCOUNTS_KEY) || '{}'); } catch { return {}; } }
+function saveAdminAccounts(map) { try { localStorage.setItem(ADMIN_ACCOUNTS_KEY, JSON.stringify(map)); } catch {} }
+function hasAdminAccount(tenantId) { if (!tenantId) return false; return !!loadAdminAccounts()[tenantId]; }
+function setAdminAccount(tenantId, val) {
+  if (!tenantId) return;
+  const map = loadAdminAccounts();
+  if (val) map[tenantId] = true; else delete map[tenantId];
+  saveAdminAccounts(map);
 }
 
 // ── Onglets TenantPulse / Mhaelle (vue type navigateur) ──
@@ -3698,7 +3715,23 @@ function renderHero(ms, domain, confidence) {
       const infoBtn = document.createElement('button'); infoBtn.className = 'conf-info-btn'; infoBtn.appendChild(makeInfoIcon('white')); infoBtn.setAttribute('aria-label', 'Détail de l\'indice de confiance');
       infoBtn.addEventListener('mousedown', (e) => { e.preventDefault(); showConfTooltip(e, confidence, ms); });
       badge.appendChild(infoBtn);
-      guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(badge);
+      const adminBtn = document.createElement('button'); adminBtn.type = 'button';
+      const setAdminBtnState = (active) => {
+        adminBtn.classList.toggle('is-admin', active);
+        adminBtn.setAttribute('aria-pressed', String(active));
+        adminBtn.title = active ? 'Compte admin créé sur ce tenant — cliquer pour retirer' : 'Marquer : compte admin créé sur ce tenant';
+      };
+      adminBtn.className = 'hero-admin-toggle';
+      const adminIco = document.createElement('img'); adminIco.src = 'assets/checked.png'; adminIco.className = 'hero-admin-toggle-ico'; adminIco.alt = '';
+      adminBtn.appendChild(adminIco);
+      setAdminBtnState(hasAdminAccount(ms.tenantId));
+      adminBtn.addEventListener('click', () => {
+        const next = !hasAdminAccount(ms.tenantId);
+        setAdminAccount(ms.tenantId, next);
+        setAdminBtnState(next);
+        renderHistory();
+      });
+      guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(adminBtn); guid.appendChild(badge);
       hero.appendChild(guid);
     } else {
       const none = document.createElement('div'); none.className = 'hero-none'; none.textContent = 'GUID non résolu — domaine Microsoft détecté';
