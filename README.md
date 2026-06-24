@@ -1,6 +1,6 @@
 # TenantPulse
 
-Internal **Microsoft 365 / Google Workspace** diagnostic and DNS-hygiene tool for MW N1
+Internal **Microsoft 365** diagnostic and DNS-hygiene tool for MW N1
 support. A **100% client-side** application: no backend, no dependencies, no data sent to a
 server. All processing happens in the browser, which queries public APIs directly (Microsoft,
 Google DNS, RDAP).
