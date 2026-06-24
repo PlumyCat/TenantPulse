@@ -1016,7 +1016,17 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 [data-theme="dark"] .hc-item.warn{background:#2a2010;border-color:#92781a}
 [data-theme="dark"] .hc-item.error{background:#2d1515;border-color:#7f1d1d}
 [data-theme="dark"] .hc-item.info{background:#0d2030;border-color:#1e5a7a}
-.hc-icon{font-size:var(--text-base);flex-shrink:0;margin-top:1px}
+.hc-icon{font-size:var(--text-base);flex-shrink:0;margin-top:1px;width:1.05em;height:1.05em;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;background-color:currentColor}
+/* L'icône prend la couleur du titre du bloc (au lieu du blanc) via un masque CSS. */
+.hc-icon img{display:none}
+.hc-item.ok    .hc-icon{-webkit-mask-image:url('assets/checked.png');mask-image:url('assets/checked.png');background-color:#15803d}
+.hc-item.warn  .hc-icon{-webkit-mask-image:url('assets/warning.png');mask-image:url('assets/warning.png');background-color:#b45309}
+.hc-item.error .hc-icon{-webkit-mask-image:url('assets/warning.png');mask-image:url('assets/warning.png');background-color:#dc2626}
+.hc-item.info  .hc-icon{-webkit-mask-image:url('assets/information.png');mask-image:url('assets/information.png');background-color:#0369a1}
+[data-theme="dark"] .hc-item.ok    .hc-icon{background-color:#86efac}
+[data-theme="dark"] .hc-item.warn  .hc-icon{background-color:#fcd34d}
+[data-theme="dark"] .hc-item.error .hc-icon{background-color:#fca5a5}
+[data-theme="dark"] .hc-item.info  .hc-icon{background-color:#7dd3fc}
 .hc-body{flex:1;min-width:0}
 .hc-title{font-size:var(--text-sm);font-weight:700;margin-bottom:2px}
 .hc-item.ok .hc-title{color:#15803d}
