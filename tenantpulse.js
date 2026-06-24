@@ -4094,6 +4094,14 @@ function healthSubLbl(health) {
   return `SPF · DMARC · DKIM · DNSSEC · MTA-STS${errC > 0 ? ' — ' + errC + ' erreur(s)' : ''}${warnC > 0 ? ', ' + warnC + ' avert.' : ''}${dkim}`;
 }
 
+// Ordre canonique des blocs de résultat : on met d'abord les infos utiles à la résolution
+// d'un ticket (tenant, M365/Santé), et l'hébergeur/registrar en dernier. Re-append = déplacement
+// en fin de conteneur, donc l'ordre final suit ce tableau, quel que soit l'ordre d'insertion.
+function reorderResults(center) {
+  ['.tenant-hero', '#card-ms', '#card-google', '#card-health', '#card-dns', '.pills-block', '#card-host', '#btnTriggerFull']
+    .forEach(sel => { const el = center.querySelector(sel); if (el) center.appendChild(el); });
+}
+
 // ── FAST check ──
 async function checkFast() {
   const raw = emailInput.value.trim(); if (!raw) { showError('Veuillez entrer une adresse e-mail ou un domaine.'); return; }
@@ -4144,6 +4152,7 @@ async function checkFast() {
     // Construire le contenu initial et attacher le listener via le helper partagé
     resetCtaBtn(ctaBtn, raw, domain);
     center.appendChild(ctaBtn);
+    reorderResults(center);
     if (loadProfile().analysisMode === 'auto') {
       // Priorité au hero : on le laisse s'afficher, puis l'analyse complète s'enchaîne en arrière-plan.
       setTimeout(() => runFullFromState(raw, domain, ctaBtn), 0);
@@ -4228,6 +4237,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     if (currentState.health) {
       center.insertBefore(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) }), ctaBtn);
     }
+    reorderResults(center);
     ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.replaceChildren(); const doneImg = document.createElement('img'); doneImg.src='assets/checked.png'; doneImg.className='icon-adaptive'; doneImg.alt=''; ctaBtn.appendChild(doneImg); ctaBtn.appendChild(document.createTextNode(' Analyse complète effectuée'));
   } catch (err) {
     ctaBtn.classList.remove('running');
@@ -4297,6 +4307,7 @@ async function checkFull() {
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
     if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
     center.appendChild(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) }));
+    reorderResults(center);
   } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFullLoading(false); }
 }
