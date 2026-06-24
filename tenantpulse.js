@@ -3722,7 +3722,7 @@ function renderHero(ms, domain, confidence) {
         adminBtn.title = active ? 'Compte admin créé sur ce tenant — cliquer pour retirer' : 'Marquer : compte admin créé sur ce tenant';
       };
       adminBtn.className = 'hero-admin-toggle';
-      const adminIco = document.createElement('img'); adminIco.src = 'assets/checked.png'; adminIco.className = 'hero-admin-toggle-ico'; adminIco.alt = '';
+      const adminIco = document.createElement('img'); adminIco.src = 'assets/user.png'; adminIco.className = 'hero-admin-toggle-ico'; adminIco.alt = '';
       adminBtn.appendChild(adminIco);
       setAdminBtnState(hasAdminAccount(ms.tenantId));
       adminBtn.addEventListener('click', () => {

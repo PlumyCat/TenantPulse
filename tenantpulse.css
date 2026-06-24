@@ -871,9 +871,9 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
   box-shadow:0 1px 0 rgba(255,255,255,.2) inset, 0 1px 3px rgba(0,0,0,.18)
 }
 .hero-admin-toggle:hover{background:linear-gradient(180deg, rgba(255,255,255,.28) 0%, rgba(255,255,255,.12) 100%);border-color:rgba(255,255,255,.4)}
-.hero-admin-toggle-ico{width:13px;height:13px;opacity:.4;filter:grayscale(1) brightness(1.6);transition:opacity .15s,filter .15s}
+.hero-admin-toggle-ico{width:14px;height:14px;opacity:.5;filter:brightness(0) invert(1);transition:opacity .15s}
 .hero-admin-toggle.is-admin{background:rgba(34,197,94,.25);border-color:rgba(134,239,172,.5)}
-.hero-admin-toggle.is-admin .hero-admin-toggle-ico{opacity:1;filter:none}
+.hero-admin-toggle.is-admin .hero-admin-toggle-ico{opacity:1}
 .hero-admin-toggle::after{
   content:'';position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;
   background:#ef4444;border:1.5px solid rgba(255,255,255,.95);
