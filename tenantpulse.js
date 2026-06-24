@@ -3118,6 +3118,30 @@ async function dnsQuery(name, type) {
   const d = await dohResolve(name, type);
   return d ? (d.Answer || []) : [];
 }
+// Compte les lookups DNS d'un enregistrement SPF (include:/redirect=/a/mx/exists/ptr), récursivement.
+// Microsoft : au-delà de 10, SPF renvoie permerror et échoue entièrement.
+// learn.microsoft.com/defender-office-365/email-authentication-spf-configure
+async function countSpfLookups(spf, seen = new Set(), depth = 0) {
+  if (depth > 10) return 11;
+  spf = spf.replace(/"\s*"/g, '').replace(/"/g, ''); // recoller les chunks d'un TXT multi-chaînes
+  let count = 0;
+  for (const tok of spf.trim().split(/\s+/)) {
+    const t = tok.toLowerCase();
+    if (t.startsWith('include:') || t.startsWith('redirect=')) {
+      count++; if (count > 10) return count;
+      const dom = t.split(/[:=]/)[1]?.replace(/\.$/, '');
+      if (dom && !seen.has(dom)) {
+        seen.add(dom);
+        const txt = await dnsQuery(dom, 'TXT');
+        const nested = txt.map(a => a.data).find(d => d.includes('v=spf1'));
+        if (nested) count += await countSpfLookups(nested, seen, depth + 1);
+      }
+    } else if (t.startsWith('exists:') || /^a([:/]|$)/.test(t) || /^mx([:/]|$)/.test(t) || t === 'ptr' || t.startsWith('ptr:')) {
+      count++;
+    }
+  }
+  return count;
+}
 
 function extractGuid(s) {
   if (!s) return null;
@@ -3360,13 +3384,29 @@ async function checkHealth(domain) {
   if (mxA.length > 0) { score += 10; checks.push({ t:'ok',    icon:'assets/checked.png', title:'MX Records présents', desc: mxA.map(a => a.data).join(' | ') }); }
   else                              checks.push({ t:'error', icon:'assets/warning.png', title:'MX Records manquants',  desc: 'Aucun enregistrement MX.' });
 
+  // SPF — bonnes pratiques Microsoft : include spf.protection.outlook.com (M365), -all, ≤ 10 lookups DNS.
   const txtA = await dnsQuery(domain, 'TXT'), allTxt = txtA.map(a => a.data).filter(Boolean), spf = allTxt.find(t => t.includes('v=spf1'));
   if (spf) {
-    const m365Spf = /spf\.protection\.outlook\.com/i.test(spf);
-    const spfNote = m365Spf ? ' — inclut spf.protection.outlook.com (M365)' : '';
-    if (spf.includes('-all'))      { score += 20; checks.push({ t:'ok',   icon:'assets/checked.png', title:'SPF strict (-all)',           desc: spf + spfNote }); }
-    else if (spf.includes('~all')) { score += 12; checks.push({ t:'warn', icon:'assets/warning.png', title:'SPF softfail (~all)',         desc: spf + spfNote + ' — -all (hardfail) recommandé.' }); }
-    else                           { score += 6;  checks.push({ t:'warn', icon:'assets/warning.png', title:'SPF permissif (pas de -all)', desc: spf + spfNote + ' — terminez par -all pour bloquer le spoofing.' }); }
+    const isM365Mail = mxA.some(a => /\.protection\.outlook\.com/i.test(a.data || ''));
+    const m365Include = /include:\s*spf\.protection\.(outlook\.com|office365\.us|partner\.outlook\.cn)/i.test(spf);
+    const hardFail = /-all\b/.test(spf), softFail = /~all\b/.test(spf);
+    const lookups = await countSpfLookups(spf);
+    if (lookups > 10) {
+      score += 4;
+      checks.push({ t:'error', icon:'assets/warning.png', title:`SPF dépasse 10 lookups DNS (${lookups})`, desc: spf + ' — Microsoft : >10 lookups = permerror, le SPF échoue. Réduire les include: (sous-domaines dédiés ou ip4).' });
+    } else if (isM365Mail && !m365Include) {
+      score += 8;
+      checks.push({ t:'warn', icon:'assets/warning.png', title:'SPF sans include Microsoft 365', desc: spf + ' — manque include:spf.protection.outlook.com : le mail sortant via M365 ne passe pas SPF.' });
+    } else if (hardFail) {
+      score += 20;
+      checks.push({ t:'ok', icon:'assets/checked.png', title:'SPF strict (-all)', desc: spf + (m365Include ? ' — include M365 OK.' : '') + (lookups >= 8 ? ` (${lookups}/10 lookups)` : '') });
+    } else if (softFail) {
+      score += 12;
+      checks.push({ t:'warn', icon:'assets/warning.png', title:'SPF softfail (~all)', desc: spf + ' — Microsoft recommande -all : DMARC ignore l\'échec SPF ~all si le message n\'a pas de DKIM.' });
+    } else {
+      score += 6;
+      checks.push({ t:'warn', icon:'assets/warning.png', title:'SPF permissif (ni -all ni ~all)', desc: spf + ' — terminer par -all (recommandation Microsoft).' });
+    }
   }
   else checks.push({ t:'error', icon:'assets/warning.png', title:'SPF manquant', desc:'Risque de spoofing.' });
 
@@ -3374,10 +3414,11 @@ async function checkHealth(domain) {
   let dmarcIsQuarantine = false;
   if (dmarc) {
     const p = (dmarc.match(/p=([^;]+)/i) || [])[1]?.trim().toLowerCase();
-    if (p === 'reject')          { score += 30; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=reject', desc: dmarc }); }
-    else if (p === 'quarantine') { score += 24; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=quarantine', desc: dmarc + ' — bonne protection ; p=reject pour le score maximal.' }); }
-    else                         { score += 10; checks.push({ t:'warn', icon:'assets/warning.png', title:'DMARC p=none (surveillance seule)', desc: dmarc + ' — aucune application : passez à quarantine puis reject.' }); }
-  } else checks.push({ t:'error', icon:'assets/warning.png', title:'DMARC manquant', desc: `Aucun _dmarc.${domain}` });
+    const ruaNote = /rua=/i.test(dmarc) ? '' : ' — sans rua= : ajoutez une adresse de rapport agrégé (recommandé par Microsoft).';
+    if (p === 'reject')          { score += 30; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=reject', desc: dmarc + ruaNote }); }
+    else if (p === 'quarantine') { score += 24; dmarcIsQuarantine = true; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DMARC p=quarantine', desc: dmarc + ' — bonne protection ; p=reject pour le score maximal.' + ruaNote }); }
+    else                         { score += 10; checks.push({ t:'warn', icon:'assets/warning.png', title:'DMARC p=none (surveillance seule)', desc: dmarc + ' — aucune application : Microsoft recommande de progresser vers quarantine puis reject.' + ruaNote }); }
+  } else checks.push({ t:'error', icon:'assets/warning.png', title:'DMARC manquant', desc: `Aucun _dmarc.${domain} — configurez SPF, DKIM puis DMARC (ordre Microsoft).` });
 
   const dkimSelectors = ['selector1','selector2','default','google','microsoft','k1','mail','dkim','smtp','email','mailjet','sendgrid','mandrill','amazonses','postmark','sparkpost','mxroute','zoho','protonmail','brevo','s1','s2','sig1'];
   const dkimResults   = {};
