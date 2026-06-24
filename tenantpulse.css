@@ -1533,8 +1533,8 @@ select.admin-input{cursor:pointer;color-scheme:light}
 .admin-expired-since{font-size:var(--text-xs);color:#dc2626;margin-right:auto}
 .admin-role-email{font-weight:600;color:var(--text);font-size:var(--text-sm);margin-right:auto;word-break:break-all}
 .admin-assigned-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.admin-assigned-domain{font-weight:600;color:var(--text);font-size:var(--text-sm)}
-.admin-assigned-tenant{font-size:var(--text-xs);color:var(--muted);font-family:'JetBrains Mono','Consolas',monospace;margin-right:auto;word-break:break-all}
+.admin-assigned-domain{font-weight:600;color:var(--text);font-size:var(--text-sm);overflow-wrap:anywhere}
+.admin-assigned-tenant{font-size:var(--text-xs);color:var(--muted);font-family:'JetBrains Mono','Consolas',monospace;word-break:break-all}
 .admin-role-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 9px;border-radius:var(--r-sm);color:#fff}
 .admin-role-admin{background:linear-gradient(180deg,#8b5cf6,#7c3aed)}
 .admin-role-manager{background:linear-gradient(180deg,#3b82f6,#2563eb)}
@@ -1552,8 +1552,11 @@ select.admin-input{cursor:pointer;color-scheme:light}
 /* ── Lignes "Tenant connu" (groupées) ── */
 .admin-known-row{display:flex;flex-direction:column;gap:8px;padding:11px 14px;border-radius:var(--r-lg);background:linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,.02) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.08) inset}
 [data-theme="light"] .admin-known-row,html:not([data-theme="dark"]) .admin-known-row{background:linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.01) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.06) inset}
-.admin-known-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.admin-known-head .admin-assigned-tenant{margin-right:auto}
+.admin-known-head{display:flex;align-items:center;justify-content:space-between;gap:10px 14px;flex-wrap:wrap}
+/* Texte prioritaire : garde un plancher de largeur → les boutons passent à la ligne plutôt que de rogner le texte. */
+.admin-known-id{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;flex:1 1 auto;min-width:min(100%,240px)}
+/* Boutons groupés : ne rétrécissent pas, basculent ensemble à la ligne si la place manque. */
+.admin-known-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
 .admin-known-badges{display:flex;flex-wrap:wrap;gap:6px}
 
 /* ── Garde-fous [hidden] (les règles display ci-dessus battent le UA [hidden]) ── */

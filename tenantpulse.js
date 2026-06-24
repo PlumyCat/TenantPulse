@@ -2440,27 +2440,35 @@ function buildKnownRow(t) {
   const row = document.createElement('div'); row.className = 'admin-known-row';
 
   const head = document.createElement('div'); head.className = 'admin-known-head';
+
+  // Bloc texte (prioritaire : prend la place, ne se fait pas rogner par les boutons)
+  const idWrap = document.createElement('div'); idWrap.className = 'admin-known-id';
   const dom = document.createElement('span'); dom.className = 'admin-assigned-domain'; dom.textContent = t.domain || '(domaine inconnu)';
   const tid = document.createElement('span'); tid.className = 'admin-assigned-tenant'; tid.textContent = t.tenantId;
-  const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'admin-btn admin-btn-small'; copy.textContent = 'Copier ID';
-  copy.addEventListener('click', () => copyTenantId(t.tenantId, copy));
-  head.appendChild(dom); head.appendChild(tid);
+  idWrap.appendChild(dom); idWrap.appendChild(tid);
   if (hasAdminAccount(t.tenantId)) {
     const adminDot = document.createElement('span'); adminDot.className = 'history-admin-dot'; adminDot.title = 'Compte admin créé sur ce tenant';
-    head.appendChild(adminDot);
+    idWrap.appendChild(adminDot);
   }
+  head.appendChild(idWrap);
+
+  // Bloc actions (boutons groupés : passent à la ligne ensemble si la place manque)
+  const actions = document.createElement('div'); actions.className = 'admin-known-actions';
   if (t.domain) {
     const analyze = document.createElement('button'); analyze.type = 'button'; analyze.className = 'admin-btn admin-btn-small admin-btn-analyze'; analyze.textContent = 'Analyser';
     analyze.title = 'Ouvrir la recherche / analyse pour ' + t.domain;
     analyze.addEventListener('click', () => { closeAdmin(); loadFromHistory(t.domain); });
-    head.appendChild(analyze);
+    actions.appendChild(analyze);
   }
-  head.appendChild(copy);
+  const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'admin-btn admin-btn-small'; copy.textContent = 'Copier ID';
+  copy.addEventListener('click', () => copyTenantId(t.tenantId, copy));
+  actions.appendChild(copy);
   if (t.domain) {
     const copyDom = document.createElement('button'); copyDom.type = 'button'; copyDom.className = 'admin-btn admin-btn-small'; copyDom.textContent = 'Copier domaine';
     copyDom.addEventListener('click', () => copyDomain(t.domain, copyDom));
-    head.appendChild(copyDom);
+    actions.appendChild(copyDom);
   }
+  head.appendChild(actions);
 
   const badges = document.createElement('div'); badges.className = 'admin-known-badges';
   t.types.forEach(ty => {
