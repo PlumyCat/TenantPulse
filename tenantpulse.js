@@ -3419,7 +3419,7 @@ async function checkHealth(domain) {
 async function checkOtherTenants(domain, dns) {
   const t  = [], ms = (dns.mx || []).join(' ').toLowerCase(), ss = (dns.spf || '').toLowerCase(), ts = (dns.txt || []).join(' ').toLowerCase();
 
-  t.push({ name:'Google Workspace', imgSrc:'assets/google.png',          on: ms.includes('google.com') || ms.includes('googlemail.com') });
+  // Google Workspace n'est plus listé ici : sa détection a sa propre carte dédiée (si réellement Google).
   t.push({ name:'Mailinblack',      imgSrc:'assets/mailinblack.jpeg',    on: ms.includes('mailinblack') || ss.includes('mailinblack') });
   t.push({ name:'Mimecast',         imgSrc:'assets/Mimecast.png',        on: ms.includes('mimecast') || ss.includes('mimecast') });
   t.push({ name:'Proofpoint',       imgSrc:'assets/Proofpoint.png',      on: ms.includes('pphosted') || ms.includes('proofpoint') || ss.includes('proofpoint') });
@@ -4111,17 +4111,16 @@ async function checkFast() {
   exportBtn.classList.remove('visible'); lastReport = null;
   currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, fullDone:false };
   lockButtons(); setFastLoading(true);
-  showSteps(['ms', 'google', 'dns']);
+  showSteps(['ms', 'dns']);
   try {
     setStep('step-ms', 'active');
     stepRetryFns.ms = async () => { setStep('step-ms', 'active'); currentState.ms = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail'); };
     currentState.ms = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain);
     if (!document.getElementById('step-ms').className.includes('timeout')) setStep('step-ms', currentState.ms ? 'done' : 'fail');
 
-    setStep('step-google', 'active');
-    stepRetryFns.google = async () => { setStep('step-google', 'active'); currentState.goog = await checkGoogle(domain); setStep('step-google', currentState.goog ? 'done' : 'fail'); };
+    // Détection Google Workspace silencieuse (pas d'étape visible) : outil orienté M365.
+    // La carte « Google Workspace » s'affiche uniquement si le domaine est réellement Google.
     currentState.goog = await checkGoogle(domain);
-    if (!document.getElementById('step-google').className.includes('timeout')) setStep('step-google', currentState.goog ? 'done' : 'fail');
 
     setStep('step-dns', 'active');
     stepRetryFns.dns = async () => { setStep('step-dns', 'active'); currentState.dns = await checkDNS(domain); setStep('step-dns', currentState.dns?.mx?.length > 0 ? 'done' : 'fail'); };
@@ -4257,18 +4256,17 @@ async function checkFull() {
   exportBtn.classList.remove('visible'); lastReport = null;
   currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, fullDone:false };
   lockButtons(); setFullLoading(true);
-  showSteps(['ms', 'google', 'dns', 'health', 'others', 'host']);
-  ['ms', 'google', 'dns', 'health', 'others', 'host'].forEach(k => setStep('step-' + k, 'pending'));
+  showSteps(['ms', 'dns', 'health', 'others', 'host']);
+  ['ms', 'dns', 'health', 'others', 'host'].forEach(k => setStep('step-' + k, 'pending'));
   // Peupler stepRetryFns pour que le bouton "Relancer" fonctionne en mode full
   stepRetryFns.ms     = async () => { setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail'); };
-  stepRetryFns.google = async () => { setStep('step-google', 'active'); currentState.goog   = await checkGoogle(domain);                                          setStep('step-google', currentState.goog ? 'done' : 'fail'); };
   stepRetryFns.dns    = async () => { setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', currentState.dns?.mx?.length > 0 ? 'done' : 'fail'); };
   stepRetryFns.health = async () => { setStep('step-health', 'active'); currentState.health = await checkHealth(domain);                                         setStep('step-health', 'done'); };
   stepRetryFns.others = async () => { setStep('step-others', 'active'); currentState.others = await checkOtherTenants(domain, currentState.dns || {});          setStep('step-others', 'done'); };
   stepRetryFns.host   = async () => { setStep('step-host', 'active');   currentState.host   = await checkHost(domain);                                           setStep('step-host', currentState.host ? 'done' : 'fail'); };
   try {
     setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail');
-    setStep('step-google', 'active'); currentState.goog   = await checkGoogle(domain);                                          setStep('step-google', currentState.goog ? 'done' : 'fail');
+    currentState.goog   = await checkGoogle(domain); // détection silencieuse (pas d'étape visible)
     setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', (currentState.dns?.mx?.length ?? 0) > 0 ? 'done' : 'fail');
     setStep('step-health', 'active'); currentState.health = await checkHealth(domain);                                         setStep('step-health', 'done');
     setStep('step-others', 'active'); currentState.others = await checkOtherTenants(domain, currentState.dns);                 setStep('step-others', 'done');
