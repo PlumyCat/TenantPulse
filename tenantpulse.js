@@ -4067,7 +4067,7 @@ function buildHealthPanel(health, domain) {
     b.appendChild(buildScoreRing(health.score, health.dmarcIsQuarantine));
     // Prêt pour M365 en premier : ce sont les checks les plus utiles pour résoudre un ticket.
     if (health.m365?.length) {
-      const sub = document.createElement('div'); sub.className = 'hc-subhead hc-subhead-top'; sub.textContent = 'Prêt pour M365 (services)';
+      const sub = document.createElement('div'); sub.className = 'hc-subhead hc-subhead-top'; sub.textContent = 'M365';
       b.appendChild(sub);
       b.appendChild(renderChecks(health.m365));
     }
