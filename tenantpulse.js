@@ -3379,7 +3379,41 @@ async function checkHealth(domain) {
   if (bimiRec) { score += 5; checks.push({ t:'ok',   icon:'assets/checked.png', title:'BIMI configuré',          desc: bimiRec }); }
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'BIMI absent',              desc: 'Nécessite DMARC p=quarantine ou reject.' });
 
-  return { score: Math.min(score, 100), checks, dkimResults, hasSel1, hasSel2, dmarcIsQuarantine, spTenant };
+  // ── Prêt pour M365 : enregistrements de service mappés sur les tickets RUN ──
+  // N'impacte pas le score (calibré pour l'hygiène mail) : purement diagnostic.
+  const m365 = [];
+  const first = arr => arr.map(a => a.data).find(Boolean) || null;
+
+  // Autodiscover → connexion / configuration Outlook
+  const adTgt = first(await dnsQuery(`autodiscover.${domain}`, 'CNAME'));
+  if (adTgt && /autodiscover\.outlook\.com/i.test(adTgt))
+    m365.push({ t:'ok',   icon:'assets/checked.png',     title:'Autodiscover M365',         desc:`autodiscover.${domain} → ${adTgt}` });
+  else if (adTgt)
+    m365.push({ t:'warn', icon:'assets/warning.png',     title:'Autodiscover non Microsoft', desc:`Pointe vers ${adTgt} (attendu : autodiscover.outlook.com). La config Outlook peut échouer.` });
+  else
+    m365.push({ t:'info', icon:'assets/information.png', title:'Autodiscover absent',         desc:`Aucun CNAME autodiscover.${domain}. La connexion Outlook peut nécessiter une configuration manuelle.` });
+
+  // Enrôlement Intune / MDM (auto-enroll Windows + mobile, Hybrid AAD join)
+  const erTgt = first(await dnsQuery(`enterpriseregistration.${domain}`, 'CNAME'));
+  const eeTgt = first(await dnsQuery(`enterpriseenrollment.${domain}`, 'CNAME'));
+  const erOk = erTgt && /enterpriseregistration\.windows\.net/i.test(erTgt);
+  const eeOk = eeTgt && /enterpriseenrollment\.manage\.microsoft\.com/i.test(eeTgt);
+  if (erOk && eeOk)
+    m365.push({ t:'ok',   icon:'assets/checked.png',     title:'Enrôlement Intune/MDM',      desc:'enterpriseregistration + enterpriseenrollment correctement configurés.' });
+  else if (erTgt || eeTgt)
+    m365.push({ t:'warn', icon:'assets/warning.png',     title:'Enrôlement Intune incomplet', desc:`registration: ${erTgt || 'absent'} | enrollment: ${eeTgt || 'absent'} — l'enrôlement automatique d'appareils peut échouer.` });
+  else
+    m365.push({ t:'info', icon:'assets/information.png', title:'Enrôlement Intune non configuré', desc:'Aucun CNAME enterpriseregistration/enterpriseenrollment. Requis pour l\'enrôlement automatique (MDM/Hybrid AAD join).' });
+
+  // Teams / Skype Entreprise (records hérités SfB — optionnels en Teams-only)
+  const lync = first(await dnsQuery(`lyncdiscover.${domain}`, 'CNAME'));
+  const sipFed = first(await dnsQuery(`_sipfederationtls._tcp.${domain}`, 'SRV'));
+  if (lync || sipFed)
+    m365.push({ t:'ok',   icon:'assets/checked.png',     title:'Teams / Skype (DNS hérité)',  desc:`${lync ? 'lyncdiscover → ' + lync : ''}${lync && sipFed ? ' | ' : ''}${sipFed ? 'fédération SRV → ' + sipFed : ''}` });
+  else
+    m365.push({ t:'info', icon:'assets/information.png', title:'Teams : pas de DNS Skype',    desc:'Aucun lyncdiscover/SRV SfB. Normal pour un tenant Teams-only ; requis seulement si Skype Entreprise / fédération DNS est utilisé.' });
+
+  return { score: Math.min(score, 100), checks, m365, dkimResults, hasSel1, hasSel2, dmarcIsQuarantine, spTenant };
 }
 
 async function checkOtherTenants(domain, dns) {
@@ -4030,6 +4064,21 @@ function buildHealthPanel(health, domain) {
     });
     b.appendChild(hcl);
     buildDkimBlock(b, health.dkimResults, health.hasSel1, health.hasSel2);
+    if (health.m365?.length) {
+      const sub = document.createElement('div'); sub.className = 'hc-subhead'; sub.textContent = 'Prêt pour M365 (services)';
+      b.appendChild(sub);
+      const m365l = document.createElement('div'); m365l.className = 'hc-list';
+      health.m365.forEach(c => {
+        const it = document.createElement('div'); it.className = 'hc-item ' + c.t;
+        const ico = document.createElement('div'); ico.className = 'hc-icon'; const icoImg = document.createElement('img'); icoImg.src = c.icon; icoImg.className = 'icon-adaptive'; icoImg.alt = ''; ico.appendChild(icoImg);
+        const body = document.createElement('div'); body.className = 'hc-body';
+        const ttl = document.createElement('div'); ttl.className = 'hc-title'; ttl.textContent = c.title;
+        const dsc = document.createElement('div'); dsc.className = 'hc-desc';  dsc.textContent = c.desc;
+        body.appendChild(ttl); body.appendChild(dsc); it.appendChild(ico); it.appendChild(body);
+        m365l.appendChild(it);
+      });
+      b.appendChild(m365l);
+    }
     const lnk = document.createElement('a'); lnk.className = 'ext-link'; lnk.href = `https://dnschecker.org/all-dns-records-of-domain.php?query=${encodeURIComponent(domain)}&rtype=ALL&dns=google`; lnk.target = '_blank'; lnk.rel = 'noopener';
     const lnkIcon = document.createTextNode('→ Analyse DNS complète sur DNSChecker — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
     lnk.appendChild(lnkIcon); lnk.appendChild(lnkStrong); b.appendChild(lnk);
@@ -4157,7 +4206,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     const oldHero = center.querySelector('.tenant-hero');
     if (oldHero) center.replaceChild(renderHero(currentState.ms, domain, confidence), oldHero);
 
-    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, tenantConfidence: confidence, fullDone: true };
+    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, tenantConfidence: confidence, fullDone: true };
     exportBtn.classList.add('visible');
 
     const newPb = document.createElement('div'); newPb.className = 'pills-block';
@@ -4221,7 +4270,7 @@ async function checkFull() {
     document.getElementById('progList').style.display = 'none';
     currentState.fullDone = true;
     const confidence = computeConfidence(currentState.ms);
-    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, tenantConfidence: confidence, fullDone: true };
+    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, tenantConfidence: confidence, fullDone: true };
     exportBtn.classList.add('visible');
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));

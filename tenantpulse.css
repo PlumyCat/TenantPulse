@@ -1005,6 +1005,7 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .score-title{font-size:var(--text-base);font-weight:700;margin-bottom:2px}
 .score-desc{font-size:var(--text-xs);font-weight:400;color:var(--soft);line-height:1.4}
 .hc-list{display:flex;flex-direction:column;gap:6px}
+.hc-subhead{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:14px 0 7px;padding-top:12px;border-top:1.5px solid var(--border)}
 .hc-item{display:flex;align-items:flex-start;gap:8px;padding:9px 11px;border-radius:var(--r-md);border:1.5px solid}
 .hc-item.ok{background:#f0fdf4;border-color:#bbf7d0}
 .hc-item.warn{background:#fffbeb;border-color:#fde68a}
