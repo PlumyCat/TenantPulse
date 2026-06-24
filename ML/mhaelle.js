@@ -476,14 +476,14 @@ function toolLinks(type, value) {
     links.push({ n: "VirusTotal IP", u: `https://www.virustotal.com/gui/ip-address/${enc}` });
     links.push({ n: "AbuseIPDB", u: `https://www.abuseipdb.com/check/${enc}` });
     links.push({ n: "Talos", u: `https://talosintelligence.com/reputation_center/lookup?search=${enc}` });
-    links.push({ n: "Spamhaus Blacklist", u: `https://check.spamhaus.org/results/?query=${enc}` });
+    links.push({ n: "multiRBL Blacklist", u: `https://multirbl.valli.org/lookup/${enc}.html` });
     links.push({ n: "Shodan", u: `https://www.shodan.io/host/${enc}` });
     links.push({ n: "GreyNoise", u: `https://viz.greynoise.io/ip/${enc}` });
   }
   if (type === "domain") {
     links.push({ n: "VirusTotal Domain", u: `https://www.virustotal.com/gui/domain/${enc}` });
     links.push({ n: "DNS Records", u: `https://dnschecker.org/all-dns-records-of-domain.php?query=${enc}&rtype=ALL&dns=google` });
-    links.push({ n: "SPF Record", u: `https://easydmarc.com/tools/spf-record-checker?domain=${enc}` });
+    links.push({ n: "SPF Record", u: `https://easydmarc.com/tools/spf-lookup?domain=${enc}` });
     links.push({ n: "DMARC Record", u: `https://easydmarc.com/tools/dmarc-lookup?domain=${enc}` });
     links.push({ n: "WHOIS", u: `https://who.is/whois/${enc}` });
     links.push({ n: "URLhaus", u: `https://urlhaus.abuse.ch/browse.php?search=${enc}` });
