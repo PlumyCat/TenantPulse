@@ -89,13 +89,13 @@
 const STATIC_TOOLS = [
   { name: "Google Message Header", url: "https://toolbox.googleapps.com/apps/messageheader/", desc: "Analyse complète des headers" },
   { name: "Microsoft Header Analyzer", url: "https://mha.azurewebsites.net/", desc: "Outil officiel Microsoft" },
-  { name: "MXToolbox Email Header", url: "https://mxtoolbox.com/EmailHeaders.aspx", desc: "Visualisation des hops" },
+  { name: "Gaijin Header Analyzer", url: "https://www.gaijin.at/en/tools/e-mail-header-analyzer", desc: "Visualisation des hops" },
   { name: "IPQualityScore Email Validator", url: "https://www.ipqualityscore.com/email-verification/validate", desc: "Validation email" },
   { name: "VirusTotal", url: "https://www.virustotal.com/", desc: "IP, URL, hash" },
   { name: "URLScan.io", url: "https://urlscan.io/", desc: "Analyse de pages web" },
   { name: "AbuseIPDB", url: "https://www.abuseipdb.com/", desc: "Réputation IP" },
   { name: "Talos Intelligence", url: "https://talosintelligence.com/reputation_center", desc: "Réputation Cisco" },
-  { name: "MXToolbox SuperTool", url: "https://mxtoolbox.com/SuperTool.aspx", desc: "SPF, DNS, blacklist" },
+  { name: "DNSChecker Tools", url: "https://dnschecker.org/", desc: "SPF, DNS, blacklist" },
   { name: "DMARCian Inspector", url: "https://dmarcian.com/dmarc-inspector/", desc: "Politique DMARC" },
   { name: "DKIMCore Validator", url: "https://dkimvalidator.com/", desc: "Test DKIM" },
   { name: "PhishTool", url: "https://phishtool.com/", desc: "Headers + IOCs" },
@@ -476,15 +476,15 @@ function toolLinks(type, value) {
     links.push({ n: "VirusTotal IP", u: `https://www.virustotal.com/gui/ip-address/${enc}` });
     links.push({ n: "AbuseIPDB", u: `https://www.abuseipdb.com/check/${enc}` });
     links.push({ n: "Talos", u: `https://talosintelligence.com/reputation_center/lookup?search=${enc}` });
-    links.push({ n: "MXToolbox Blacklist", u: `https://mxtoolbox.com/SuperTool.aspx?action=blacklist%3a${enc}&run=toolpage` });
+    links.push({ n: "Spamhaus Blacklist", u: `https://check.spamhaus.org/results/?query=${enc}` });
     links.push({ n: "Shodan", u: `https://www.shodan.io/host/${enc}` });
     links.push({ n: "GreyNoise", u: `https://viz.greynoise.io/ip/${enc}` });
   }
   if (type === "domain") {
     links.push({ n: "VirusTotal Domain", u: `https://www.virustotal.com/gui/domain/${enc}` });
-    links.push({ n: "MXToolbox DNS", u: `https://mxtoolbox.com/SuperTool.aspx?action=mx%3a${enc}&run=toolpage` });
-    links.push({ n: "SPF Record", u: `https://mxtoolbox.com/SuperTool.aspx?action=spf%3a${enc}&run=toolpage` });
-    links.push({ n: "DMARC Record", u: `https://mxtoolbox.com/SuperTool.aspx?action=dmarc%3a${enc}&run=toolpage` });
+    links.push({ n: "DNS Records", u: `https://dnschecker.org/all-dns-records-of-domain.php?query=${enc}&rtype=ALL&dns=google` });
+    links.push({ n: "SPF Record", u: `https://easydmarc.com/tools/spf-record-checker?domain=${enc}` });
+    links.push({ n: "DMARC Record", u: `https://easydmarc.com/tools/dmarc-lookup?domain=${enc}` });
     links.push({ n: "WHOIS", u: `https://who.is/whois/${enc}` });
     links.push({ n: "URLhaus", u: `https://urlhaus.abuse.ch/browse.php?search=${enc}` });
   }
@@ -1242,7 +1242,7 @@ Score global: ${score}/100 | Verdict: ${verdict} | Fiabilité détection: ${conf
   anoBody.appendChild(el('h3', { text: 'Seconde opinion (outils externes)' }));
   anoBody.appendChild(el('div', { class: 'tools-grid' },
     extLink("https://toolbox.googleapps.com/apps/messageheader/", "Google Header Tool ↗"),
-    extLink("https://mxtoolbox.com/EmailHeaders.aspx", "MXToolbox Headers ↗"),
+    extLink("https://www.gaijin.at/en/tools/e-mail-header-analyzer", "Gaijin Headers ↗"),
     extLink("https://phishtool.com/", "PhishTool ↗")
   ));
   anoBody.appendChild(el('p', { class: 'note', text: 'Collez le même header dans ces outils pour une seconde opinion (traitement côté serveur).' }));

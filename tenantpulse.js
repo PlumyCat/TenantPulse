@@ -9,7 +9,7 @@
 
 // ── Code principal ──
 const PROXY_DATA = {
-  dnsgoogle:      {title:'dns.google', desc:'API DNS-over-HTTPS de Google (DoH). Utilisée pour résoudre MX, SPF, DKIM, DMARC, DNSSEC, BIMI et MTA-STS. Aucune donnée personnelle transmise — seulement le nom de domaine.', url:'https://dns.google/resolve'},
+  dnsgoogle:      {title:'cloudflare-dns.com', desc:'API DNS-over-HTTPS de Cloudflare (DoH, 1.1.1.1). Utilisée pour résoudre MX, SPF, DKIM, DMARC, DNSSEC, BIMI et MTA-STS. Aucune donnée personnelle transmise — seulement le nom de domaine.', url:'https://cloudflare-dns.com/dns-query'},
   rdap:           {title:'rdap.org',   desc:'Service RDAP public (Registration Data Access Protocol). Utilisé pour récupérer les données WHOIS : registrar, serveurs NS, dates de création/expiration. Lecture seule.', url:'https://rdap.org/domain/'},
   mslogin:        {title:'login.microsoftonline.com', desc:'Endpoint public officiel Microsoft. Utilisé pour détecter le Tenant ID (OpenID Connect) et valider le GUID du tenant.', url:'https://login.microsoftonline.com/common/.well-known/openid-configuration'},
   googleaccounts: {title:'accounts.google.com', desc:'Endpoint public officiel Google. Utilisé pour détecter Google Workspace via OpenID Connect (issuer, token & authorization endpoints). Lecture seule.', url:'https://accounts.google.com/.well-known/openid-configuration'},
@@ -3065,14 +3065,18 @@ async function fetchWithAbort(url, key, timeout, isJson) {
 const fetchJsonC = (url, key, t=10000) => fetchWithAbort(url, key, t, true);
 const fetchTextC = (url, key, t=10000) => fetchWithAbort(url, key, t, false);
 
-async function fetchJson(url, timeout=9000) {
+async function fetchJson(url, timeout=9000, headers=null) {
   const ctrl = new AbortController();
   const tid  = setTimeout(() => ctrl.abort(), timeout);
-  try { const r = await fetch(url, { signal: ctrl.signal }); clearTimeout(tid); if (!r.ok) return null; return await r.json(); }
+  try { const r = await fetch(url, headers ? { signal: ctrl.signal, headers } : { signal: ctrl.signal }); clearTimeout(tid); if (!r.ok) return null; return await r.json(); }
   catch { clearTimeout(tid); return null; }
 }
+// Résolution DNS via Cloudflare DoH (gratuit, usage commercial autorisé). Format JSON identique à Google DoH.
+async function dohResolve(name, type, timeout=9000) {
+  return fetchJson(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`, timeout, { Accept: 'application/dns-json' });
+}
 async function dnsQuery(name, type) {
-  const d = await fetchJson(`https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`);
+  const d = await dohResolve(name, type);
   return d ? (d.Answer || []) : [];
 }
 
@@ -3269,7 +3273,7 @@ async function checkMicrosoft(domain) {
 
 async function checkGoogle(domain) {
   try {
-    const [oidc, mx] = await Promise.all([fetchJson('https://accounts.google.com/.well-known/openid-configuration'), fetchJson(`https://dns.google/resolve?name=${domain}&type=MX`)]);
+    const [oidc, mx] = await Promise.all([fetchJson('https://accounts.google.com/.well-known/openid-configuration'), dohResolve(domain, 'MX')]);
     if (!oidc || !mx) return null;
     const ans = mx.Answer || [];
     if (!ans.some(a => a.data?.toLowerCase().includes('google'))) return null;
@@ -3279,8 +3283,8 @@ async function checkGoogle(domain) {
 
 async function checkDNS(domain) {
   const r = { mx: [], spf: null, txt: [], detectedProviders: [] };
-  const mx  = await fetchJson(`https://dns.google/resolve?name=${domain}&type=MX`);  if (mx)  r.mx  = (mx.Answer  || []).map(a => a.data).filter(Boolean);
-  const txt = await fetchJson(`https://dns.google/resolve?name=${domain}&type=TXT`); if (txt) { const all = (txt.Answer || []).map(a => a.data).filter(Boolean); r.spf = all.find(t => t.includes('v=spf1')) || null; r.txt = all; }
+  const mx  = await dohResolve(domain, 'MX');  if (mx)  r.mx  = (mx.Answer  || []).map(a => a.data).filter(Boolean);
+  const txt = await dohResolve(domain, 'TXT'); if (txt) { const all = (txt.Answer || []).map(a => a.data).filter(Boolean); r.spf = all.find(t => t.includes('v=spf1')) || null; r.txt = all; }
   const ms = r.mx.join(' ').toLowerCase(), ss = (r.spf || '').toLowerCase(), ts = r.txt.join(' ').toLowerCase();
   const providers = [
     [['google','googlemail'],              ['google'],                      'Google Workspace'],
@@ -4026,8 +4030,8 @@ function buildHealthPanel(health, domain) {
     });
     b.appendChild(hcl);
     buildDkimBlock(b, health.dkimResults, health.hasSel1, health.hasSel2);
-    const lnk = document.createElement('a'); lnk.className = 'ext-link'; lnk.href = `https://mxtoolbox.com/SuperTool.aspx?action=mx:${encodeURIComponent(domain)}`; lnk.target = '_blank'; lnk.rel = 'noopener';
-    const lnkIcon = document.createTextNode('→ Analyse complète sur MXToolbox — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
+    const lnk = document.createElement('a'); lnk.className = 'ext-link'; lnk.href = `https://dnschecker.org/all-dns-records-of-domain.php?query=${encodeURIComponent(domain)}&rtype=ALL&dns=google`; lnk.target = '_blank'; lnk.rel = 'noopener';
+    const lnkIcon = document.createTextNode('→ Analyse DNS complète sur DNSChecker — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
     lnk.appendChild(lnkIcon); lnk.appendChild(lnkStrong); b.appendChild(lnk);
   };
 }

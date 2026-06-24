@@ -91,7 +91,7 @@ fallback otherwise. **Sub-apps share `../tenantpulse.css`** plus their own overr
 External endpoints:
 - `login.microsoftonline.com/<domain>/.well-known/openid-configuration` → tenant ID;
   `validateTenantGuid` re-queries the GUID and rejects generic MSA tenants (`MS_GENERIC_GUIDS`).
-- `dns.google/resolve` (DNS-over-HTTPS JSON) → MX/TXT/etc via `dnsQuery`.
+- `cloudflare-dns.com/dns-query` (DNS-over-HTTPS JSON, header `Accept: application/dns-json`) → MX/TXT/etc via `dohResolve`/`dnsQuery`. Gratuit, usage commercial autorisé.
 - `accounts.google.com` → Google Workspace detection.
 - `rdap.org` + many registry RDAP servers → WHOIS / hosting detection (`detectHostFromNS`).
 - `google.com/s2/favicons` → service icons.
