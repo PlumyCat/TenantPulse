@@ -4050,10 +4050,9 @@ function buildHostPanel(host, domain) {
   };
 }
 function buildHealthPanel(health, domain) {
-  return b => {
-    b.appendChild(buildScoreRing(health.score, health.dmarcIsQuarantine));
+  const renderChecks = (list) => {
     const hcl = document.createElement('div'); hcl.className = 'hc-list';
-    health.checks.forEach(c => {
+    list.forEach(c => {
       const it = document.createElement('div'); it.className = 'hc-item ' + c.t;
       const ico = document.createElement('div'); ico.className = 'hc-icon'; const icoImg = document.createElement('img'); icoImg.src = c.icon; icoImg.className = 'icon-adaptive'; icoImg.alt = ''; ico.appendChild(icoImg);
       const body = document.createElement('div'); body.className = 'hc-body';
@@ -4062,23 +4061,20 @@ function buildHealthPanel(health, domain) {
       body.appendChild(ttl); body.appendChild(dsc); it.appendChild(ico); it.appendChild(body);
       hcl.appendChild(it);
     });
-    b.appendChild(hcl);
-    buildDkimBlock(b, health.dkimResults, health.hasSel1, health.hasSel2);
+    return hcl;
+  };
+  return b => {
+    b.appendChild(buildScoreRing(health.score, health.dmarcIsQuarantine));
+    // Prêt pour M365 en premier : ce sont les checks les plus utiles pour résoudre un ticket.
     if (health.m365?.length) {
-      const sub = document.createElement('div'); sub.className = 'hc-subhead'; sub.textContent = 'Prêt pour M365 (services)';
+      const sub = document.createElement('div'); sub.className = 'hc-subhead hc-subhead-top'; sub.textContent = 'Prêt pour M365 (services)';
       b.appendChild(sub);
-      const m365l = document.createElement('div'); m365l.className = 'hc-list';
-      health.m365.forEach(c => {
-        const it = document.createElement('div'); it.className = 'hc-item ' + c.t;
-        const ico = document.createElement('div'); ico.className = 'hc-icon'; const icoImg = document.createElement('img'); icoImg.src = c.icon; icoImg.className = 'icon-adaptive'; icoImg.alt = ''; ico.appendChild(icoImg);
-        const body = document.createElement('div'); body.className = 'hc-body';
-        const ttl = document.createElement('div'); ttl.className = 'hc-title'; ttl.textContent = c.title;
-        const dsc = document.createElement('div'); dsc.className = 'hc-desc';  dsc.textContent = c.desc;
-        body.appendChild(ttl); body.appendChild(dsc); it.appendChild(ico); it.appendChild(body);
-        m365l.appendChild(it);
-      });
-      b.appendChild(m365l);
+      b.appendChild(renderChecks(health.m365));
     }
+    const sub2 = document.createElement('div'); sub2.className = 'hc-subhead'; sub2.textContent = 'Hygiène e-mail & DNS';
+    b.appendChild(sub2);
+    b.appendChild(renderChecks(health.checks));
+    buildDkimBlock(b, health.dkimResults, health.hasSel1, health.hasSel2);
     const lnk = document.createElement('a'); lnk.className = 'ext-link'; lnk.href = `https://dnschecker.org/all-dns-records-of-domain.php?query=${encodeURIComponent(domain)}&rtype=ALL&dns=google`; lnk.target = '_blank'; lnk.rel = 'noopener';
     const lnkIcon = document.createTextNode('→ Analyse DNS complète sur DNSChecker — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
     lnk.appendChild(lnkIcon); lnk.appendChild(lnkStrong); b.appendChild(lnk);
