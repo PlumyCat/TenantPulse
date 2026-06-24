@@ -1555,8 +1555,9 @@ select.admin-input{cursor:pointer;color-scheme:light}
 .admin-known-head{display:flex;align-items:center;justify-content:space-between;gap:10px 14px;flex-wrap:wrap}
 /* Texte prioritaire : garde un plancher de largeur → les boutons passent à la ligne plutôt que de rogner le texte. */
 .admin-known-id{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;flex:1 1 auto;min-width:min(100%,240px)}
-/* Boutons groupés : ne rétrécissent pas, basculent ensemble à la ligne si la place manque. */
-.admin-known-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
+/* Boutons groupés : ne rétrécissent pas, basculent ensemble à la ligne si la place manque,
+   et restent alignés à droite (margin-left:auto s'applique par ligne flex, même en wrap). */
+.admin-known-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;margin-left:auto;justify-content:flex-end}
 .admin-known-badges{display:flex;flex-wrap:wrap;gap:6px}
 
 /* ── Garde-fous [hidden] (les règles display ci-dessus battent le UA [hidden]) ── */
