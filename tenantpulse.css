@@ -1501,6 +1501,9 @@ html:not([data-theme="dark"]) .admin-req-row,html:not([data-theme="dark"]) .admi
 [data-theme="light"] .admin-btn-small,html:not([data-theme="dark"]) .admin-btn-small{color:var(--text);background:linear-gradient(180deg, rgba(0,0,0,.04) 0%, rgba(0,0,0,.02) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.5) inset}
 [data-theme="light"] .admin-btn-small:hover,html:not([data-theme="dark"]) .admin-btn-small:hover{color:var(--text);background:linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.04) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.26), 0 1px 0 rgba(255,255,255,.5) inset}
 .admin-btn-small.admin-btn-reject{padding:6px 12px;color:#fff;background:linear-gradient(180deg, rgba(220,38,38,.95) 0%, rgba(185,28,28,.95) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.18) inset, 0 4px 14px rgba(185,28,28,.3)}
+/* Analyser — action primaire (accent violet de la charte) */
+.admin-btn-small.admin-btn-analyze{padding:6px 12px;color:#fff;background:linear-gradient(180deg, rgba(99,102,241,.95) 0%, rgba(79,70,229,.95) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.18) inset, 0 4px 14px rgba(79,70,229,.3)}
+.admin-btn-small.admin-btn-analyze:hover{transform:translateY(-1px);color:#fff;background:linear-gradient(180deg, rgba(109,112,255,1) 0%, rgba(89,80,239,1) 100%);box-shadow:0 0 0 1px rgba(255,255,255,.2), 0 1px 0 rgba(255,255,255,.22) inset, 0 6px 20px rgba(79,70,229,.42)}
 
 /* ── Formulaires (tags / rôles) ── */
 .admin-tag-form{display:flex;flex-direction:column;gap:10px;padding:16px;margin-top:12px}

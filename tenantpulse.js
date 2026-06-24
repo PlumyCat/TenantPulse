@@ -2424,7 +2424,14 @@ function buildKnownRow(t) {
   const tid = document.createElement('span'); tid.className = 'admin-assigned-tenant'; tid.textContent = t.tenantId;
   const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'admin-btn admin-btn-small'; copy.textContent = 'Copier ID';
   copy.addEventListener('click', () => copyTenantId(t.tenantId, copy));
-  head.appendChild(dom); head.appendChild(tid); head.appendChild(copy);
+  head.appendChild(dom); head.appendChild(tid);
+  if (t.domain) {
+    const analyze = document.createElement('button'); analyze.type = 'button'; analyze.className = 'admin-btn admin-btn-small admin-btn-analyze'; analyze.textContent = 'Analyser';
+    analyze.title = 'Ouvrir la recherche / analyse pour ' + t.domain;
+    analyze.addEventListener('click', () => { closeAdmin(); loadFromHistory(t.domain); });
+    head.appendChild(analyze);
+  }
+  head.appendChild(copy);
   if (t.domain) {
     const copyDom = document.createElement('button'); copyDom.type = 'button'; copyDom.className = 'admin-btn admin-btn-small'; copyDom.textContent = 'Copier domaine';
     copyDom.addEventListener('click', () => copyDomain(t.domain, copyDom));
