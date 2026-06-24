@@ -864,7 +864,7 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .hero-none{font-size:var(--text-base);font-weight:500;color:rgba(255,255,255,.6);font-style:italic;margin-bottom:6px}
 .hero-admin-toggle{
   position:relative;display:inline-flex;align-items:center;justify-content:center;
-  width:28px;height:28px;flex-shrink:0;padding:0;
+  width:22px;height:22px;flex-shrink:0;padding:0;box-sizing:border-box;
   background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.06) 100%);
   border:1px solid rgba(255,255,255,.22);border-radius:50%;cursor:pointer;
   transition:background .2s,border-color .15s,box-shadow .2s;
