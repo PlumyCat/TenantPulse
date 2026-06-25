@@ -3989,38 +3989,19 @@ function exportReport() {
   lines.push('');
 
   // ── Security Checks ─────────────────────────
-  lines.push('SECURITY CHECKS:');
+  lines.push('HYGIENE E-MAIL & DNS (M365):');
   lines.push('');
   if (r.health) {
-    const mapCheck = (c) => {
-      const t = c.title;
-      if (t.includes('MX Records pr\u00e9sents'))       return 'MX Records: OK';
-      if (t.includes('MX Records manquants'))             return 'MX Records: MANQUANT';
-      if (t.includes('SPF strict'))                       return 'SPF: OK';
-      if (t.includes('SPF (softfail'))                    return 'SPF: OK (softfail \u2014 ~all)';
-      if (t.includes('SPF manquant'))                     return 'SPF: MANQUANT';
-      if (t.includes('DMARC p=reject'))                   return 'DMARC: OK (p=reject)';
-      if (t.includes('DMARC p=quarantine'))               return 'DMARC: OK (p=quarantine *)';
-      if (t.includes('DMARC p=none'))                     return 'DMARC: KO (p=none)';
-      if (t.includes('DMARC manquant'))                   return 'DMARC: MANQUANT';
-      if (t.includes('DKIM actif')) {
-        const m = t.match(/DKIM actif \((.+)\)/);
-        return 'DKIM: OK' + (m ? ' (' + m[1] + ')' : '');
-      }
-      if (t.includes('DKIM non d\u00e9tect\u00e9'))      return 'DKIM: MANQUANT';
-      if (t.includes('CNAME www'))                        return 'www via CNAME: OK';
-      if (t.includes('www via A record'))                 return 'www via A record: [i]';
-      if (t.includes('www non r\u00e9solu'))              return 'www: KO';
-      if (t.includes('DNSSEC activ\u00e9'))               return 'DNSSEC: OK';
-      if (t.includes('DNSSEC non'))                       return 'DNSSEC: KO';
-      if (t.includes('MTA-STS activ\u00e9'))              return 'MTA-STS: OK';
-      if (t.includes('MTA-STS non'))                      return 'MTA-STS: KO';
-      if (t.includes('BIMI configur\u00e9'))              return 'BIMI: OK';
-      if (t.includes('BIMI absent'))                      return 'BIMI: KO';
-      const status = c.type === 'ok' ? 'OK' : c.type === 'warn' ? 'KO' : c.type === 'error' ? 'MANQUANT' : '[i]';
-      return t + ': ' + status;
-    };
-    r.health.checks.forEach(c => lines.push(mapCheck(c)));
+    lines.push('Score : ' + r.health.score + '/100' + (r.health.bonus > 0 ? '  (+' + r.health.bonus + ' durcissement)' : ''));
+    lines.push('Bareme : auth e-mail (MX/SPF/DKIM/DMARC) = base 100 ; MTA-STS/DNSSEC/BIMI = bonus.');
+    lines.push('');
+    const tagOf = (type) => type === 'ok' ? 'OK' : type === 'warn' ? 'A CORRIGER' : type === 'error' ? 'CRITIQUE' : 'info';
+    r.health.checks.forEach(c => lines.push('[' + tagOf(c.type) + '] ' + c.title));
+    if (r.health.m365 && r.health.m365.length) {
+      lines.push('');
+      lines.push('Pret pour M365 (services):');
+      r.health.m365.forEach(c => lines.push('  [' + tagOf(c.type) + '] ' + c.title));
+    }
   } else {
     lines.push('(Analyse rapide \u2014 s\u00e9curit\u00e9 non v\u00e9rifi\u00e9e)');
     lines.push('Lancez l\u2019analyse compl\u00e8te pour voir SPF, DMARC, DKIM\u2026');
@@ -4051,11 +4032,13 @@ function exportReport() {
     const RISK_MAP = [
       { match: t => t.includes('MX Records manquants'),                  msg: 'No MX records: mail server not configured' },
       { match: t => t.includes('SPF manquant'),                          msg: 'No SPF: spoofing risk' },
-      { match: t => t.includes('SPF (softfail'),                         msg: 'SPF softfail: spoofing partially possible' },
+      { match: t => t.includes('SPF softfail'),                          msg: 'SPF softfail (~all) : -all recommande (Microsoft)' },
+      { match: t => t.includes('SPF sans include Microsoft 365'),        msg: 'SPF sans include M365 : le mail sortant via M365 ne passe pas SPF' },
+      { match: t => t.includes('SPF d') && t.includes('passe 10 lookups'), msg: 'SPF >10 lookups DNS : permerror, le SPF echoue (Microsoft)' },
       { match: t => t.includes('DMARC manquant'),                        msg: 'No DMARC: phishing risk' },
       { match: t => t.includes('DMARC p=none'),                          msg: 'DMARC p=none: no enforcement' },
       { match: t => t.includes('DKIM non d\u00e9tect\u00e9'),            msg: 'No DKIM: weak email authentication' },
-      { match: t => t.includes('DNSSEC non'),                            msg: 'No DNSSEC: integrity validation' },
+      { match: t => t.includes('DKIM M365 partiel'),                     msg: 'Rotation DKIM incomplete : publier le CNAME selector2' },
     ];
     const risks = [];
     r.health.checks.forEach(c => {
