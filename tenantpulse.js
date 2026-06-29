@@ -368,18 +368,21 @@ function buildShortcutCatalog() {
 }
 /* Ouvre une série d'URLs (déjà résolues et validées) dans des onglets séparés. */
 function openCombo(urls) {
-  /* Ouvre chaque URL dans un onglet via un <a target="_blank"> synthétique.
-     window.open(url, '_blank', '<features>') ouvre une POPUP (3e argument présent),
-     bloquée par le navigateur dès le 2e lien — d'où « tous les liens ne s'ouvrent pas ».
-     Le clic sur une ancre, déclenché dans le même geste utilisateur, ouvre de vrais
-     onglets et passe le bloqueur de pop-ups. rel=noopener pour la sécurité. */
+  /* Ouvre chaque URL dans un nouvel onglet et renvoie le nombre de liens BLOQUÉS.
+     window.open(url, '_blank') sans 3e argument ouvre un onglet (et non une pop-up)
+     et renvoie null si le navigateur a bloqué l'ouverture. Les navigateurs
+     n'autorisent en général qu'UNE ouverture par clic : les suivantes sont bloquées
+     tant que l'utilisateur n'a pas autorisé les pop-ups pour le site. On compte les
+     blocages pour pouvoir guider l'utilisateur (cf. tuile combo). opener=null →
+     équivalent de rel=noopener pour la sécurité. */
+  let blocked = 0;
   urls.forEach(u => {
-    const a = document.createElement('a');
-    a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    let w = null;
+    try { w = window.open(u, '_blank'); } catch { w = null; }
+    if (w) { try { w.opener = null; } catch {} }
+    else blocked++;
   });
+  return blocked;
 }
 /* Recompose le hero in place (après modification des raccourcis / boutons perso). */
 function rerenderHero() {
@@ -982,10 +985,10 @@ function closeCustomMenu() {
   _openCustomMenu = null;
   animateMenuClose(menu);
 }
-function openCustomShortcutMenu(custom, anchorEl, ctx) {
+function openCustomShortcutMenu(custom, anchorEl, ctx, blockedHint) {
   const wasId = _openCustomMenu && _openCustomMenu._cid;
   closeCustomMenu();
-  if (wasId === custom.id) return; // re-clic sur le même bouton → simple fermeture
+  if (wasId === custom.id && !blockedHint) return; // re-clic sur le même bouton → simple fermeture
 
   const resolved = sanitizeCustomItems(custom.items)
     .map(it => ({ label: it.label, url: resolveShortcutUrl(it.url, ctx) }));
@@ -1002,13 +1005,25 @@ function openCustomShortcutMenu(custom, anchorEl, ctx) {
   title.textContent = custom.name || 'Raccourci';
   menu.appendChild(title);
 
+  /* Bandeau affiché quand le navigateur a bloqué l'ouverture multiple (pop-ups). */
+  if (blockedHint) {
+    const hint = document.createElement('div');
+    hint.className = 'hero-shortcut-hint';
+    hint.textContent = "Le navigateur a bloqué l'ouverture de plusieurs onglets. Autorisez les pop-ups de ce site pour tout ouvrir d'un clic, ou ouvrez les liens ci-dessous un par un.";
+    menu.appendChild(hint);
+  }
+
   if (okUrls.length > 1) {
     const all = document.createElement('button');
     all.type = 'button';
     all.className = 'hero-shortcut-opt primary';
     all.textContent = 'Tout ouvrir (' + okUrls.length + ')';
     all.setAttribute('role', 'menuitem');
-    all.addEventListener('click', () => { openCombo(okUrls); closeCustomMenu(); });
+    all.addEventListener('click', () => {
+      const blocked = openCombo(okUrls);
+      if (blocked > 0) openCustomShortcutMenu(custom, anchorEl, ctx, true); // ré-affiche avec le bandeau
+      else closeCustomMenu();
+    });
     menu.appendChild(all);
   }
 
@@ -1055,7 +1070,15 @@ function makeCustomButtonCell(custom, ctx) {
   } else {
     a.href = '#';
     a.title = 'Ouvrir les ' + okUrls.length + ' liens';
-    a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openCombo(okUrls); });
+    a.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      const blocked = openCombo(okUrls);
+      if (blocked > 0) {
+        // Pop-ups bloquées → on ouvre le menu (avec bandeau) pour ouvrir les liens un par un
+        const chev = cell.querySelector('.hero-btn-chevron');
+        if (chev) openCustomShortcutMenu(custom, chev, ctx, true);
+      }
+    });
   }
 
   const icon = document.createElement('img');
