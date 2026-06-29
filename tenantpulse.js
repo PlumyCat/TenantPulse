@@ -368,7 +368,18 @@ function buildShortcutCatalog() {
 }
 /* Ouvre une série d'URLs (déjà résolues et validées) dans des onglets séparés. */
 function openCombo(urls) {
-  urls.forEach(u => { try { window.open(u, '_blank', 'noopener,noreferrer'); } catch {} });
+  /* Ouvre chaque URL dans un onglet via un <a target="_blank"> synthétique.
+     window.open(url, '_blank', '<features>') ouvre une POPUP (3e argument présent),
+     bloquée par le navigateur dès le 2e lien — d'où « tous les liens ne s'ouvrent pas ».
+     Le clic sur une ancre, déclenché dans le même geste utilisateur, ouvre de vrais
+     onglets et passe le bloqueur de pop-ups. rel=noopener pour la sécurité. */
+  urls.forEach(u => {
+    const a = document.createElement('a');
+    a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
 }
 /* Recompose le hero in place (après modification des raccourcis / boutons perso). */
 function rerenderHero() {
