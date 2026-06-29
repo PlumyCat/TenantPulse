@@ -1068,16 +1068,16 @@ function makeCustomButtonCell(custom, ctx) {
   } else if (okUrls.length === 1) {
     a.href = okUrls[0]; a.target = '_blank'; a.rel = 'noopener noreferrer';
   } else {
+    /* Plusieurs liens : un clic ouvre le MENU (liste + « Tout ouvrir »).
+       On n'ouvre pas tout automatiquement car les navigateurs (et surtout les Edge
+       gérés par une organisation) bloquent l'ouverture de plusieurs onglets par clic.
+       Depuis le menu, chaque lien cliqué individuellement n'est jamais bloqué. */
     a.href = '#';
-    a.title = 'Ouvrir les ' + okUrls.length + ' liens';
+    a.title = 'Voir les ' + okUrls.length + ' liens';
     a.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation();
-      const blocked = openCombo(okUrls);
-      if (blocked > 0) {
-        // Pop-ups bloquées → on ouvre le menu (avec bandeau) pour ouvrir les liens un par un
-        const chev = cell.querySelector('.hero-btn-chevron');
-        if (chev) openCustomShortcutMenu(custom, chev, ctx, true);
-      }
+      const chev = cell.querySelector('.hero-btn-chevron');
+      openCustomShortcutMenu(custom, chev || a, ctx);
     });
   }
 
