@@ -332,6 +332,55 @@ function isButtonEnabled(key) {
   return loadProfile()[key] !== false;
 }
 
+/* ── Raccourcis personnalisés (boutons « combo » définis par l'utilisateur) ──
+   Stockés dans le profil (localStorage) sous profile.customButtons. Chaque bouton
+   référence une liste de raccourcis existants (centre + gabarit d'URL) : à l'ouverture,
+   chaque URL est résolue puis re-validée contre l'allowlist d'hôtes Microsoft
+   (resolveShortcutUrl), donc un localStorage altéré ne peut jamais produire un lien
+   hors des centres autorisés. */
+function loadCustomButtons() {
+  const p = loadProfile();
+  return Array.isArray(p.customButtons) ? p.customButtons : [];
+}
+function persistCustomButtons(list) {
+  const p = loadProfile();
+  p.customButtons = list;
+  saveProfile(p);
+}
+/* Ne conserve d'un bouton perso que les champs sûrs (défense en profondeur localStorage). */
+function sanitizeCustomItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(it => it && typeof it.url === 'string' && typeof it.center === 'string')
+    .map(it => ({ center: String(it.center), label: String(it.label || ''), url: String(it.url) }));
+}
+/* Catalogue de tous les raccourcis sélectionnables, groupés par centre d'administration. */
+function buildShortcutCatalog() {
+  return Object.keys(ADMIN_SHORTCUTS).map(centerKey => {
+    const center = REDIRECT_BUTTONS.find(b => b.key === centerKey);
+    return {
+      center: centerKey,
+      centerLabel: center ? center.label : centerKey,
+      centerIcon: center ? center.icon : 'assets/user.png',
+      items: ADMIN_SHORTCUTS[centerKey].map(sc => ({ center: centerKey, label: sc.label, url: sc.url }))
+    };
+  });
+}
+/* Ouvre une série d'URLs (déjà résolues et validées) dans des onglets séparés. */
+function openCombo(urls) {
+  urls.forEach(u => { try { window.open(u, '_blank', 'noopener,noreferrer'); } catch {} });
+}
+/* Recompose le hero in place (après modification des raccourcis / boutons perso). */
+function rerenderHero() {
+  if (!currentState.ms || !currentState.domain) return;
+  const center = document.getElementById('centerCol');
+  const oldHero = center && center.querySelector('.tenant-hero');
+  if (oldHero) {
+    const confidence = computeConfidence(currentState.ms);
+    center.replaceChild(renderHero(currentState.ms, currentState.domain, confidence), oldHero);
+  }
+}
+
 
 function toggleDropSection(btn) {
   btn.classList.toggle('open');
@@ -805,6 +854,18 @@ function bindEvents() {
   });
   document.getElementById('profilesTabTP').addEventListener('click', () => switchProfilesTab('tp'));
   document.getElementById('profilesTabML').addEventListener('click', () => switchProfilesTab('ml'));
+  /* Modale création / édition de raccourci personnalisé */
+  document.getElementById('btnCbtnClose').addEventListener('click', closeCustomButtonModal);
+  document.getElementById('btnCbtnCancel').addEventListener('click', closeCustomButtonModal);
+  document.getElementById('btnCbtnSave').addEventListener('click', saveCustomButtonModal);
+  const cbtnOverlay = document.getElementById('cbtnOverlay');
+  cbtnOverlay.addEventListener('click', e => {
+    e.stopPropagation(); // évite de fermer la modale Profils en arrière-plan
+    if (e.target === cbtnOverlay) closeCustomButtonModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !cbtnOverlay.hidden) closeCustomButtonModal();
+  });
   document.querySelectorAll('#analysisModeSeg .analysis-mode-opt').forEach(opt => {
     opt.addEventListener('click', () => {
       document.querySelectorAll('#analysisModeSeg .analysis-mode-opt').forEach(o => {
@@ -881,6 +942,344 @@ function syncCacheSettingsAvailability() {
   panel.classList.toggle('disabled', !enabled);
 }
 
+/* Positionne un menu flottant sous l'élément d'ancrage (repli vers le haut si débordement). */
+function placeFloatingMenu(menu, anchorEl, menuWidth) {
+  const rect = anchorEl.getBoundingClientRect();
+  const w = menuWidth || 240;
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '3000';
+  let left = rect.left;
+  if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;
+  if (left < 12) left = 12;
+  menu.style.left = left + 'px';
+  menu.style.top = (rect.bottom + 6) + 'px';
+  document.body.appendChild(menu);
+  const mh = menu.getBoundingClientRect().height;
+  if (rect.bottom + 6 + mh > window.innerHeight - 12) {
+    let top = rect.top - 6 - mh;
+    if (top < 12) top = 12;
+    menu.style.top = top + 'px';
+  }
+}
+
+/* ── Menu dépliant d'un bouton personnalisé (détail des raccourcis « combo ») ── */
+let _openCustomMenu = null;
+function closeCustomMenu() {
+  document.removeEventListener('click', closeCustomMenu);
+  window.removeEventListener('scroll', closeCustomMenu, true);
+  const menu = _openCustomMenu;
+  _openCustomMenu = null;
+  animateMenuClose(menu);
+}
+function openCustomShortcutMenu(custom, anchorEl, ctx) {
+  const wasId = _openCustomMenu && _openCustomMenu._cid;
+  closeCustomMenu();
+  if (wasId === custom.id) return; // re-clic sur le même bouton → simple fermeture
+
+  const resolved = sanitizeCustomItems(custom.items)
+    .map(it => ({ label: it.label, url: resolveShortcutUrl(it.url, ctx) }));
+  const okUrls = resolved.filter(r => r.url).map(r => r.url);
+
+  const menu = document.createElement('div');
+  menu.className = 'hero-shortcut-menu';
+  menu._cid = custom.id;
+  menu.setAttribute('role', 'menu');
+  menu.addEventListener('click', e => e.stopPropagation());
+
+  const title = document.createElement('div');
+  title.className = 'hero-shortcut-menu-title';
+  title.textContent = custom.name || 'Raccourci';
+  menu.appendChild(title);
+
+  if (okUrls.length > 1) {
+    const all = document.createElement('button');
+    all.type = 'button';
+    all.className = 'hero-shortcut-opt primary';
+    all.textContent = 'Tout ouvrir (' + okUrls.length + ')';
+    all.setAttribute('role', 'menuitem');
+    all.addEventListener('click', () => { openCombo(okUrls); closeCustomMenu(); });
+    menu.appendChild(all);
+  }
+
+  resolved.forEach(r => {
+    if (r.url) {
+      const a = document.createElement('a');
+      a.className = 'hero-shortcut-opt';
+      a.href = r.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = r.label;
+      a.setAttribute('role', 'menuitem');
+      a.addEventListener('click', closeCustomMenu);
+      menu.appendChild(a);
+    } else {
+      const span = document.createElement('span');
+      span.className = 'hero-shortcut-opt disabled';
+      span.textContent = r.label;
+      span.title = 'Lien indisponible pour ce tenant.';
+      menu.appendChild(span);
+    }
+  });
+
+  placeFloatingMenu(menu, anchorEl);
+  _openCustomMenu = menu;
+  setTimeout(() => document.addEventListener('click', closeCustomMenu), 0);
+  window.addEventListener('scroll', closeCustomMenu, true);
+}
+
+/* Tuile d'un bouton personnalisé dans le hero (clic = ouvre tous les liens résolus). */
+function makeCustomButtonCell(custom, ctx) {
+  const items = sanitizeCustomItems(custom.items);
+  const okUrls = items.map(it => resolveShortcutUrl(it.url, ctx)).filter(Boolean);
+
+  const cell = document.createElement('div');
+  cell.className = 'hero-btn-cell';
+
+  const a = document.createElement('a');
+  a.className = 'hero-partner-btn hero-custom-btn' + (okUrls.length === 0 ? ' disabled' : '');
+  if (okUrls.length === 0) {
+    a.setAttribute('aria-disabled', 'true');
+    a.title = "Aucun lien disponible pour ce tenant (lancez l'analyse complète si nécessaire).";
+    a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+  } else if (okUrls.length === 1) {
+    a.href = okUrls[0]; a.target = '_blank'; a.rel = 'noopener noreferrer';
+  } else {
+    a.href = '#';
+    a.title = 'Ouvrir les ' + okUrls.length + ' liens';
+    a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openCombo(okUrls); });
+  }
+
+  const icon = document.createElement('img');
+  icon.src = 'assets/user.png'; icon.alt = ''; icon.className = 'hero-partner-btn-icon';
+  const text = document.createElement('div'); text.className = 'hero-partner-btn-text';
+  const label = document.createElement('span'); label.className = 'hero-partner-btn-label'; label.textContent = custom.name || 'Raccourci';
+  const sub = document.createElement('span'); sub.className = 'hero-partner-btn-sub';
+  sub.textContent = custom.desc || (items.length + (items.length > 1 ? ' liens' : ' lien'));
+  text.appendChild(label); text.appendChild(sub);
+  a.appendChild(icon); a.appendChild(text);
+  cell.appendChild(a);
+
+  if (items.length > 1) {
+    const chev = document.createElement('button');
+    chev.type = 'button';
+    chev.className = 'hero-btn-chevron';
+    chev.textContent = '▾';
+    chev.setAttribute('aria-haspopup', 'true');
+    chev.setAttribute('aria-label', 'Raccourcis ' + (custom.name || ''));
+    chev.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      openCustomShortcutMenu(custom, chev, ctx);
+    });
+    cell.appendChild(chev);
+  }
+  return cell;
+}
+
+/* Tuile « + » d'ajout d'un raccourci personnalisé (en fin de grille du hero). */
+function makeAddShortcutCell() {
+  const cell = document.createElement('div');
+  cell.className = 'hero-btn-cell';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'hero-partner-btn hero-add-btn';
+  btn.setAttribute('aria-label', 'Ajouter un raccourci personnalisé');
+  btn.title = 'Ajouter un raccourci personnalisé';
+  const plus = document.createElement('span');
+  plus.className = 'hero-add-btn-plus'; plus.textContent = '+'; plus.setAttribute('aria-hidden', 'true');
+  const text = document.createElement('div'); text.className = 'hero-partner-btn-text';
+  const label = document.createElement('span'); label.className = 'hero-partner-btn-label'; label.textContent = 'Ajouter';
+  const sub = document.createElement('span'); sub.className = 'hero-partner-btn-sub'; sub.textContent = 'Raccourci perso';
+  text.appendChild(label); text.appendChild(sub);
+  btn.appendChild(plus); btn.appendChild(text);
+  btn.addEventListener('click', () => openCustomButtonModal(null));
+  cell.appendChild(btn);
+  return cell;
+}
+
+/* ── Modale de création / édition d'un bouton personnalisé ── */
+let _editingCustomId = null;
+
+function openCustomButtonModal(editId) {
+  _editingCustomId = editId || null;
+  const overlay   = document.getElementById('cbtnOverlay');
+  const titleEl   = document.getElementById('cbtnModalTitleText');
+  const nameInput = document.getElementById('cbtnNameInput');
+  const descInput = document.getElementById('cbtnDescInput');
+  const errEl     = document.getElementById('cbtnError');
+  errEl.hidden = true; errEl.textContent = '';
+
+  const selected = new Set();
+  if (editId) {
+    const cb = loadCustomButtons().find(c => c.id === editId);
+    if (cb) {
+      titleEl.textContent = 'Modifier le raccourci';
+      nameInput.value = cb.name || '';
+      descInput.value = cb.desc || '';
+      sanitizeCustomItems(cb.items).forEach(it => selected.add(it.center + '::' + it.url));
+    }
+  } else {
+    titleEl.textContent = 'Nouveau raccourci personnalisé';
+    nameInput.value = ''; descInput.value = '';
+  }
+  renderShortcutPicker(selected);
+  overlay.hidden = false;
+  setTimeout(() => nameInput.focus(), 30);
+}
+
+function closeCustomButtonModal() {
+  document.getElementById('cbtnOverlay').hidden = true;
+  _editingCustomId = null;
+}
+
+function renderShortcutPicker(selectedSet) {
+  const host = document.getElementById('cbtnShortcutList');
+  host.replaceChildren();
+  buildShortcutCatalog().forEach(group => {
+    const section = document.createElement('div'); section.className = 'cbtn-sc-group';
+    const head = document.createElement('div'); head.className = 'cbtn-sc-group-head';
+    const gi = document.createElement('img'); gi.src = group.centerIcon; gi.alt = ''; gi.className = 'cbtn-sc-group-icon';
+    const gl = document.createElement('span'); gl.textContent = group.centerLabel;
+    head.appendChild(gi); head.appendChild(gl);
+    section.appendChild(head);
+    group.items.forEach(it => {
+      const id = it.center + '::' + it.url;
+      const on = selectedSet.has(id);
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'cbtn-sc-opt' + (on ? ' selected' : '');
+      row.dataset.scid = id; row.dataset.center = it.center; row.dataset.url = it.url; row.dataset.label = it.label;
+      row.setAttribute('role', 'checkbox');
+      row.setAttribute('aria-checked', on ? 'true' : 'false');
+      const chk = document.createElement('span'); chk.className = 'cbtn-sc-check'; chk.textContent = '✓'; chk.setAttribute('aria-hidden', 'true');
+      const lbl = document.createElement('span'); lbl.className = 'cbtn-sc-opt-label'; lbl.textContent = it.label;
+      row.appendChild(chk); row.appendChild(lbl);
+      row.addEventListener('click', () => {
+        const sel = row.classList.toggle('selected');
+        row.setAttribute('aria-checked', sel ? 'true' : 'false');
+        updateCustomCount();
+      });
+      section.appendChild(row);
+    });
+    host.appendChild(section);
+  });
+  updateCustomCount();
+}
+
+function updateCustomCount() {
+  const n = document.querySelectorAll('#cbtnShortcutList .cbtn-sc-opt.selected').length;
+  const el = document.getElementById('cbtnCount');
+  if (el) el.textContent = n + ' sélectionné' + (n > 1 ? 's' : '');
+}
+
+function saveCustomButtonModal() {
+  const nameInput = document.getElementById('cbtnNameInput');
+  const descInput = document.getElementById('cbtnDescInput');
+  const errEl = document.getElementById('cbtnError');
+  const name = nameInput.value.trim();
+  const desc = descInput.value.trim();
+  const selectedRows = [...document.querySelectorAll('#cbtnShortcutList .cbtn-sc-opt.selected')];
+  const showErr = msg => { errEl.textContent = msg; errEl.hidden = false; };
+
+  if (!name) { showErr('Veuillez saisir un nom pour le bouton.'); nameInput.focus(); return; }
+  if (selectedRows.length === 0) { showErr('Sélectionnez au moins un raccourci à inclure.'); return; }
+
+  const items = selectedRows.map(r => ({ center: r.dataset.center, label: r.dataset.label, url: r.dataset.url }));
+  const list = loadCustomButtons();
+  if (_editingCustomId) {
+    const idx = list.findIndex(c => c.id === _editingCustomId);
+    if (idx >= 0) list[idx] = { ...list[idx], name, desc, items };
+  } else {
+    list.push({ id: 'cb_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, desc, pinned: false, items });
+  }
+  persistCustomButtons(list);
+  closeCustomButtonModal();
+  renderCustomButtonsManager();
+  rerenderHero();
+}
+
+/* ── Gestion des boutons perso (section « Raccourcis personnalisés » de la modale Profils) ── */
+function orderedCustomButtons() {
+  const list = loadCustomButtons();
+  return [...list.filter(c => c.pinned), ...list.filter(c => !c.pinned)];
+}
+
+function renderCustomButtonsManager() {
+  const host = document.getElementById('customButtonsList');
+  if (!host) return;
+  host.replaceChildren();
+  const ordered = orderedCustomButtons();
+  if (ordered.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'cbtn-manage-empty';
+    empty.textContent = "Aucun bouton personnalisé. Créez-en un pour ouvrir plusieurs centres d'administration en un seul clic.";
+    host.appendChild(empty);
+  } else {
+    ordered.forEach(cb => host.appendChild(makeCustomManageRow(cb)));
+  }
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'cbtn-manage-add';
+  add.textContent = '+ Créer un raccourci';
+  add.addEventListener('click', () => openCustomButtonModal(null));
+  host.appendChild(add);
+}
+
+function makeCustomManageRow(cb) {
+  const items = sanitizeCustomItems(cb.items);
+  const row = document.createElement('div');
+  row.className = 'cbtn-manage-item' + (cb.pinned ? ' pinned' : '');
+
+  const icon = document.createElement('img'); icon.src = 'assets/user.png'; icon.alt = ''; icon.className = 'cbtn-manage-icon';
+  const info = document.createElement('div'); info.className = 'cbtn-manage-info';
+  const name = document.createElement('span'); name.className = 'cbtn-manage-name'; name.textContent = cb.name || 'Raccourci';
+  const meta = document.createElement('span'); meta.className = 'cbtn-manage-meta';
+  meta.textContent = (cb.desc ? cb.desc + ' · ' : '') + items.length + (items.length > 1 ? ' liens' : ' lien');
+  info.appendChild(name); info.appendChild(meta);
+
+  const actions = document.createElement('div'); actions.className = 'cbtn-manage-actions';
+
+  const pin = document.createElement('button');
+  pin.type = 'button';
+  pin.className = 'cbtn-manage-btn cbtn-pin' + (cb.pinned ? ' active' : '');
+  pin.title = cb.pinned ? 'Désépingler' : 'Épingler en premier';
+  pin.setAttribute('aria-label', pin.title);
+  pin.setAttribute('aria-pressed', cb.pinned ? 'true' : 'false');
+  pin.textContent = cb.pinned ? '★' : '☆';
+  pin.addEventListener('click', () => toggleCustomPinned(cb.id));
+
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'cbtn-manage-btn';
+  edit.title = 'Modifier'; edit.setAttribute('aria-label', 'Modifier');
+  edit.textContent = '✎';
+  edit.addEventListener('click', () => openCustomButtonModal(cb.id));
+
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'cbtn-manage-btn cbtn-del';
+  del.title = 'Supprimer'; del.setAttribute('aria-label', 'Supprimer');
+  del.textContent = '✕';
+  del.addEventListener('click', () => deleteCustomButton(cb.id));
+
+  actions.appendChild(pin); actions.appendChild(edit); actions.appendChild(del);
+  row.appendChild(icon); row.appendChild(info); row.appendChild(actions);
+  return row;
+}
+
+function toggleCustomPinned(id) {
+  const list = loadCustomButtons();
+  const cb = list.find(c => c.id === id);
+  if (!cb) return;
+  cb.pinned = !cb.pinned;
+  persistCustomButtons(list);
+  renderCustomButtonsManager();
+  rerenderHero();
+}
+
+function deleteCustomButton(id) {
+  persistCustomButtons(loadCustomButtons().filter(c => c.id !== id));
+  renderCustomButtonsManager();
+  rerenderHero();
+}
+
 // ── Profiles modal ──
 let _profilesActiveTab = 'tp';
 
@@ -942,6 +1341,9 @@ function renderTpProfilePane() {
   });
   list.appendChild(sortable);
   setupTpDragReorder(sortable);
+
+  /* Section « Raccourcis personnalisés » (gestion : épingler / modifier / supprimer) */
+  renderCustomButtonsManager();
 }
 
 function makeTpProfileItem(btn, profile, locked) {
@@ -1148,17 +1550,12 @@ function saveTpProfileFromModal() {
   if (sortable) {
     profile.order = [...sortable.querySelectorAll('.profile-item[draggable]')].map(i => i.dataset.key);
   }
+  /* Les boutons perso sont gérés en direct (création/épinglage/suppression) : on les préserve. */
+  profile.customButtons = loadCustomButtons();
   saveProfile(profile);
   applyAnalysisMode(profile.analysisMode);
   closeProfilesModal();
-  if (currentState.ms && currentState.domain) {
-    const center = document.getElementById('centerCol');
-    const oldHero = center.querySelector('.tenant-hero');
-    if (oldHero) {
-      const confidence = computeConfidence(currentState.ms);
-      center.replaceChild(renderHero(currentState.ms, currentState.domain, confidence), oldHero);
-    }
-  }
+  rerenderHero();
 }
 
 function saveMhaelleProfileFromModal() {
@@ -3881,9 +4278,11 @@ function renderHero(ms, domain, confidence) {
       }
       const profile = loadProfile();
       const enabled = orderedRedirectButtons(profile).filter(b => profile[b.key] !== false);
-      if (enabled.length > 0) {
+      {
         const actions = document.createElement('div'); actions.className = 'hero-actions';
-        enabled.forEach(btn => {
+        const ctx = { tenantId: ms.tenantId, domain, spTenant: currentState.health?.spTenant || null };
+        const customs = loadCustomButtons();
+        const renderStd = btn => {
           let safeHref = safeRedirectHref(btn.href, ms.tenantId, domain);
           let spDisabled = false; // SharePoint : bouton principal grisé si le lien direct n'est pas disponible
           if (btn.key === 'sharepoint') {
@@ -3951,7 +4350,15 @@ function renderHero(ms, domain, confidence) {
             cell.appendChild(chev);
           }
           actions.appendChild(cell);
-        });
+        };
+        /* Ordre : Partner Center (recommandé, verrouillé) → perso épinglés →
+           autres centres → perso non épinglés → tuile « + » d'ajout. */
+        const pcBtn = enabled.find(b => b.key === 'partnerCenter');
+        if (pcBtn) renderStd(pcBtn);
+        customs.filter(c => c.pinned).forEach(c => actions.appendChild(makeCustomButtonCell(c, ctx)));
+        enabled.filter(b => b.key !== 'partnerCenter').forEach(renderStd);
+        customs.filter(c => !c.pinned).forEach(c => actions.appendChild(makeCustomButtonCell(c, ctx)));
+        actions.appendChild(makeAddShortcutCell());
         hero.appendChild(actions);
       }
     }
