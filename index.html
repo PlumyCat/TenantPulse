@@ -160,13 +160,6 @@
       <div class="drop-section-body">
         <div id="profilesToggleList"></div>
       </div>
-      <!-- Section Raccourcis personnalisés -->
-      <button class="drop-section-btn" data-drop-section>
-        <span>Raccourcis personnalisés</span><span class="ds-arrow">▾</span>
-      </button>
-      <div class="drop-section-body">
-        <div id="customButtonsList" class="cbtn-manage-list"></div>
-      </div>
     </div>
     <!-- Pane Mhaelle -->
     <div class="profiles-pane profiles-pane-hidden" id="profilesPaneML">
@@ -467,37 +460,6 @@
       <div class="admin-pane" id="adminPaneKnown"></div>
       <div class="admin-pane" id="adminPaneTags" hidden></div>
       <div class="admin-pane" id="adminPaneUsers" hidden></div>
-    </div>
-  </div>
-</div>
-
-<!-- Modal création / édition d'un raccourci personnalisé (centré, style Administration) -->
-<div class="cbtn-overlay" id="cbtnOverlay" hidden>
-  <div class="cbtn-modal" id="cbtnModalInner">
-    <div class="cbtn-modal-head">
-      <div class="cbtn-modal-title"><img src="assets/user.png" class="icon-adaptive-inv" alt=""> <span id="cbtnModalTitleText">Nouveau raccourci personnalisé</span></div>
-      <button class="cbtn-modal-close" id="btnCbtnClose" aria-label="Fermer">✕</button>
-    </div>
-    <div class="cbtn-body">
-      <div class="cbtn-field">
-        <label class="cbtn-label" for="cbtnNameInput">Nom du bouton</label>
-        <input type="text" id="cbtnNameInput" class="cbtn-input" maxlength="40" placeholder="Ex. Sécurité quotidienne" autocomplete="off">
-      </div>
-      <div class="cbtn-field">
-        <label class="cbtn-label" for="cbtnDescInput">Description <span class="cbtn-optional">(facultatif)</span></label>
-        <input type="text" id="cbtnDescInput" class="cbtn-input" maxlength="60" placeholder="Ex. Quarantaine + Alertes Defender" autocomplete="off">
-      </div>
-      <div class="cbtn-field">
-        <div class="cbtn-label">Raccourcis à inclure</div>
-        <p class="cbtn-hint">Cochez un ou plusieurs raccourcis. Le bouton ouvrira toutes les pages sélectionnées en même temps (lien « combo »).</p>
-        <div id="cbtnShortcutList" class="cbtn-shortcut-list"></div>
-      </div>
-      <div class="cbtn-error" id="cbtnError" hidden></div>
-    </div>
-    <div class="cbtn-modal-footer">
-      <span class="cbtn-count" id="cbtnCount">0 sélectionné</span>
-      <button class="cbtn-cancel-btn" id="btnCbtnCancel" type="button">Annuler</button>
-      <button class="cbtn-save-btn" id="btnCbtnSave" type="button">Enregistrer</button>
     </div>
   </div>
 </div>
