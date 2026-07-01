@@ -3334,6 +3334,40 @@ async function checkMicrosoft(domain) {
   return null;
 }
 
+const GUID_ONLY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Recherche directe par Tenant ID (GUID) : interroge l'endpoint OIDC du tenant lui-même
+ * (même endpoint que checkMicrosoft, mais adressé par ID au lieu du domaine).
+ */
+async function checkMicrosoftById(tenantId) {
+  const direct = await fetchJsonC(`https://login.microsoftonline.com/${tenantId}/.well-known/openid-configuration`, 'ms', 8000);
+  if (!direct || !direct.issuer?.includes(tenantId) || MS_GENERIC_GUIDS.has(tenantId.toLowerCase())) return null;
+  return { tenantId, tenantValid: true, namespaceType: null, federationType: null, cloudInstance: 'microsoftonline.com', issuer: direct.issuer, tokenEndpoint: direct.token_endpoint, authorizationEndpoint: direct.authorization_endpoint, userInfoEndpoint: direct.userinfo_endpoint };
+}
+
+/*
+ * Retrouve le domaine associé à un Tenant ID à partir des données déjà connues de l'outil —
+ * Microsoft n'expose aucune API publique anonyme faisant l'inverse (GUID → domaine) : la liste
+ * des domaines vérifiés d'un tenant n'est accessible que via un token authentifié (Graph API).
+ * On cherche donc : 1) l'historique local de l'utilisateur, 2) l'annuaire partagé (tags approuvés).
+ */
+async function resolveKnownDomainForTenantId(tenantId) {
+  const t = tenantId.toLowerCase();
+  const local = loadHistory().find(i => i.tenantId?.toLowerCase() === t);
+  if (local?.domain) return local.domain;
+  try {
+    const r = await fetch('/api/classification?all=1', { headers: { Accept: 'application/json' } });
+    if (r.ok) {
+      const d = await r.json();
+      const items = Array.isArray(d.items) ? d.items : [];
+      const match = items.find(it => it.tenantId?.toLowerCase() === t && it.domain);
+      if (match) return match.domain;
+    }
+  } catch {}
+  return null;
+}
+
 async function checkGoogle(domain) {
   try {
     const [oidc, mx] = await Promise.all([fetchJson('https://accounts.google.com/.well-known/openid-configuration'), dohResolve(domain, 'MX')]);
@@ -3814,7 +3848,7 @@ function renderHero(ms, domain, confidence) {
     s.appendChild(msLogoEl()); s.appendChild(document.createTextNode(' ' + text));
     d.appendChild(s); return d;
   };
-  const mkDomain = () => { const d = document.createElement('div'); d.className = 'hero-domain'; d.textContent = domain; return d; };
+  const mkDomain = () => { const d = document.createElement('div'); d.className = 'hero-domain'; d.textContent = domain || 'Domaine non résolu'; return d; };
 
   if (!ms) {
     hero.style.background = 'linear-gradient(135deg,#374151 0%,#4b5563 100%)';
@@ -4179,9 +4213,45 @@ function reorderResults(center) {
     .forEach(sel => { const el = center.querySelector(sel); if (el) center.appendChild(el); });
 }
 
-// ── FAST check ──
+// ── FAST check (recherche directe par Tenant ID) ──
+// Pour l'instant le hero n'affiche que le domaine de base résolu : pas de DNS/santé/hébergeur
+// (ces données nécessitent une recherche par domaine, ajoutée séparément ensuite).
+async function checkFastById(tenantId) {
+  const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
+  errBox.style.display = 'none'; center.replaceChildren(); closePanel();
+  exportBtn.classList.remove('visible'); lastReport = null;
+  currentState = { domain: null, ms: null, dns: null, goog: null, health: null, others: null, host: null, fullDone: false };
+  lockButtons(); setFastLoading(true);
+  showSteps(['ms']);
+  stepRetryFns.ms = () => checkFastById(tenantId);
+  try {
+    setStep('step-ms', 'active', 'Validation du Tenant ID…');
+    const ms = await checkMicrosoftById(tenantId);
+    if (!ms) {
+      setStep('step-ms', 'fail', 'Tenant ID — invalide');
+      document.getElementById('progList').style.display = 'none';
+      center.appendChild(renderHero({ tenantId, tenantValid: false }, '', 0));
+      return;
+    }
+    setStep('step-ms', 'active', 'Recherche du domaine connu…');
+    const domain = await resolveKnownDomainForTenantId(tenantId);
+    document.getElementById('progList').style.display = 'none';
+    if (!domain) showError("Tenant ID validé, mais domaine inconnu : ce tenant n'a jamais été recherché par domaine (historique local ou annuaire partagé).");
+    currentState.ms = ms; currentState.domain = domain || null;
+    const confidence = computeConfidence(ms);
+    if (domain) addToHistory(domain, ms.tenantId);
+    center.appendChild(renderHero(ms, domain, confidence));
+    lastReport = { domain: domain || null, analysedAt: new Date().toISOString(), input: tenantId, microsoft: ms, google: null, dns: null, health: null, otherServices: null, host: null, tenantConfidence: confidence, fullDone: false };
+    exportBtn.classList.add('visible');
+  } catch (err) {
+    document.getElementById('progList').style.display = 'none';
+    showError('Erreur : ' + err.message);
+  } finally { unlockButtons(); setFastLoading(false); }
+}
+
 async function checkFast() {
   const raw = emailInput.value.trim(); if (!raw) { showError('Veuillez entrer une adresse e-mail ou un domaine.'); return; }
+  if (GUID_ONLY_RE.test(raw)) { await checkFastById(raw); return; }
   const domain = extractDomain(raw); if (!domain || !domain.includes('.')) { showError('Domaine invalide.'); return; }
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
   errBox.style.display = 'none'; center.replaceChildren(); closePanel();
@@ -4327,6 +4397,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
 // ── Full from scratch ──
 async function checkFull() {
   const raw = emailInput.value.trim(); if (!raw) { showError('Veuillez entrer une adresse e-mail ou un domaine.'); return; }
+  if (GUID_ONLY_RE.test(raw)) { showError("L'analyse complète par Tenant ID n'est pas encore disponible — utilisez le bouton « Tenant ID » ou saisissez le domaine résolu."); return; }
   const domain = extractDomain(raw); if (!domain || !domain.includes('.')) { showError('Domaine invalide.'); return; }
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
   errBox.style.display = 'none'; center.replaceChildren(); closePanel();
