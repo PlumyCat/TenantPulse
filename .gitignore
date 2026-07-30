@@ -26,3 +26,14 @@ _shots_*.js
 _shots.js
 _review_shots/
 *.rej
+
+# Extension navigateur : artefacts de build et clé de signature.
+# Le .pem fixe l'identifiant de l'extension auto-hébergée — il ne doit JAMAIS
+# être versionné, et sa perte impose une réinstallation à tous les utilisateurs.
+extension/dist/
+*.pem
+
+# Configuration locale de l'extension : contient l'origine réelle de l'application
+# et les URL d'hébergement avec leur jeton SAS. Voir local-config.example.json.
+extension/local-config.json
+extension/app-origin.js

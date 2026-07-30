@@ -1,0 +1,12 @@
+{
+  "_commentaire": "Modèle de configuration locale. Copier en local-config.json (ignoré par git) et renseigner les valeurs réelles. Ce fichier ne doit JAMAIS contenir de valeur de production : appOrigin est un domaine réel et updateUrl/crxUrl portent un jeton SAS, tous deux interdits dans un dépôt public.",
+
+  "_appOrigin": "Origine de l'application TenantPulse, sans barre oblique finale. Injectée dans app-origin.js à la construction ; sert au script de contenu (garde-fou d'origine, appel /api/me) et au lien d'analyse approfondie.",
+  "appOrigin": "https://<votre-app>.azurestaticapps.net",
+
+  "_updateUrl": "URL du manifeste de mise à jour, jeton SAS compris. Inscrite dans le manifest de la variante auto-hébergée et interrogée anonymement par le navigateur. Doit rester stable d'une version à l'autre.",
+  "updateUrl": "https://<compte>.blob.core.windows.net/<conteneur>/updates.xml?<jeton-sas>",
+
+  "_crxUrl": "URL du paquet CRX, jeton SAS compris. Référencée par updates.xml.",
+  "crxUrl": "https://<compte>.blob.core.windows.net/<conteneur>/tenantpulse-extension.crx?<jeton-sas>"
+}

@@ -1355,6 +1355,16 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .admin-badge-req{background:#6b7280}
 .admin-badge-alert{background:#dc2626}
 
+/* ── État de l'extension navigateur (barre supérieure) ──
+   « is-active » : pastille discrète, purement informative.
+   « is-cta »    : bouton d'installation, affiché seulement si une fiche est configurée. */
+.topbar-ext{display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:var(--text-xs);font-weight:600;letter-spacing:.01em;white-space:nowrap;text-decoration:none;border-radius:var(--r-pill);line-height:1}
+.topbar-ext.is-active{color:rgba(255,255,255,.75);padding:3px 9px;background:rgba(255,255,255,.1);cursor:default}
+.topbar-ext-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0;box-shadow:0 0 0 2px rgba(74,222,128,.25)}
+.topbar-ext.is-cta{color:#fff;padding:4px 11px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);transition:background .18s,border-color .18s}
+.topbar-ext.is-cta:hover{background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.55)}
+.topbar-ext-icon{object-fit:contain;flex-shrink:0}
+
 /* ── Footer : rôle en bas à gauche ── */
 footer{position:relative}
 .footer-role{position:absolute;left:24px;top:50%;transform:translateY(-50%);font-size:var(--text-sm);font-weight:600;color:var(--soft)}
@@ -1706,6 +1716,7 @@ select.admin-input{cursor:pointer;color-scheme:light}
 /* ── Liens topbar ── */
 .topbar-logout:focus-visible,
 .topbar-bug:focus-visible,
+.topbar-ext.is-cta:focus-visible,
 .topbar-admin:focus-visible{
   outline:2px solid rgba(255,255,255,.8);
   outline-offset:2px;

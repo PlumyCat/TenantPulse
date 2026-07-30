@@ -189,6 +189,16 @@
   <a class="topbar-bug" id="bugReportLink" href="mailto:?subject=Bug%20report%20-%20TenantPulse" title="Signaler un bug par email">Report Bug(s)</a>
   <span class="topbar-tagline">Analyse instantanée &nbsp;|&nbsp; Décisions immédiates</span>
   <div class="topbar-right">
+    <!-- État de l'extension navigateur — alimenté par syncExtensionUI() :
+         pastille « active » si le script de contenu a posé son marqueur,
+         bouton d'installation sinon (et seulement si une fiche est configurée). -->
+    <span class="topbar-ext is-active" id="extStatus" title="" hidden>
+      <span class="topbar-ext-dot"></span><span id="extStatusLabel">Extension active</span>
+    </span>
+    <a class="topbar-ext is-cta" id="extInstall" href="#" target="_blank" rel="noopener noreferrer"
+       title="Installer l'extension navigateur TenantPulse" hidden>
+      <img src="assets/TP.png" class="topbar-ext-icon" alt="" width="12" height="12">Ajouter l'extension
+    </a>
     <button class="topbar-admin" id="btnOpenAdmin" type="button" title="Onglet administration" hidden>
       <span class="topbar-admin-label">Administration</span>
       <span class="admin-badge admin-badge-req" id="adminBadgeReq" title="Demandes en attente" hidden>0</span>

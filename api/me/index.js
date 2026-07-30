@@ -4,8 +4,9 @@ const { rolesClient } = require("../shared/tableClient");
 /**
  * GET /api/me
  * Retourne l'email, le nom, le rôle de l'utilisateur connecté,
- * ainsi que le contactEmail (premier admin) pour le lien de rapport de bug.
- * Réponse : { email, name, role, blocked, contactEmail }
+ * ainsi que le contactEmail (premier admin) pour le lien de rapport de bug
+ * et extensionUrl, la fiche de l'extension navigateur.
+ * Réponse : { email, name, role, blocked, contactEmail, extensionUrl }
  */
 module.exports = async function (context, req) {
   try {
@@ -32,6 +33,15 @@ module.exports = async function (context, req) {
       }
     } catch { /* table inaccessible → pas de contact */ }
 
+    /* Fiches de l'extension navigateur, servies depuis des paramètres d'application et
+       non codées en dur : les fiches sont en visibilité masquée, leurs URL n'ont donc
+       rien à faire dans un dépôt public. Absentes → aucun bouton n'est affiché.
+       Deux magasins, car ils ne se couvrent pas l'un l'autre :
+         EXTENSION_STORE_URL      → Chrome Web Store : Chrome, Vivaldi, Brave, Opera
+         EXTENSION_STORE_URL_EDGE → Edge Add-ons : Edge uniquement */
+    const extensionUrl     = process.env.EXTENSION_STORE_URL || null;
+    const extensionUrlEdge = process.env.EXTENSION_STORE_URL_EDGE || null;
+
     context.res = {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -40,7 +50,9 @@ module.exports = async function (context, req) {
         name:         auth.name,
         role:         auth.role,
         blocked:      auth.blocked === true,
-        contactEmail: contactEmail || null
+        contactEmail:     contactEmail || null,
+        extensionUrl:     extensionUrl,
+        extensionUrlEdge: extensionUrlEdge
       })
     };
 

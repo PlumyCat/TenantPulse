@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>TenantPulse</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+<header class="tp-head">
+  <span class="tp-head-logo" aria-hidden="true"></span>
+  <span class="tp-head-title">TenantPulse</span>
+  <a class="tp-head-link" id="openAppLink" href="#" target="_blank" rel="noopener noreferrer"
+     title="Ouvrir l'application TenantPulse">Ouvrir l'app ↗</a>
+</header>
+
+<div class="tp-banner" id="mirrorBanner" hidden>
+  <span id="mirrorBannerText"></span>
+</div>
+
+<form class="tp-search" id="searchForm">
+  <input class="tp-input" id="queryInput" type="text" autocomplete="off" spellcheck="false"
+         placeholder="domaine, e-mail ou Tenant ID" aria-label="Domaine, e-mail ou Tenant ID">
+  <button class="tp-submit" id="submitBtn" type="submit">Tenant ID</button>
+</form>
+
+<p class="tp-endpoint" id="endpointPreview" aria-live="off"></p>
+
+<div class="tp-status" id="statusBox" hidden></div>
+<div class="tp-error" id="errorBox" role="alert" hidden></div>
+
+<main class="tp-result" id="resultBox" hidden></main>
+
+<section class="tp-recent" id="recentBox" hidden>
+  <h2 class="tp-recent-title">Recherches récentes</h2>
+  <div class="tp-recent-list" id="recentList"></div>
+</section>
+
+<footer class="tp-foot">
+  <a class="tp-foot-link" id="deepLink" href="#" target="_blank" rel="noopener noreferrer">
+    Analyse approfondie (DNS · santé · hébergeur) ↗
+  </a>
+</footer>
+
+<script src="app-origin.js"></script>
+<script src="tp-core.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

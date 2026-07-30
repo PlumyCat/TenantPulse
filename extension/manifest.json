@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "TenantPulse — Tenant ID & raccourcis",
+  "short_name": "TenantPulse",
+  "description": "Recherche le Tenant ID Microsoft 365 d'un domaine et ouvre les centres d'administration, avec le profil de raccourcis configuré dans TenantPulse.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "102",
+  "action": {
+    "default_title": "TenantPulse — Tenant ID & raccourcis",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon-16.png",
+    "32": "assets/icon-32.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://login.microsoftonline.com/*",
+    "https://cloudflare-dns.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.azurestaticapps.net/*"],
+      "js": ["app-origin.js", "sync.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  }
+}

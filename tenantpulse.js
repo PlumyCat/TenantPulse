@@ -1180,6 +1180,95 @@ function saveMhaelleProfileFromModal() {
   closeProfilesModal();
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+//  EXTENSION NAVIGATEUR
+//  Présence détectée via l'attribut « data-tp-extension » que le script de
+//  contenu de l'extension pose sur <html> (mondes JS isolés, DOM partagé).
+//  L'URL de la fiche vient de /api/me : la fiche est en visibilité masquée,
+//  son adresse n'a donc rien à faire dans un dépôt public.
+// ══════════════════════════════════════════════════════════════════════════
+const TP_EXTENSION = { present: false, version: null, url: null, urlEdge: null };
+
+/* Edge ne peut pas installer depuis le Chrome Web Store sans que l'utilisateur
+   autorise « les extensions d'autres magasins » ; les autres navigateurs Chromium
+   ne peuvent pas installer depuis Edge Add-ons. On oriente donc chacun vers sa
+   propre fiche quand les deux sont configurées. */
+const isEdgeBrowser = () => {
+  const brands = navigator.userAgentData?.brands;
+  if (Array.isArray(brands)) return brands.some(b => /Microsoft Edge/i.test(b.brand));
+  return / Edg\//.test(navigator.userAgent);
+};
+
+/* Hôtes de magasin autorisés pour le bouton d'installation. Même défense en
+   profondeur que ALLOWED_REDIRECT_HOSTS : un paramètre d'application mal renseigné
+   ne doit jamais produire un lien vers une destination arbitraire. */
+const ALLOWED_STORE_HOSTS = new Set([
+  'microsoftedge.microsoft.com',
+  'chromewebstore.google.com',
+  'chrome.google.com'
+]);
+function safeStoreUrl(raw) {
+  let u; try { u = new URL(raw); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  return ALLOWED_STORE_HOSTS.has(u.hostname) ? u.href : null;
+}
+
+/* Reflète l'état de l'extension dans la barre supérieure : pastille « active »,
+   ou bouton d'installation si une fiche est configurée. Rien si ni l'un ni l'autre. */
+function syncExtensionUI() {
+  const badge = document.getElementById('extStatus');
+  const cta   = document.getElementById('extInstall');
+  if (!badge || !cta) return;
+
+  if (TP_EXTENSION.present) {
+    document.getElementById('extStatusLabel').textContent = 'Extension active';
+    badge.title = 'Extension navigateur TenantPulse active'
+      + (TP_EXTENSION.version ? ' (v' + TP_EXTENSION.version + ')' : '');
+    badge.hidden = false; cta.hidden = true;
+    return;
+  }
+  badge.hidden = true;
+  // Fiche du magasin du navigateur courant, avec repli sur l'autre si une seule existe.
+  const prefere = isEdgeBrowser()
+    ? [TP_EXTENSION.urlEdge, TP_EXTENSION.url]
+    : [TP_EXTENSION.url, TP_EXTENSION.urlEdge];
+  const href = prefere.map(u => (u ? safeStoreUrl(u) : null)).find(Boolean) || null;
+  if (href) { cta.href = href; cta.hidden = false; } else { cta.hidden = true; }
+}
+
+/* Lit le marqueur et surveille son apparition : le script de contenu s'exécute à
+   « document_idle », donc parfois après le chargement de cette page. */
+function watchExtensionMarker() {
+  const read = () => {
+    const v = document.documentElement.getAttribute('data-tp-extension');
+    const present = typeof v === 'string' && v.length > 0;
+    if (present === TP_EXTENSION.present && v === TP_EXTENSION.version) return;
+    TP_EXTENSION.present = present;
+    TP_EXTENSION.version = present ? v : null;
+    syncExtensionUI();
+  };
+  read();
+  new MutationObserver(read)
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-tp-extension'] });
+}
+
+/* Pré-remplissage depuis le fragment d'URL : « #q=<domaine|e-mail|GUID> » remplit le
+   champ et lance l'analyse rapide. Utilisé par l'extension de navigateur pour passer
+   la main à l'app (analyse approfondie). Le fragment — et non un paramètre de requête —
+   pour que la valeur ne parte jamais dans les journaux serveur. */
+function applyHashQuery() {
+  const m = (location.hash || '').match(/^#q=(.+)$/);
+  if (!m) return;
+  let value; try { value = decodeURIComponent(m[1]); } catch { return; }
+  value = value.trim();
+  if (!value || value.length > 253) return; // longueur max d'un nom de domaine
+  emailInput.value = value;
+  emailInput.dispatchEvent(new Event('input')); // rafraîchit l'aperçu d'endpoint
+  // Le fragment est retiré pour qu'un rechargement ne relance pas l'analyse.
+  try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+  checkFast();
+}
+
 window.addEventListener('load', () => {
   bindEvents();
   applyAnalysisMode(loadProfile().analysisMode);
@@ -1188,6 +1277,8 @@ window.addEventListener('load', () => {
   syncCacheIndicator();
   initAuth();
   bindAdminEvents();
+  watchExtensionMarker();
+  applyHashQuery();
 
   // ── Synchronisation thème clair/sombre → iframe Mhaelle ──
   // Utilise postMessage (fonctionne même avec le protocole file://)
@@ -1245,6 +1336,10 @@ async function initAuth() {
     if (link && data.contactEmail) {
       link.href = 'mailto:' + data.contactEmail + '?subject=Bug%20report%20-%20TenantPulse';
     }
+    // Fiches de l'extension navigateur (paramètres d'application, hors dépôt)
+    TP_EXTENSION.url     = data.extensionUrl     || null;
+    TP_EXTENSION.urlEdge = data.extensionUrlEdge || null;
+    syncExtensionUI();
   } catch {
     // Pas d'API disponible (dev local) — on reste en utilisateur anonyme
   }
