@@ -23,7 +23,6 @@ const tpPanneau = (function () {
      absurde. Les frames de session relaient leur état à la frame principale. */
   if (window.top !== window) return { rendre() {}, configurer() {} };
 
-  const UI_KEY = 'tp_d365_ui_v1';
 
   /* Titres possibles de la section d'ancrage. La langue de l'interface suit celle de
      l'utilisateur, et le libellé peut changer d'une mise à jour à l'autre — d'où une
@@ -32,7 +31,9 @@ const tpPanneau = (function () {
   const ANCRE_TENTATIVES = 12;
   const ANCRE_DELAI_MS = 1500;
 
-  let hote = null, ombre = null, cadre = null, corps = null, chevron = null;
+  let hote = null, ombre = null, cadre = null, corps = null, chevron = null, piedBouton = null;
+  /* Fiche actuellement affichée : changer de fiche remet le panneau replié. */
+  let cleAffichee = null;
   let ancre = null, decoupeEl = null, observateur = null, rafId = null;
   let replie = false, modeTiroir = false;
   let etatCourant = null;
@@ -252,21 +253,33 @@ const tpPanneau = (function () {
     chevron.type = 'button';
     chevron.setAttribute('aria-expanded', 'true');
     chevron.setAttribute('aria-label', 'Replier le panneau');
-    chevron.addEventListener('click', () => appliquerRepli(!replie, true));
+    chevron.addEventListener('click', () => appliquerRepli(!replie));
     tete.appendChild(chevron);
 
     corps = creerEl('div', 'tp-corps');
 
+    /* Second point de repli, en pied de panneau : une fois déplié, le panneau occupe
+       toute la hauteur de la section et son en-tête peut être hors de vue — refermer
+       depuis le bas évite d'avoir à remonter. */
+    const pied = creerEl('div', 'tp-pied');
+    piedBouton = creerEl('button', 'tp-pied-bouton', 'Replier ▴');
+    piedBouton.type = 'button';
+    piedBouton.addEventListener('click', () => appliquerRepli(true));
+    pied.appendChild(piedBouton);
+
     cadre.appendChild(tete);
     cadre.appendChild(corps);
+    cadre.appendChild(pied);
     ombre.appendChild(cadre);
 
-    /* Repli restauré d'une session à l'autre : replier le panneau est un geste que
-       l'utilisateur ne veut pas refaire à chaque ouverture de fiche. */
+    /* Le panneau naît replié et le redevient à chaque nouvelle fiche : il se superpose
+       à « Santé du client », qu'il masquerait en permanence sinon. L'ouvrir est un
+       geste volontaire, valable pour la fiche en cours — d'où l'absence de mémorisation
+       d'un état déplié d'une fiche à l'autre. */
+    appliquerRepli(true);
+
     try {
-      chrome.storage.local.get([UI_KEY, 'tp_mirror_v1'], (res) => {
-        const ui = res && res[UI_KEY];
-        if (ui && ui.replie) appliquerRepli(true, false);
+      chrome.storage.local.get('tp_mirror_v1', (res) => {
         const miroir = res && res.tp_mirror_v1;
         if (miroir && miroir.profile) { profilMiroir = miroir.profile; dessiner(); }
       });
@@ -290,7 +303,7 @@ const tpPanneau = (function () {
     attacher();
   }
 
-  function appliquerRepli(valeur, memoriser) {
+  function appliquerRepli(valeur) {
     replie = !!valeur;
     if (cadre) cadre.classList.toggle('est-replie', replie);
     if (chevron) {
@@ -299,7 +312,6 @@ const tpPanneau = (function () {
       chevron.setAttribute('aria-label', replie ? 'Déplier le panneau' : 'Replier le panneau');
     }
     positionner();
-    if (memoriser) { try { chrome.storage.local.set({ [UI_KEY]: { replie } }); } catch {} }
   }
 
   // ── Contenu ──────────────────────────────────────────────────────────────────
@@ -338,6 +350,13 @@ const tpPanneau = (function () {
     bas.appendChild(creerEl('span', 'confidence-badge ' + classeConfiance(etat.confiance || 0),
       (etat.confiance || 0) + ' % de confiance'));
     hero.appendChild(bas);
+
+    /* Badges de classification, en lecture seule — mêmes données et même rendu que
+       dans la popup et dans l'application (tp-badges.js). */
+    const zoneTags = creerEl('div', 'hero-tags-badges');
+    zoneTags.hidden = true;
+    hero.appendChild(zoneTags);
+    chargerBadges(etat.tenantId, zoneTags, () => { zoneTags.hidden = false; });
 
     const tuiles = bloqueTuiles(etat, hero);
     if (tuiles) hero.appendChild(tuiles);
@@ -566,6 +585,7 @@ const tpPanneau = (function () {
   function effacer(emetteur) {
     if (etatCourant && etatCourant.emetteur && emetteur && etatCourant.emetteur !== emetteur) return;
     etatCourant = null;
+    cleAffichee = null;   // rouvrir la même fiche la retrouvera repliée
     if (hote) hote.style.display = 'none';
   }
 
@@ -579,8 +599,15 @@ const tpPanneau = (function () {
 
   function rendre(etat) {
     if (!etat || STATUTS_MUETS.has(etat.statut)) { effacer(etat && etat.emetteur); return; }
+
+    /* Changement de fiche → repli. Le panneau recouvre « Santé du client » : le laisser
+       ouvert d'un ticket à l'autre masquerait cette section en permanence. L'ouvrir
+       reste un geste volontaire, valable pour la fiche en cours. */
+    const nouvelleFiche = !!etat.cle && etat.cle !== cleAffichee;
     etatCourant = etat;
     if (!hote) creer();
+    if (nouvelleFiche) { cleAffichee = etat.cle; appliquerRepli(true); }
+
     dessiner();
     positionner();
   }

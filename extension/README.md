@@ -23,6 +23,7 @@ l'application TenantPulse.
 | `tp-core.js` | Config et helpers **copiés** de `../tenantpulse.js` |
 | `tp-net.js` | Résolution du Tenant ID — les seuls appels réseau, portés par le service worker |
 | `tp-client.js` | Plomberie commune popup / scripts de contenu : verrou d'appartenance, pont vers le worker |
+| `tp-badges.js` | Badges de classification, partagés par la popup et le panneau (lecture seule) |
 | `background.js` | Service worker : routeur des résolutions, enregistrement des scripts Dynamics, icône |
 | `sync.js` | Script de contenu : miroir du profil + attestation d'appartenance |
 | `d365/ctx-main.js` | Monde `MAIN` : lit l'enregistrement affiché via les API client de Dynamics |
@@ -358,6 +359,12 @@ défilement (en capture, car le défilement utile est celui des conteneurs inter
 remonte pas jusqu'à `window`), le tout throttlé en `requestAnimationFrame`. Section masquée — une
 session en arrière-plan — et le panneau s'efface avec elle.
 
+**Replié par défaut.** Le panneau recouvre « Santé du client » : le laisser ouvert d'un ticket à
+l'autre masquerait cette section en permanence. Il s'ouvre donc sur un geste volontaire, valable
+pour la fiche en cours, et redevient replié dès qu'une autre fiche s'affiche. Deux points de
+repli : le chevron de l'en-tête, et un bouton en pied de panneau — une fois déplié, le panneau
+occupe toute la hauteur de la section et son en-tête peut être hors de vue.
+
 **Deux registres visuels, volontairement.** Le *conteneur* imite une carte de formulaire Dynamics —
 fond uni, bordure d'un pixel, coins à 4 px, **aucune ombre portée** : il doit passer pour une
 section du formulaire, pas pour une fenêtre posée dessus. Le *résultat*, lui, reprend le hero de
@@ -404,6 +411,35 @@ Le panneau ne peut vivre que dans la frame principale, alors que l'enregistremen
 la frame qui héberge `Xrm` — celle d'une session Omnicanal, le cas échéant. Deux scripts de contenu
 ne pouvant pas se parler directement, le service worker relaie : l'état vers la frame 0, la saisie
 manuelle vers toutes les frames, dont seule celle qui détient l'enregistrement concerné réagit.
+
+## Badges de classification
+
+Les tags de l'application s'affichent dans la popup **et** dans le panneau Dynamics, avec le même
+rendu que dans le hero de l'app (`tp-badges.js` reprend les classes `.hero-badge`). **En lecture
+seule** : proposer, valider ou retirer un tag reste dans l'application — l'extension n'écrit rien.
+
+L'obstacle est le même que pour l'attestation : une requête partie de l'extension est inter-site,
+donc dépourvue du cookie de session SWA. `sync.js`, lui, s'exécute **sur l'origine de
+l'application**. C'est donc lui qui interroge l'API, et deux sources se complètent :
+
+| Source | Contenu | Disponibilité |
+|---|---|---|
+| Annuaire recopié (`GET /api/classification?all=1` + `/api/tags`) | Tags **validés** de tous les tenants, libellés et couleurs | Toujours — mais daté de la dernière ouverture de l'app (rafraîchi à l'ouverture puis toutes les 10 min) |
+| Détail d'un tenant (`GET /api/classification?tenantId=`) | Ajoute les demandes **en attente** | Seulement si l'application est ouverte dans un onglet |
+
+L'affichage part de l'annuaire — les badges validés apparaissent immédiatement, sans attendre le
+relais — puis se complète si le détail arrive. Sans application ouverte, une mention discrète
+donne l'âge des données (« validés · il y a 3 h ») plutôt que de laisser croire au temps réel.
+
+Le relais passe par le service worker : `sync.js` se signale (`tp-app-tab`) au chargement et à
+chaque retour au premier plan, le worker retient l'identifiant de l'onglet et lui transmet la
+demande. Aucune permission `tabs` n'est nécessaire — l'identifiant vient de l'expéditeur du
+message.
+
+L'annuaire vit dans **sa propre clé** de stockage (`tp_tags_v1`), hors du miroir : celui-ci est
+comparé par sérialisation toutes les deux secondes, et y verser un annuaire entier reviendrait à
+le sérialiser en boucle pour rien. `approvedBy` est une adresse professionnelle : elle est écartée
+avant écriture et n'entre jamais dans le stockage de l'extension.
 
 ### Icône adaptée au thème
 

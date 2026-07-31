@@ -68,6 +68,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
+  /* Onglets de l'application, signalés par sync.js. Ils sont la seule voie vers
+     /api/classification : le cookie de session n'accompagne que les requêtes parties
+     de l'origine de l'app. Mémoriser l'identifiant de l'expéditeur évite d'avoir à
+     demander la permission « tabs » pour retrouver ces onglets nous-mêmes. */
+  if (msg.type === 'tp-app-tab') {
+    const id = sender && sender.tab && sender.tab.id;
+    if (typeof id === 'number') ongletsApp.add(id);
+    return false;
+  }
+
+  /* Détail des tags d'un tenant (validés ET en attente) : relayé au premier onglet
+     de l'application qui répond. Sans onglet ouvert, on rend null et l'appelant se
+     rabat sur l'annuaire recopié, qui ne porte que les tags validés. */
+  if (msg.type === 'tp-tags-detail') {
+    detailTagsViaApp(msg.tenantId).then(sendResponse, () => sendResponse(null));
+    return true;
+  }
+
   if (msg.type === 'tp-d365-sync') {
     syncD365Scripts().then(etat => sendResponse({ ok: true, etat }), () => sendResponse({ ok: false }));
     return true;
@@ -86,6 +104,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
    (Xrm, Microsoft.Apm), invisibles depuis un monde isolé. Il n'a aucune permission
    d'extension et ne peut rien faire d'autre que poster un message à ctx.js, qui lui
    reste isolé et porte tous les garde-fous. */
+/* Onglets où l'application est ouverte. Un service worker peut être arrêté à tout
+   moment : cet ensemble est une simple optimisation, reconstruite dès que sync.js se
+   signale à nouveau (au chargement et à chaque retour au premier plan). */
+const ongletsApp = new Set();
+
+chrome.tabs.onRemoved.addListener((id) => ongletsApp.delete(id));
+
+function interrogerOnglet(tabId, tenantId) {
+  return new Promise(resolve => {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: 'tp-tags-detail', tenantId }, (rep) => {
+        if (chrome.runtime.lastError) { ongletsApp.delete(tabId); resolve(null); return; }
+        resolve(rep || null);
+      });
+    } catch { resolve(null); }
+  });
+}
+
+async function detailTagsViaApp(tenantId) {
+  for (const tabId of Array.from(ongletsApp)) {
+    const rep = await interrogerOnglet(tabId, tenantId);
+    if (rep) return rep;
+  }
+  return null;
+}
+
 const D365_ORIGIN_PATTERN = 'https://*.dynamics.com/*';
 
 const D365_SCRIPTS = [
@@ -100,7 +144,7 @@ const D365_SCRIPTS = [
   {
     id: 'tp-d365',
     matches: [D365_ORIGIN_PATTERN],
-    js: ['d365-origin.js', 'tp-core.js', 'tp-client.js', 'd365/panel.js', 'd365/ctx.js'],
+    js: ['d365-origin.js', 'tp-core.js', 'tp-client.js', 'tp-badges.js', 'd365/panel.js', 'd365/ctx.js'],
     world: 'ISOLATED',
     allFrames: true,
     runAt: 'document_idle',

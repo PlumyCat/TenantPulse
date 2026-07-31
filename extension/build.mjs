@@ -37,7 +37,7 @@ const D365_ORIGIN_FILE = join(EXT_DIR, 'd365-origin.js');
    le script de build, la documentation interne ou les artefacts précédents. */
 const RUNTIME_FILES = [
   'manifest.json', 'popup.html', 'popup.css', 'popup.js',
-  'tp-core.js', 'tp-net.js', 'tp-client.js',
+  'tp-core.js', 'tp-net.js', 'tp-client.js', 'tp-badges.js',
   'sync.js', 'background.js', 'app-origin.js', 'd365-origin.js',
 ];
 const RUNTIME_DIRS  = ['assets', 'd365'];

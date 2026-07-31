@@ -286,6 +286,16 @@ function renderResult(ms, domain, input) {
   dom.textContent = domain || 'Domaine inconnu (jamais recherché par domaine)';
   hero.appendChild(dom);
 
+  /* Badges de classification, en lecture seule. Alimentés par l'annuaire recopié
+     (tags validés, disponibles hors ligne) puis complétés par le détail du tenant
+     si l'application est ouverte quelque part (demandes en attente). Le conteneur
+     reste caché tant que rien n'a été trouvé. */
+  const zoneTags = document.createElement('div');
+  zoneTags.className = 'hero-tags-badges';
+  zoneTags.hidden = true;
+  hero.appendChild(zoneTags);
+  chargerBadges(ms.tenantId, zoneTags, () => { zoneTags.hidden = false; });
+
   if (!domain) {
     const warn = document.createElement('div'); warn.className = 'hero-warn';
     const ico = document.createElement('img'); ico.src = 'assets/warning.png'; ico.alt = ''; ico.className = 'hero-warn-ico';
