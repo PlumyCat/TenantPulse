@@ -24,6 +24,15 @@
 
   const CHANNEL = 'tp-d365-ctx';
   const API = '/api/data/v9.2/';
+  const DIAG_KEY = 'tp_d365_diag_v1';
+
+  /* Signe de vie lu par la popup. Diagnostiquer par la console est peu fiable ici :
+     Omnicanal en produit des centaines de lignes, la page vit dans des iframes, et
+     DevTools ouvert après le chargement rate le démarrage. On ne consigne qu'un
+     horodatage et un statut — jamais un domaine, un identifiant ni un nom. */
+  function noter(statut) {
+    try { chrome.storage.local.set({ [DIAG_KEY]: { at: new Date().toISOString(), statut } }); } catch {}
+  }
 
   /* Résolutions déjà faites, par enregistrement : rouvrir un onglet de session ne
      redéclenche ni lecture Dataverse ni appel réseau. */
@@ -119,16 +128,18 @@
     if (cache.has(key)) { log('contexte (déjà résolu)', cache.get(key)); return; }
 
     const reader = READERS[record.entityName];
+    noter('enregistrement détecté : ' + record.entityName);
     if (!reader) return;                              // entité hors périmètre : silence
     if (!GUID_ONLY_RE.test(record.entityId)) return;  // tp-core.js
 
     // Verrou d'appartenance : rien n'est émis sans attestation valide.
     const auth = authState(await readAuthFromMirror());   // tp-client.js
-    if (!auth.ok) { log('verrouillé —', MESSAGES_AUTH[auth.raison]); return; }
+    if (!auth.ok) { noter('verrouillé (' + auth.raison + ')'); log('verrouillé —', MESSAGES_AUTH[auth.raison]); return; }
 
     const client = await reader(record.entityId);
-    if (!client) { log('lecture Dataverse sans résultat pour', key); return; }
+    if (!client) { noter('lecture Dataverse refusée ou vide'); log('lecture Dataverse sans résultat pour', key); return; }
     if (!client.domain) {
+      noter('aucun domaine exploitable sur la fiche');
       const res = { entite: key, domaine: null, motif: 'aucun site web ni adresse exploitable' };
       cache.set(key, res);
       log('contexte non résolu', res);
@@ -144,6 +155,7 @@
       confiance: ms ? computeConfidence(ms) : 0,         // tp-core.js
     };
     cache.set(key, res);
+    noter(ms ? 'Tenant ID résolu' : 'domaine trouvé, aucun tenant');
     log('contexte résolu', res);
   }
 
@@ -158,5 +170,17 @@
     resolve(data.record);
   });
 
-  log('contexte Dynamics actif dans cette frame');
+  /* Marqueur DOM, même principe que sync.js sur l'application : il rend l'injection
+     vérifiable d'un coup d'œil dans l'inspecteur, sans dépendre de la console. */
+  try { document.documentElement.setAttribute('data-tp-d365', '1'); } catch {}
+
+  /* Journal et signe de vie réservés à la frame principale. Une page Dynamics en
+     compte des dizaines : sans cette réserve, le démarrage écrit autant de lignes
+     identiques, et la dernière frame injectée écrase le statut d'une résolution
+     déjà réussie ailleurs. Les frames de session, elles, ne parlent que lorsqu'elles
+     ont quelque chose à dire — un enregistrement détecté. */
+  if (window.top === window) {
+    noter('script injecté, en attente du contexte');
+    log('contexte Dynamics actif (frame principale)');
+  }
 })();

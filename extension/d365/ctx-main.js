@@ -21,18 +21,31 @@
    ────────────────────────────────────────────────────────────────────────────── */
 (function () {
   const CHANNEL = 'tp-d365-ctx';
-  const POLL_MS = 1000;
+  const POLL_MS = 1000;      // frame hébergeant Xrm : rythme de détection
+  const ATTENTE_MS = 3000;   // frame sans Xrm : on repasse rarement…
+  const ATTENTE_MAX = 10;    // …et pas plus de 30 s avant d'abandonner
 
   let last = null;
   let timer = null;
+  let mode = null;      // 'actif' (Xrm présent) | 'attente' | 'abandon'
+  let attentes = 0;
+
+  /* Une page Dynamics compte des dizaines d'iframes (contrôles, ressources web,
+     canaux Omnicanal) et presque aucune n'héberge Xrm. Sans ce test, chacune d'elles
+     lancerait son propre sondage à la seconde — le coût que ce module s'interdit. */
+  function hasXrm() {
+    try {
+      const xrm = window.Xrm;
+      return !!(xrm && xrm.Utility && typeof xrm.Utility.getPageContext === 'function');
+    } catch { return false; }
+  }
 
   /* Enregistrement affiché dans CETTE frame, via l'API client documentée.
      Hors d'une fiche (tableau de bord, vue, liste), il n'y a rien à décrire. */
   function readRecord() {
     try {
-      const xrm = window.Xrm;
-      if (!xrm || !xrm.Utility || typeof xrm.Utility.getPageContext !== 'function') return null;
-      const input = (xrm.Utility.getPageContext() || {}).input;
+      if (!hasXrm()) return null;
+      const input = (window.Xrm.Utility.getPageContext() || {}).input;
       if (!input || input.pageType !== 'entityrecord') return null;
       if (!input.entityName || !input.entityId) return null;
       return {
@@ -71,21 +84,46 @@
     } catch {}
   }
 
-  /* Sondage conservé même quand les événements ci-dessus sont disponibles : ouvrir un
-     autre enregistrement DANS un onglet de session déjà ouvert ne déclenche ni bascule
-     de session ni navigation d'onglet. Le coût est une lecture d'objet en mémoire —
-     aucun accès au DOM, donc rien qui puisse peser sur le rendu d'Omnicanal — et il
-     s'arrête dès que l'onglet du navigateur passe en arrière-plan. */
+  function armer(delai) {
+    if (timer !== null) clearInterval(timer);
+    timer = setInterval(battement, delai);
+  }
+  function desarmer() {
+    if (timer !== null) { clearInterval(timer); timer = null; }
+  }
+
+  /* Deux régimes.
+
+     Frame hébergeant Xrm : sondage à la seconde. Il est conservé même quand les
+     événements Apm sont disponibles, parce qu'ouvrir un autre enregistrement DANS un
+     onglet de session déjà ouvert ne déclenche ni bascule de session ni navigation
+     d'onglet. Le coût est une lecture d'objet en mémoire, sans aucun accès au DOM.
+
+     Frame sans Xrm : on repasse toutes les trois secondes, le temps que Dynamics
+     finisse de charger ses contrôles, puis on abandonne définitivement au bout de
+     trente secondes. Une frame qui n'a pas d'Xrm à ce stade n'en aura jamais. */
+  function battement() {
+    if (hasXrm()) {
+      if (mode !== 'actif') { mode = 'actif'; subscribe(); armer(POLL_MS); }
+      publish();
+      return;
+    }
+    if (mode === 'actif') { mode = 'attente'; attentes = 0; armer(ATTENTE_MS); return; }
+    if (++attentes > ATTENTE_MAX) { mode = 'abandon'; desarmer(); }
+  }
+
+  /* Sondage suspendu dès que l'onglet du navigateur passe en arrière-plan. */
   function syncPolling() {
+    if (mode === 'abandon') return;
     if (document.visibilityState === 'visible') {
-      if (timer === null) timer = setInterval(publish, POLL_MS);
-    } else if (timer !== null) {
-      clearInterval(timer); timer = null;
+      if (timer === null) armer(mode === 'actif' ? POLL_MS : ATTENTE_MS);
+    } else {
+      desarmer();
     }
   }
 
-  subscribe();
-  publish();
+  mode = 'attente';
+  battement();
   syncPolling();
   document.addEventListener('visibilitychange', syncPolling);
 })();

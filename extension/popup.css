@@ -278,6 +278,7 @@ body{
 .tp-optin-text{display:flex;flex-direction:column;gap:1px;min-width:0}
 .tp-optin-title{font-size:var(--text-xs);font-weight:600;color:var(--text)}
 .tp-optin-sub{font-size:10px;color:var(--soft);line-height:1.35}
+.tp-optin-diag{font-size:10px;color:var(--muted);line-height:1.35;font-style:italic}
 
 /* ───── Pied ───── */
 .tp-foot{margin-top:12px;padding-top:9px;border-top:1px solid var(--border)}

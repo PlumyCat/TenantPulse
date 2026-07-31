@@ -48,7 +48,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === 'tp-d365-sync') {
-    syncD365Scripts().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
+    syncD365Scripts().then(etat => sendResponse({ ok: true, etat }), () => sendResponse({ ok: false }));
     return true;
   }
 
@@ -89,24 +89,64 @@ const D365_SCRIPTS = [
 const D365_SCRIPT_IDS = D365_SCRIPTS.map(s => s.id);
 
 /* Aligne l'état d'enregistrement sur l'état de la permission. Idempotent : appelable
-   au démarrage, à l'installation, et à chaque octroi ou retrait. */
-async function syncD365Scripts() {
-  let granted = false;
-  try { granted = await chrome.permissions.contains({ origins: [D365_ORIGIN_PATTERN] }); } catch { return; }
+   au démarrage, à l'installation, et à chaque octroi ou retrait.
 
-  let existing = [];
-  try { existing = await chrome.scripting.getRegisteredContentScripts({ ids: D365_SCRIPT_IDS }); } catch {}
+   Rend un état plutôt que rien : sans lui, un échec d'enregistrement est parfaitement
+   silencieux — la popup annonce « actif » et il ne se passe rien dans Dynamics, sans
+   le moindre indice. La popup affiche donc ce que ce diagnostic rapporte. */
+async function syncD365Scripts() {
+  const etat = { granted: false, registered: 0, erreur: null };
 
   try {
-    if (!granted) {
-      if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing.map(s => s.id) });
-      return;
+    etat.granted = await chrome.permissions.contains({ origins: [D365_ORIGIN_PATTERN] });
+  } catch (e) {
+    etat.erreur = 'permissions.contains — ' + ((e && e.message) || 'erreur inconnue');
+    console.warn('[TenantPulse] panneau Dynamics :', etat.erreur);
+    return etat;
+  }
+
+  /* Lecture SANS filtre, puis tri côté script : passer « ids » à
+     getRegisteredContentScripts lève une erreur dès qu'un des identifiants demandés
+     n'existe pas encore. Le filtre échouait donc précisément dans le cas où il servait
+     à quelque chose, et l'enregistrement suivant butait sur un « Duplicate script ID ». */
+  async function dejaEnregistres() {
+    try {
+      const tous = await chrome.scripting.getRegisteredContentScripts();
+      return (tous || []).filter(s => D365_SCRIPT_IDS.includes(s.id)).map(s => s.id);
+    } catch { return []; }
+  }
+
+  /* Désenregistrement un par un : un identifiant absent fait échouer l'appel groupé,
+     et emporterait avec lui le retrait de ceux qui existent bel et bien. */
+  async function retirer(ids) {
+    for (const id of ids) {
+      try { await chrome.scripting.unregisterContentScripts({ ids: [id] }); } catch {}
     }
+  }
+
+  try {
     // Ré-enregistrement complet : une définition modifiée par une mise à jour de
     // l'extension doit remplacer celle qui persiste depuis la session précédente.
-    if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing.map(s => s.id) });
-    await chrome.scripting.registerContentScripts(D365_SCRIPTS);
-  } catch { /* enregistrement impossible : le panneau reste simplement absent */ }
+    await retirer(await dejaEnregistres());
+    if (etat.granted) {
+      try {
+        await chrome.scripting.registerContentScripts(D365_SCRIPTS);
+      } catch (e) {
+        // Filet : identifiant encore pris malgré le retrait → on force et on retente.
+        if (!/duplicate script id/i.test((e && e.message) || '')) throw e;
+        await retirer(D365_SCRIPT_IDS);
+        await chrome.scripting.registerContentScripts(D365_SCRIPTS);
+      }
+      etat.registered = D365_SCRIPTS.length;
+    }
+  } catch (e) {
+    etat.erreur = (e && e.message) || "échec d'enregistrement";
+  }
+
+  if (etat.erreur) console.warn('[TenantPulse] panneau Dynamics :', etat.erreur);
+  else console.info('[TenantPulse] panneau Dynamics :',
+    etat.granted ? `${etat.registered} script(s) enregistré(s)` : 'permission non accordée');
+  return etat;
 }
 
 chrome.runtime.onInstalled.addListener(syncD365Scripts);

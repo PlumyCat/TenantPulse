@@ -419,6 +419,55 @@ function updateEndpointPreview() {
    silencieux au premier lancement. */
 const D365_SUB_DEFAUT = 'Affiche le Tenant ID du client sur la fiche incident.';
 
+/* Demande au service worker d'aligner les scripts sur la permission, et rend son
+   diagnostic : sans ça, un échec d'enregistrement serait invisible ici. */
+function askD365Sync() {
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'tp-d365-sync' }, res => {
+        if (chrome.runtime.lastError || !res || !res.ok) { resolve(null); return; }
+        resolve(res.etat || null);
+      });
+    } catch { resolve(null); }
+  });
+}
+
+/* Dernier signe de vie du script de contenu Dynamics (clé écrite par d365/ctx.js).
+   Sans ce retour, une injection qui n'a pas lieu est indiscernable d'une fiche sans
+   domaine exploitable — et la console d'Omnicanal est inexploitable à l'œil nu. */
+const D365_DIAG_KEY = 'tp_d365_diag_v1';
+
+function tempsRelatif(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return `il y a ${s} s`;
+  if (s < 3600) return `il y a ${Math.round(s / 60)} min`;
+  if (s < 86400) return `il y a ${Math.round(s / 3600)} h`;
+  return `il y a ${Math.round(s / 86400)} j`;
+}
+
+async function renderD365Diag(actif) {
+  const box = el('d365Diag');
+  if (!actif) { box.hidden = true; return; }
+  const stored = await storageGet(D365_DIAG_KEY);
+  const diag = stored[D365_DIAG_KEY];
+  if (!diag || !diag.at) {
+    box.textContent = "Jamais vu sur Dynamics — rechargez l'onglet après activation.";
+  } else {
+    const quand = tempsRelatif(diag.at);
+    box.textContent = `Dernier signe de vie ${quand || ''} : ${diag.statut}`;
+  }
+  box.hidden = false;
+}
+
+function d365Message(etat, actif) {
+  if (etat && etat.erreur) return "Échec d'activation : " + etat.erreur;
+  if (!actif) return D365_SUB_DEFAUT;
+  if (etat && etat.registered) return `Actif (${etat.registered} scripts) — rechargez l'onglet Dynamics.`;
+  return "Actif — rechargez l'onglet Dynamics.";
+}
+
 async function initD365Toggle() {
   const box = el('d365Optin');
   const cb = el('d365Toggle');
@@ -433,8 +482,11 @@ async function initD365Toggle() {
   }
 
   try { cb.checked = await chrome.permissions.contains({ origins: D365_ORIGINS }); } catch {}
-  if (cb.checked) sub.textContent = 'Actif sur votre instance Dynamics.';
   box.hidden = false;
+  /* Réalignement à chaque ouverture : après une mise à jour de l'extension, les scripts
+     enregistrés dans la session précédente peuvent être obsolètes ou absents. */
+  if (cb.checked) sub.textContent = d365Message(await askD365Sync(), true);
+  renderD365Diag(cb.checked);
 
   cb.addEventListener('change', async () => {
     const voulu = cb.checked;
@@ -448,12 +500,10 @@ async function initD365Toggle() {
     } catch { cb.checked = !voulu; }
 
     /* permissions.onAdded / onRemoved réveille déjà le service worker : ce message ne
-       sert qu'à ne pas dépendre du seul ordonnancement des événements. */
-    try { chrome.runtime.sendMessage({ type: 'tp-d365-sync' }, () => void chrome.runtime.lastError); } catch {}
-
-    sub.textContent = cb.checked
-      ? "Actif — rechargez l'onglet Dynamics pour l'appliquer."
-      : D365_SUB_DEFAUT;
+       sert qu'à ne pas dépendre du seul ordonnancement des événements, et à récupérer
+       le diagnostic d'enregistrement. */
+    sub.textContent = d365Message(await askD365Sync(), cb.checked);
+    renderD365Diag(cb.checked);
   });
 }
 
