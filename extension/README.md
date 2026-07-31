@@ -21,6 +21,8 @@ l'application TenantPulse.
 | `popup.html` / `popup.css` | Interface (420 px de large) |
 | `popup.js` | Recherche, rendu des tuiles et des raccourcis, verrou d'appartenance |
 | `tp-core.js` | Config et helpers **copiés** de `../tenantpulse.js` |
+| `tp-net.js` | Résolution du Tenant ID — les seuls appels réseau, portés par le service worker |
+| `background.js` | Service worker : routeur des résolutions + icône de la barre d'outils |
 | `sync.js` | Script de contenu : miroir du profil + attestation d'appartenance |
 | `assets/` | Sous-ensemble des icônes de `../assets` |
 | `build.mjs` | Génère les paquets de distribution |
@@ -272,9 +274,21 @@ Ni `tabs`, ni `scripting`, ni `activeTab`, ni `<all_urls>` : les raccourcis sont
 `host_permissions` — un script de contenu tire son droit d'injection de son `matches`. Aucune API
 propre à Chrome ou à Edge : l'extension fonctionne sur tout navigateur Chromium.
 
-Le service worker `background.js` n'existe que pour l'icône de la barre d'outils (voir ci-dessous)
-et ne demande aucune permission : `chrome.action.setIcon` est accessible du seul fait que le
-manifest déclare une `action`.
+Le service worker `background.js` ne demande aucune permission propre : `chrome.action.setIcon` est
+accessible du seul fait que le manifest déclare une `action`, et les résolutions qu'il porte
+s'appuient sur les `host_permissions` ci-dessus.
+
+### Pourquoi le réseau passe par le service worker
+
+Les appels à `login.microsoftonline.com` et à la DoH Cloudflare vivent dans `tp-net.js`, chargé par
+`background.js` via `importScripts`. La popup ne fait plus de `fetch` : elle envoie un message
+`{ type: 'tp-lookup', kind, value }` et reçoit `{ ok, data }`.
+
+La raison n'est pas cosmétique. Un `fetch` émis depuis un **script de contenu** part avec l'origine
+de la page hôte : il est donc soumis au CORS et à la politique de sécurité de contenu de cette page.
+Depuis le service worker, ce sont les `host_permissions` du manifest qui s'appliquent, et l'appel
+aboutit quelle que soit la page à l'origine de la demande. Tout contexte de l'extension partage
+ainsi une seule implémentation, et un seul endroit liste les endpoints publics interrogés.
 
 ### Icône adaptée au thème
 

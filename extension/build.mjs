@@ -34,7 +34,7 @@ const ORIGIN_FILE = join(EXT_DIR, 'app-origin.js');
 
 /* Fichiers embarqués dans les paquets : liste explicite, pour ne jamais expédier
    le script de build, la documentation interne ou les artefacts précédents. */
-const RUNTIME_FILES = ['manifest.json', 'popup.html', 'popup.css', 'popup.js', 'tp-core.js', 'sync.js', 'background.js', 'app-origin.js'];
+const RUNTIME_FILES = ['manifest.json', 'popup.html', 'popup.css', 'popup.js', 'tp-core.js', 'tp-net.js', 'sync.js', 'background.js', 'app-origin.js'];
 const RUNTIME_DIRS  = ['assets'];
 
 function loadConfig() {

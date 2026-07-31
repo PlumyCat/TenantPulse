@@ -26,83 +26,29 @@ const storageGet = (key) => new Promise(resolve => {
 });
 const storageSet = (obj) => { try { chrome.storage.local.set(obj); } catch {} };
 
-// ── Réseau : un AbortController par appel, délai borné ──
-async function fetchJson(url, timeout = 8000, headers = null) {
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const r = await fetch(url, headers ? { signal: ctrl.signal, headers } : { signal: ctrl.signal });
-    clearTimeout(tid);
-    if (!r.ok) return null;
-    return await r.json();
-  } catch { clearTimeout(tid); return null; }
-}
-async function fetchText(url, timeout = 8000) {
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const r = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(tid);
-    if (!r.ok) return null;
-    return await r.text();
-  } catch { clearTimeout(tid); return null; }
+/* ── Réseau : délégué au service worker ──
+   La popup n'émet aucun fetch elle-même. Les appels vivent dans tp-net.js, chargé
+   par background.js, pour que le panneau injecté dans une page tierce puisse les
+   réutiliser : un fetch parti d'un script de contenu porte l'origine de la page
+   hôte, donc son CORS et sa CSP.
+
+   Un échec (réseau, worker indisponible, message perdu) rend null, exactement comme
+   le faisait un fetch en échec avant ce découpage — l'appelant n'a rien à changer. */
+function askLookup(kind, value) {
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage({ type: 'tp-lookup', kind, value }, res => {
+        // lastError doit être lu, sinon Chromium journalise une erreur non traitée.
+        if (chrome.runtime.lastError || !res || !res.ok) { resolve(null); return; }
+        resolve(res.data);
+      });
+    } catch { resolve(null); }
+  });
 }
 
-/* Valide un GUID de tenant auprès de l'endpoint OIDC (portage de validateTenantGuid). */
-async function validateTenantGuid(guid) {
-  const r = await fetchJson(`https://login.microsoftonline.com/${guid}/.well-known/openid-configuration`, 6000);
-  if (!r || !r.issuer || !r.issuer.includes(guid)) return false;
-  return !MS_GENERIC_GUIDS.has(guid.toLowerCase());
-}
-
-/* Recherche du tenant par domaine — portage de checkMicrosoft (tenantpulse.js).
-   Endpoint OIDC public, puis repli sur les métadonnées de fédération. */
-async function lookupByDomain(domain) {
-  let tenantId = null, oidcData = null, tenantValid = false;
-  const direct = await fetchJson(`https://login.microsoftonline.com/${domain}/.well-known/openid-configuration`);
-  if (direct) {
-    const c = extractGuid(direct.issuer) || extractGuid(direct.token_endpoint) || extractGuid(direct.authorization_endpoint);
-    if (c && !MS_GENERIC_GUIDS.has(c.toLowerCase()) && direct.issuer && direct.issuer.includes(c)) {
-      oidcData = direct; tenantId = c; tenantValid = true;
-    }
-  }
-  if (!tenantId) {
-    const x = await fetchText(`https://login.microsoftonline.com/${domain}/federationmetadata/2007-06/federationmetadata.xml`);
-    if (x) {
-      const c = extractGuid(x);
-      if (c && !MS_GENERIC_GUIDS.has(c.toLowerCase()) && await validateTenantGuid(c)) { tenantId = c; tenantValid = true; }
-    }
-  }
-  if (!tenantId) return null;
-  return {
-    tenantId, tenantValid,
-    issuer: oidcData ? oidcData.issuer : null,
-    tokenEndpoint: oidcData ? oidcData.token_endpoint : null,
-  };
-}
-
-/* Recherche directe par Tenant ID — portage de checkMicrosoftById (tenantpulse.js). */
-async function lookupById(tenantId) {
-  const direct = await fetchJson(`https://login.microsoftonline.com/${tenantId}/.well-known/openid-configuration`);
-  if (!direct || !direct.issuer || !direct.issuer.includes(tenantId) || MS_GENERIC_GUIDS.has(tenantId.toLowerCase())) return null;
-  return { tenantId, tenantValid: true, issuer: direct.issuer, tokenEndpoint: direct.token_endpoint };
-}
-
-/* Nom de tenant SharePoint : le CNAME DKIM selector1 pointe vers « …<tenant>.onmicrosoft.com ».
-   Requête DoH ciblée (même extraction que checkHealth dans tenantpulse.js) — c'est le seul
-   appel DNS de l'extension, et il n'est déclenché que si la tuile SharePoint est active. */
-async function lookupSpTenant(domain) {
-  const d = await fetchJson(
-    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent('selector1._domainkey.' + domain)}&type=CNAME`,
-    8000, { Accept: 'application/dns-json' }
-  );
-  const answers = d && Array.isArray(d.Answer) ? d.Answer : [];
-  for (const a of answers) {
-    const m = (a.data || '').match(/([a-z0-9][a-z0-9-]*)\.onmicrosoft\.com/i);
-    if (m) return m[1].toLowerCase();
-  }
-  return null;
-}
+const lookupByDomain = domain   => askLookup('domain', domain);
+const lookupById     = tenantId => askLookup('id', tenantId);
+const lookupSpTenant = domain   => askLookup('spTenant', domain);
 
 /* Domaine associé à un Tenant ID : uniquement l'historique du miroir.
    L'annuaire partagé (/api/classification) est hors d'atteinte depuis l'extension —
