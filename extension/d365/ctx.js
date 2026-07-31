@@ -150,23 +150,29 @@
     return null;
   }
 
-  /* Incident : le client peut être un compte ou un contact ; on privilégie le site web
-     du compte, puis le domaine de l'adresse du contact principal. */
+  /* Incident : le client peut être un compte ou un contact, et l'un comme l'autre porte
+     une adresse — la case « Courrier » de la fiche, soit emailaddress1.
+
+     L'ADRESSE PASSE AVANT LE SITE WEB. Un tenant Microsoft 365 se rattache au domaine de
+     messagerie ; le site web d'un compte est souvent une vitrine hébergée ailleurs,
+     parfois un domaine commercial sans rapport avec le tenant. Le site web ne sert donc
+     plus que de repli. */
   async function readFromIncident(id) {
     const data = await odata(
       `incidents(${id})?$select=incidentid`
       + `&$expand=customerid_account($select=accountid,websiteurl,emailaddress1),`
+      + `customerid_contact($select=emailaddress1),`
       + `primarycontactid($select=emailaddress1)`
     );
     if (!data) return null;
     const account = data.customerid_account || null;
-    const contact = data.primarycontactid || null;
+    const contact = data.primarycontactid || data.customerid_contact || null;
     return {
       accountId: account ? account.accountid : null,
       ...(pickDomain([
+        { value: domainFromEmail(contact && contact.emailaddress1), source: 'courrier du contact' },
+        { value: domainFromEmail(account && account.emailaddress1), source: 'courrier du compte' },
         { value: domainFromUrl(account && account.websiteurl),      source: 'site web du compte' },
-        { value: domainFromEmail(contact && contact.emailaddress1), source: 'e-mail du contact' },
-        { value: domainFromEmail(account && account.emailaddress1), source: 'e-mail du compte' },
       ]) || { domain: null, source: null }),
     };
   }
@@ -178,8 +184,8 @@
     return {
       accountId: data.accountid || null,
       ...(pickDomain([
+        { value: domainFromEmail(data.emailaddress1), source: 'courrier du compte' },
         { value: domainFromUrl(data.websiteurl),      source: 'site web du compte' },
-        { value: domainFromEmail(data.emailaddress1), source: 'e-mail du compte' },
       ]) || { domain: null, source: null }),
     };
   }

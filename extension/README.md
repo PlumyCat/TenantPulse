@@ -375,14 +375,28 @@ est **mémorisée par compte**, vaut pour tous ses incidents, et prime ensuite s
 Dataverse — c'est l'utilisateur qui a raison. Elle accepte aussi bien une URL complète qu'une
 adresse e-mail.
 
-**Découpe au défilement.** Un élément en position fixe ne se laisse rogner par aucun ancêtre : sans
-calcul d'intersection, le panneau déborderait sur la barre de commandes dès que le formulaire
-défile. Le conteneur défilant est donc résolu une fois par ancrage — jamais dans la boucle de
-positionnement, `getComputedStyle` sur toute une lignée d'ancêtres n'ayant rien à faire à 60 Hz —
-et le panneau s'arrête là où la section cesse d'être visible, puis disparaît avec elle.
+**Découpe au défilement.** Le panneau garde la taille et la position de la section : il défile avec
+elle et ce qui dépasse de la zone est **masqué par une découpe** (`clip-path`), pas retiré.
+Redimensionner ferait sauter la mise en page à chaque cran de molette ; la découpe donne ce qu'on
+attend d'un panneau ordinaire — il glisse sous le bandeau. Un élément en position fixe ne se
+laissant rogner par aucun ancêtre, elle est calculée à la main. Le conteneur défilant est résolu
+une fois par ancrage — jamais dans la boucle de positionnement, `getComputedStyle` sur toute une
+lignée d'ancêtres n'ayant rien à faire à 60 Hz.
 
-**Hors d'une fiche** — vue de liste, tableau de bord, accueil — le panneau s'efface au lieu de
-rester affiché avec le tenant de la fiche précédente. L'effacement n'est honoré que s'il vient de
+**Alignement.** Le premier conteneur assez grand est souvent la boîte *interne* de la carte, ce qui
+laisse le panneau en retrait de quelques pixels, visiblement désaligné avec les cartes voisines. On
+remonte donc tant que le parent reste « la même carte, en un peu plus large » — plafonds sur l'écart
+de taille et sur la moitié de la largeur de fenêtre, pour ne jamais sauter à la colonne entière.
+
+**Source du domaine : l'adresse d'abord.** Un tenant Microsoft 365 se rattache au domaine de
+messagerie ; le site web d'un compte est souvent une vitrine hébergée ailleurs, parfois un domaine
+commercial sans rapport. L'ordre est donc : courrier du contact → courrier du compte → site web.
+
+**Hors d'une fiche** — vue de liste, tableau de bord, accueil — ou **quand la fiche ne donne aucune
+adresse ni site web exploitable, le panneau s'efface** au lieu d'encombrer le formulaire pour dire
+qu'il n'a rien trouvé. Conséquence assumée : la saisie manuelle d'un domaine n'est alors plus
+atteignable ; elle ne l'est que lorsqu'un domaine a été trouvé mais qu'aucun tenant n'y répond.
+Le panneau s'efface aussi plutôt que de rester affiché avec le tenant de la fiche précédente. L'effacement n'est honoré que s'il vient de
 la frame qui a produit l'état courant : dans Omnicanal, la frame principale peut afficher une liste
 pendant qu'une session ouverte, dans sa propre frame, tient toujours son incident.
 

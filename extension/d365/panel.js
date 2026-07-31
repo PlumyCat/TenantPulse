@@ -70,11 +70,30 @@ const tpPanneau = (function () {
       let candidat = noeud;
       for (let i = 0; i < 8 && candidat; i++) {
         const r = candidat.getBoundingClientRect();
-        if (r.width >= 220 && r.height >= 200) return candidat;
+        if (r.width >= 220 && r.height >= 200) return elargir(candidat);
         candidat = candidat.parentElement;
       }
     }
     return null;
+  }
+
+  /* Le premier conteneur assez grand est souvent la boîte INTERNE de la carte : le
+     panneau se retrouve alors en retrait de quelques pixels, visiblement désaligné avec
+     les cartes voisines. On remonte donc tant que le parent reste « la même carte, en
+     un peu plus large » — sans jamais sauter à la colonne entière, d'où les plafonds. */
+  function elargir(depart) {
+    let meilleur = depart;
+    let p = depart.parentElement;
+    for (let i = 0; i < 3 && p && p !== document.body; i++) {
+      const rm = meilleur.getBoundingClientRect();
+      const rp = p.getBoundingClientRect();
+      const memeCarte = (rp.width - rm.width) <= 80 && (rp.height - rm.height) <= 120
+        && rp.width >= rm.width && rp.height >= rm.height;
+      if (!memeCarte || rp.width > window.innerWidth * 0.5) break;
+      meilleur = p;
+      p = p.parentElement;
+    }
+    return meilleur;
   }
 
   /* La section n'existe pas au chargement : elle arrive avec le rendu du formulaire.
@@ -158,24 +177,29 @@ const tpPanneau = (function () {
     const r = ancre.getBoundingClientRect();
     const zone = zoneDecoupe();
 
-    /* Intersection avec la zone défilante : le panneau s'arrête là où la section
-       s'arrête d'être visible, et disparaît quand elle sort du cadre. */
-    const haut = Math.max(r.top, zone.haut);
-    const bas = Math.min(r.bottom, zone.bas);
-    const hauteur = bas - haut;
-    const seuil = replie ? 34 : 56;
+    // Section masquée (session en arrière-plan) ou hors du cadre : on s'efface.
+    const visible = Math.min(r.bottom, zone.bas) - Math.max(r.top, zone.haut);
+    if (r.width < 120 || visible < 24) { hote.style.display = 'none'; return; }
 
-    // Section masquée (session en arrière-plan) ou sortie du cadre : on s'efface.
-    if (r.width < 120 || hauteur < seuil) { hote.style.display = 'none'; return; }
-
+    /* Le panneau garde la taille et la position de la section — il défile avec elle.
+       Ce qui dépasse de la zone défilante n'est pas retiré mais MASQUÉ par une découpe :
+       redimensionner ferait sauter la mise en page à chaque cran de molette, alors que
+       la découpe donne exactement ce qu'on attend d'un panneau ordinaire — il glisse
+       sous le bandeau. Un élément en position fixe ne pouvant être rogné par aucun
+       ancêtre, la découpe est calculée ici. */
     hote.style.display = 'block';
     hote.style.right = 'auto';
-    hote.style.top = Math.round(haut) + 'px';
+    hote.style.top = Math.round(r.top) + 'px';
     hote.style.left = Math.round(r.left) + 'px';
     hote.style.width = Math.round(r.width) + 'px';
-    hote.style.height = replie ? 'auto' : Math.round(hauteur) + 'px';
-    if (replie) hote.style.maxHeight = Math.round(hauteur) + 'px';
-    else hote.style.maxHeight = '';
+    hote.style.height = replie ? 'auto' : Math.round(r.height) + 'px';
+
+    const hauteurReelle = replie ? hote.getBoundingClientRect().height : r.height;
+    const coupeHaut = Math.max(0, zone.haut - r.top);
+    const coupeBas = Math.max(0, (r.top + hauteurReelle) - zone.bas);
+    hote.style.clipPath = (coupeHaut || coupeBas)
+      ? `inset(${Math.round(coupeHaut)}px 0px ${Math.round(coupeBas)}px 0px)`
+      : '';
   }
 
   // ── Construction ─────────────────────────────────────────────────────────────
@@ -515,13 +539,7 @@ const tpPanneau = (function () {
       return;
     }
 
-    if (etat.statut === 'sans-domaine') {
-      corps.appendChild(creerEl('div', 'tp-message',
-        etat.message || "Aucun domaine exploitable sur cette fiche (ni site web, ni adresse)."));
-      corps.appendChild(bloquesSaisie(etat));
-      return;
-    }
-
+    // « sans-domaine » ne passe jamais ici : il fait disparaître le panneau (STATUTS_MUETS).
     corps.appendChild(creerEl('div', 'tp-message', etat.message || 'Aucune fiche client à analyser.'));
   }
 
@@ -544,8 +562,16 @@ const tpPanneau = (function () {
     if (hote) hote.style.display = 'none';
   }
 
+  /* Statuts qui font disparaître le panneau plutôt que d'afficher quelque chose :
+     hors d'une fiche, et fiche sans aucune adresse ni site web exploitable. Rien à
+     montrer, donc rien à l'écran — le panneau ne doit pas encombrer le formulaire pour
+     dire qu'il n'a rien trouvé. Conséquence assumée : la saisie manuelle d'un domaine
+     n'est plus atteignable dans ce cas, seulement quand un domaine a été trouvé mais
+     qu'aucun tenant n'y répond. */
+  const STATUTS_MUETS = new Set(['inactif', 'sans-domaine']);
+
   function rendre(etat) {
-    if (!etat || etat.statut === 'inactif') { effacer(etat && etat.emetteur); return; }
+    if (!etat || STATUTS_MUETS.has(etat.statut)) { effacer(etat && etat.emetteur); return; }
     etatCourant = etat;
     if (!hote) creer();
     dessiner();
