@@ -163,6 +163,13 @@ const tpPanneau = (function () {
   function positionner() {
     if (!hote) return;
 
+    /* Sans état à montrer, le panneau reste masqué — quoi qu'il arrive ensuite.
+       Ce garde-fou est indispensable : positionner() est rappelé à chaque défilement,
+       redimensionnement et tentative d'ancrage, et il rétablissait « display: block »
+       juste après un effacement. Hors d'une fiche, le panneau réapparaissait donc
+       aussitôt, en tiroir, par-dessus une vue de liste. */
+    if (!etatCourant) { hote.style.display = 'none'; return; }
+
     if (modeTiroir || !ancre || !ancre.isConnected) {
       if (!modeTiroir && ancre && !ancre.isConnected) { ancre = null; tentatives = 0; attacher(); return; }
       hote.style.display = 'block';
