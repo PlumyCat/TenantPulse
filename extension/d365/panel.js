@@ -322,34 +322,50 @@ const tpPanneau = (function () {
     return 'low';
   }
 
+  /* Domaine analysé et sa provenance, sous le GUID — comme dans la popup. */
+  function ligneDomaine(etat) {
+    const d = creerEl('div', 'hero-domain');
+    d.appendChild(creerEl('span', null, etat.domaine || 'Domaine non résolu'));
+    if (etat.source) d.appendChild(creerEl('span', 'hero-source', ' · ' + etat.source));
+    return d;
+  }
+
   /* Bloc résultat : le hero de TenantPulse, repris tel quel de la popup. C'est la
      signature visuelle de l'outil — le conteneur, lui, imite une carte Dynamics. */
+  /* Structure calquée sur renderResult() de la popup, dans le même ordre : étiquette
+     avec le logo Microsoft, puis GUID + bouton de copie + pastille de confiance SUR LA
+     MÊME LIGNE, puis le domaine. Une disposition maison donnait un hero qui ne
+     ressemblait pas à celui de l'application. */
   function bloqueHero(etat) {
     const hero = creerEl('div', 'tenant-hero' + (etat.tenantId ? '' : ' no-tenant'));
-    hero.appendChild(creerEl('div', 'hero-label', 'Microsoft Tenant ID'));
 
-    if (etat.domaine) {
-      const d = creerEl('div', 'hero-domain');
-      d.appendChild(creerEl('span', null, etat.domaine));
-      if (etat.source) d.appendChild(creerEl('span', 'hero-source', ' · ' + etat.source));
-      hero.appendChild(d);
-    }
+    const label = creerEl('div', 'hero-label');
+    const logoMs = creerEl('img');
+    try { logoMs.src = chrome.runtime.getURL('assets/Microsoft.png'); } catch {}
+    logoMs.alt = '';
+    label.appendChild(logoMs);
+    label.appendChild(creerEl('span', null, etat.tenantId ? 'Microsoft Tenant ID' : 'Microsoft 365'));
+    hero.appendChild(label);
 
     if (!etat.tenantId) {
-      hero.appendChild(creerEl('div', 'hero-none', 'Aucun tenant Microsoft 365 détecté'));
+      hero.appendChild(creerEl('div', 'hero-none', 'Aucun tenant Microsoft 365 détecté pour ce domaine'));
+      hero.appendChild(ligneDomaine(etat));
       return hero;
     }
 
-    hero.appendChild(creerEl('div', 'hero-guid', etat.tenantId));
+    const conf = etat.confiance || 0;
+    const libelleConf = conf >= 80 ? 'Confiance élevée' : conf >= 50 ? 'Confiance moyenne' : 'Confiance faible';
 
-    const bas = creerEl('div', 'hero-bas');
+    const guid = creerEl('div', 'hero-guid');
+    guid.appendChild(creerEl('span', null, etat.tenantId));
     const bouton = creerEl('button', 'hero-copy-btn', 'Copier');
     bouton.type = 'button';
     bouton.addEventListener('click', () => copier(etat.tenantId, bouton));
-    bas.appendChild(bouton);
-    bas.appendChild(creerEl('span', 'confidence-badge ' + classeConfiance(etat.confiance || 0),
-      (etat.confiance || 0) + ' % de confiance'));
-    hero.appendChild(bas);
+    guid.appendChild(bouton);
+    guid.appendChild(creerEl('span', 'confidence-badge ' + classeConfiance(conf), conf + ' % — ' + libelleConf));
+    hero.appendChild(guid);
+
+    hero.appendChild(ligneDomaine(etat));
 
     /* Badges de classification, en lecture seule — mêmes données et même rendu que
        dans la popup et dans l'application (tp-badges.js). */

@@ -74,7 +74,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      demander la permission « tabs » pour retrouver ces onglets nous-mêmes. */
   if (msg.type === 'tp-app-tab') {
     const id = sender && sender.tab && sender.tab.id;
-    if (typeof id === 'number') ongletsApp.add(id);
+    if (typeof id === 'number' && !ongletsApp.has(id)) { ongletsApp.add(id); persisterOnglets(); }
     return false;
   }
 
@@ -104,12 +104,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
    (Xrm, Microsoft.Apm), invisibles depuis un monde isolé. Il n'a aucune permission
    d'extension et ne peut rien faire d'autre que poster un message à ctx.js, qui lui
    reste isolé et porte tous les garde-fous. */
-/* Onglets où l'application est ouverte. Un service worker peut être arrêté à tout
-   moment : cet ensemble est une simple optimisation, reconstruite dès que sync.js se
-   signale à nouveau (au chargement et à chaque retour au premier plan). */
-const ongletsApp = new Set();
+/* Onglets où l'application est ouverte, seule voie vers /api/classification.
 
-chrome.tabs.onRemoved.addListener((id) => ongletsApp.delete(id));
+   Un service worker est arrêté au bout de quelques secondes d'inactivité et repart
+   avec une mémoire vide. Or sync.js ne se signale qu'au chargement de la page et au
+   retour au premier plan : un onglet de l'application ouvert mais en arrière-plan
+   depuis une minute serait donc invisible, et les badges resteraient introuvables
+   sans raison apparente. D'où la persistance dans storage.session, qui survit aux
+   redémarrages du worker et disparaît avec la session du navigateur — exactement la
+   durée de validité d'un identifiant d'onglet. */
+const SESSION_ONGLETS = 'tp_app_tabs_v1';
+let ongletsApp = new Set();
+
+async function chargerOnglets() {
+  try {
+    const r = await chrome.storage.session.get(SESSION_ONGLETS);
+    const liste = (r && r[SESSION_ONGLETS]) || [];
+    liste.forEach(id => ongletsApp.add(id));
+  } catch {}
+}
+
+function persisterOnglets() {
+  try { chrome.storage.session.set({ [SESSION_ONGLETS]: Array.from(ongletsApp) }); } catch {}
+}
+
+chrome.tabs.onRemoved.addListener((id) => {
+  if (ongletsApp.delete(id)) persisterOnglets();
+});
 
 function interrogerOnglet(tabId, tenantId) {
   return new Promise(resolve => {
@@ -123,10 +144,15 @@ function interrogerOnglet(tabId, tenantId) {
 }
 
 async function detailTagsViaApp(tenantId) {
+  await chargerOnglets();   // le worker a pu redémarrer depuis le dernier signalement
+  let modifie = false;
   for (const tabId of Array.from(ongletsApp)) {
+    const avant = ongletsApp.size;
     const rep = await interrogerOnglet(tabId, tenantId);
-    if (rep) return rep;
+    if (ongletsApp.size !== avant) modifie = true;   // onglet fermé, retiré au passage
+    if (rep) { if (modifie) persisterOnglets(); return rep; }
   }
+  if (modifie) persisterOnglets();
   return null;
 }
 
