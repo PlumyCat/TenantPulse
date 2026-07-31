@@ -358,11 +358,33 @@ défilement (en capture, car le défilement utile est celui des conteneurs inter
 remonte pas jusqu'à `window`), le tout throttlé en `requestAnimationFrame`. Section masquée — une
 session en arrière-plan — et le panneau s'efface avec elle.
 
-Le contenu tient en trois choses : le domaine et sa provenance, le Tenant ID avec un bouton de
-copie, et l'indice de confiance. Quand la fiche ne donne aucun domaine exploitable, un champ de
-saisie prend le relais ; la valeur est **mémorisée par compte**, vaut pour tous ses incidents, et
-prime ensuite sur ce que dit Dataverse — c'est l'utilisateur qui a raison. Elle accepte aussi bien
-une URL complète qu'une adresse e-mail.
+**Deux registres visuels, volontairement.** Le *conteneur* imite une carte de formulaire Dynamics —
+fond uni, bordure d'un pixel, coins à 4 px, **aucune ombre portée** : il doit passer pour une
+section du formulaire, pas pour une fenêtre posée dessus. Le *résultat*, lui, reprend le hero de
+TenantPulse à l'identique (dégradés radiaux, GUID en monospace blanche, pastille de confiance,
+tuiles de redirection), repris de `popup.css`.
+
+Le contenu reprend celui de la popup : domaine et provenance, Tenant ID avec bouton de copie,
+indice de confiance, puis la grille des centres d'administration dans l'ordre du profil synchronisé
+depuis l'application, chaque tuile ouvrant son menu de raccourcis. Un clic ouvre **un** onglet,
+jamais plusieurs — les postes gérés bloquent les pop-ups. Les icônes sont servies depuis
+`web_accessible_resources`.
+
+Quand la fiche ne donne aucun domaine exploitable, un champ de saisie prend le relais ; la valeur
+est **mémorisée par compte**, vaut pour tous ses incidents, et prime ensuite sur ce que dit
+Dataverse — c'est l'utilisateur qui a raison. Elle accepte aussi bien une URL complète qu'une
+adresse e-mail.
+
+**Découpe au défilement.** Un élément en position fixe ne se laisse rogner par aucun ancêtre : sans
+calcul d'intersection, le panneau déborderait sur la barre de commandes dès que le formulaire
+défile. Le conteneur défilant est donc résolu une fois par ancrage — jamais dans la boucle de
+positionnement, `getComputedStyle` sur toute une lignée d'ancêtres n'ayant rien à faire à 60 Hz —
+et le panneau s'arrête là où la section cesse d'être visible, puis disparaît avec elle.
+
+**Hors d'une fiche** — vue de liste, tableau de bord, accueil — le panneau s'efface au lieu de
+rester affiché avec le tenant de la fiche précédente. L'effacement n'est honoré que s'il vient de
+la frame qui a produit l'état courant : dans Omnicanal, la frame principale peut afficher une liste
+pendant qu'une session ouverte, dans sa propre frame, tient toujours son incident.
 
 Le panneau ne peut vivre que dans la frame principale, alors que l'enregistrement est détecté par
 la frame qui héberge `Xrm` — celle d'une session Omnicanal, le cas échéant. Deux scripts de contenu

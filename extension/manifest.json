@@ -3,7 +3,7 @@
   "name": "TenantPulse — Tenant ID & raccourcis",
   "short_name": "TenantPulse",
   "description": "Recherche Tenant ID Microsoft 365 d'un domaine et reconstruction des liens vers les centres admin M365",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "minimum_chrome_version": "111",
   "action": {
     "default_title": "TenantPulse — Tenant ID & raccourcis",
@@ -39,7 +39,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["d365/panel.css"],
+      "resources": ["d365/panel.css", "assets/*.png"],
       "matches": ["https://*.dynamics.com/*"]
     }
   ],

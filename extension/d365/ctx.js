@@ -49,10 +49,16 @@
      session Omnicanal a la sienne. Le panneau, lui, ne peut vivre qu'en haut — les
      frames de session relaient donc leur état par le service worker, qui le renvoie à
      la frame 0 du même onglet. */
+  /* Identifiant de frame, tiré au sort à l'injection. Il accompagne chaque état pour
+     que le panneau sache qui parle : une frame qui quitte sa fiche ne doit effacer que
+     SON affichage, pas celui qu'une autre frame vient de produire. */
+  const EMETTEUR = Math.random().toString(36).slice(2);
+
   function afficher(etat) {
-    if (EST_PRINCIPALE) { tpPanneau.rendre(etat); return; }
+    const charge = { ...(etat || { statut: 'inactif' }), emetteur: EMETTEUR };
+    if (EST_PRINCIPALE) { tpPanneau.rendre(charge); return; }
     try {
-      chrome.runtime.sendMessage({ type: 'tp-d365-etat', etat }, () => void chrome.runtime.lastError);
+      chrome.runtime.sendMessage({ type: 'tp-d365-etat', etat: charge }, () => void chrome.runtime.lastError);
     } catch {}
   }
 
@@ -192,6 +198,13 @@
       ? { statut: 'resolu', cle, domaine, source, tenantId: ms.tenantId, confiance: computeConfidence(ms) }
       : { statut: 'sans-tenant', cle, domaine, source };
 
+    /* Nom de tenant SharePoint, déduit du CNAME DKIM : sans lui, la tuile SharePoint
+       reste grisée. Une seule requête DNS, et seulement si un tenant a été trouvé. */
+    if (ms) {
+      const sp = await lookupSpTenant(domaine);
+      if (sp) etat.spTenant = sp;
+    }
+
     cache.set(cle, etat);
     noter(ms ? 'Tenant ID résolu' : 'domaine trouvé, aucun tenant');
     log('contexte résolu', etat);
@@ -298,7 +311,18 @@
     if (ev.source !== window || ev.origin !== location.origin) return;
     const data = ev.data;
     if (!data || data.source !== CHANNEL) return;
-    if (!data.visible || !data.record) return;
+    if (!data.visible) return;
+
+    /* Plus d'enregistrement affiché — vue de liste, tableau de bord, fiche fermée :
+       le panneau n'a plus de sujet et disparaît. Sans ça il resterait à l'écran avec
+       le tenant de la fiche précédente. */
+    if (!data.record) {
+      if (currentKey === null) return;
+      currentKey = null;
+      dernierClient = null;
+      afficher(null);
+      return;
+    }
     resolve(data.record);
   });
 

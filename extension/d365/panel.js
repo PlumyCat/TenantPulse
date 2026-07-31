@@ -33,11 +33,15 @@ const tpPanneau = (function () {
   const ANCRE_DELAI_MS = 1500;
 
   let hote = null, ombre = null, cadre = null, corps = null, chevron = null;
-  let ancre = null, observateur = null, rafId = null;
+  let ancre = null, decoupeEl = null, observateur = null, rafId = null;
   let replie = false, modeTiroir = false;
   let etatCourant = null;
   let tentatives = 0;
   let rappels = { surDomaineManuel: null };
+  let raccourciOuvert = null;
+  /* Profil de tuiles recopié de l'application par sync.js. Absent, normalizeProfile
+     rend le profil par défaut — toutes les tuiles, dans l'ordre d'origine. */
+  let profilMiroir = null;
 
   const creerEl = (tag, cls, texte) => {
     const n = document.createElement(tag);
@@ -90,12 +94,38 @@ const tpPanneau = (function () {
     }
 
     basculerTiroir(false);
+    decoupeEl = trouverDecoupe(ancre);
     try {
       if (observateur) observateur.disconnect();
       observateur = new ResizeObserver(planifier);
       observateur.observe(ancre);
     } catch { /* sans ResizeObserver, le défilement et le redimensionnement suffisent */ }
     positionner();
+  }
+
+  /* Conteneur défilant qui découpe la section. Un élément en position fixe ne se
+     laisse rogner par aucun ancêtre : sans ce calcul d'intersection, le panneau
+     déborderait sur la barre de commandes dès que le formulaire défile.
+     Résolu une fois par ancrage, jamais dans la boucle de positionnement —
+     getComputedStyle sur toute une lignée d'ancêtres n'a rien à faire à 60 Hz. */
+  function trouverDecoupe(depuis) {
+    let p = depuis.parentElement;
+    while (p && p !== document.body && p !== document.documentElement) {
+      let st;
+      try { st = getComputedStyle(p); } catch { break; }
+      const flot = st.overflowY;
+      if ((flot === 'auto' || flot === 'scroll') && p.scrollHeight > p.clientHeight + 4) return p;
+      p = p.parentElement;
+    }
+    return null;
+  }
+
+  function zoneDecoupe() {
+    if (decoupeEl && decoupeEl.isConnected) {
+      const r = decoupeEl.getBoundingClientRect();
+      return { haut: Math.max(0, r.top), bas: Math.min(window.innerHeight, r.bottom) };
+    }
+    return { haut: 0, bas: window.innerHeight };
   }
 
   function basculerTiroir(actif) {
@@ -126,15 +156,26 @@ const tpPanneau = (function () {
     }
 
     const r = ancre.getBoundingClientRect();
-    // Section masquée (session en arrière-plan, panneau latéral fermé) : on s'efface.
-    if (r.width < 120 || r.height < 60) { hote.style.display = 'none'; return; }
+    const zone = zoneDecoupe();
+
+    /* Intersection avec la zone défilante : le panneau s'arrête là où la section
+       s'arrête d'être visible, et disparaît quand elle sort du cadre. */
+    const haut = Math.max(r.top, zone.haut);
+    const bas = Math.min(r.bottom, zone.bas);
+    const hauteur = bas - haut;
+    const seuil = replie ? 34 : 56;
+
+    // Section masquée (session en arrière-plan) ou sortie du cadre : on s'efface.
+    if (r.width < 120 || hauteur < seuil) { hote.style.display = 'none'; return; }
 
     hote.style.display = 'block';
     hote.style.right = 'auto';
-    hote.style.top = Math.round(r.top) + 'px';
+    hote.style.top = Math.round(haut) + 'px';
     hote.style.left = Math.round(r.left) + 'px';
     hote.style.width = Math.round(r.width) + 'px';
-    hote.style.height = replie ? 'auto' : Math.round(r.height) + 'px';
+    hote.style.height = replie ? 'auto' : Math.round(hauteur) + 'px';
+    if (replie) hote.style.maxHeight = Math.round(hauteur) + 'px';
+    else hote.style.maxHeight = '';
   }
 
   // ── Construction ─────────────────────────────────────────────────────────────
@@ -168,7 +209,12 @@ const tpPanneau = (function () {
     cadre = creerEl('div', 'tp');
 
     const tete = creerEl('div', 'tp-head');
-    tete.appendChild(creerEl('span', 'tp-logo', 'TP'));
+    /* Logo TP : le glyphe noir, comme dans la popup en thème clair. Le panneau ne suit
+       pas le thème système (voir panel.css) — Omnicanal est toujours blanc. */
+    const logo = creerEl('img', 'tp-logo');
+    try { logo.src = chrome.runtime.getURL('assets/DarkTP.png'); } catch {}
+    logo.alt = '';
+    tete.appendChild(logo);
     tete.appendChild(creerEl('span', 'tp-titre', 'TenantPulse'));
 
     chevron = creerEl('button', 'tp-bouton-replier', '▾');
@@ -187,11 +233,23 @@ const tpPanneau = (function () {
     /* Repli restauré d'une session à l'autre : replier le panneau est un geste que
        l'utilisateur ne veut pas refaire à chaque ouverture de fiche. */
     try {
-      chrome.storage.local.get(UI_KEY, (res) => {
+      chrome.storage.local.get([UI_KEY, 'tp_mirror_v1'], (res) => {
         const ui = res && res[UI_KEY];
         if (ui && ui.replie) appliquerRepli(true, false);
+        const miroir = res && res.tp_mirror_v1;
+        if (miroir && miroir.profile) { profilMiroir = miroir.profile; dessiner(); }
       });
     } catch {}
+
+    /* Un clic hors du menu de raccourcis le referme, comme dans la popup. Posé sur
+       l'ombre : un écouteur sur le document de Dynamics serait à la fois inutile
+       (les clics du panneau n'en sortent pas) et intrusif. */
+    ombre.addEventListener('click', (e) => {
+      if (!raccourciOuvert) return;
+      const cible = e.target;
+      if (cible.closest && (cible.closest('.hero-shortcut-panel') || cible.closest('.hero-btn-chevron'))) return;
+      fermerRaccourcis();
+    });
 
     window.addEventListener('resize', planifier, { passive: true });
     // capture:true — le défilement utile est celui des conteneurs internes de Dynamics,
@@ -216,9 +274,158 @@ const tpPanneau = (function () {
   // ── Contenu ──────────────────────────────────────────────────────────────────
 
   function classeConfiance(v) {
-    if (v >= 90) return 'haute';
-    if (v >= 60) return 'moyenne';
-    return 'basse';
+    if (v >= 80) return 'high';
+    if (v >= 50) return 'medium';
+    return 'low';
+  }
+
+  /* Bloc résultat : le hero de TenantPulse, repris tel quel de la popup. C'est la
+     signature visuelle de l'outil — le conteneur, lui, imite une carte Dynamics. */
+  function bloqueHero(etat) {
+    const hero = creerEl('div', 'tenant-hero' + (etat.tenantId ? '' : ' no-tenant'));
+    hero.appendChild(creerEl('div', 'hero-label', 'Microsoft Tenant ID'));
+
+    if (etat.domaine) {
+      const d = creerEl('div', 'hero-domain');
+      d.appendChild(creerEl('span', null, etat.domaine));
+      if (etat.source) d.appendChild(creerEl('span', 'hero-source', ' · ' + etat.source));
+      hero.appendChild(d);
+    }
+
+    if (!etat.tenantId) {
+      hero.appendChild(creerEl('div', 'hero-none', 'Aucun tenant Microsoft 365 détecté'));
+      return hero;
+    }
+
+    hero.appendChild(creerEl('div', 'hero-guid', etat.tenantId));
+
+    const bas = creerEl('div', 'hero-bas');
+    const bouton = creerEl('button', 'hero-copy-btn', 'Copier');
+    bouton.type = 'button';
+    bouton.addEventListener('click', () => copier(etat.tenantId, bouton));
+    bas.appendChild(bouton);
+    bas.appendChild(creerEl('span', 'confidence-badge ' + classeConfiance(etat.confiance || 0),
+      (etat.confiance || 0) + ' % de confiance'));
+    hero.appendChild(bas);
+
+    const tuiles = bloqueTuiles(etat, hero);
+    if (tuiles) hero.appendChild(tuiles);
+    return hero;
+  }
+
+  // ── Tuiles de redirection et raccourcis (portage de popup.js) ────────────────
+
+  function fermerRaccourcis() {
+    raccourciOuvert = null;
+    const p = ombre && ombre.querySelector('.hero-shortcut-panel');
+    if (p) p.remove();
+    if (ombre) ombre.querySelectorAll('.hero-btn-chevron').forEach(c => c.setAttribute('aria-expanded', 'false'));
+  }
+
+  function ouvrirRaccourcis(btn, chev, ctx, conteneur) {
+    const etaitOuvert = raccourciOuvert === btn.key;
+    fermerRaccourcis();
+    if (etaitOuvert) return;   // re-clic sur le même chevron : simple fermeture
+
+    const panneau = creerEl('div', 'hero-shortcut-panel');
+    panneau.setAttribute('role', 'menu');
+    panneau.appendChild(creerEl('div', 'hero-shortcut-menu-title', btn.label));
+
+    // Accueil du centre — même cible que le clic sur la tuile.
+    let principal = safeRedirectHref(btn.href, ctx.tenantId, ctx.domain);
+    if (btn.key === 'sharepoint') {
+      principal = ctx.spTenant
+        ? resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', ctx)
+        : null;
+    }
+    if (principal) panneau.appendChild(lienRaccourci('Accueil', principal, 'hero-shortcut-opt primary'));
+
+    (ADMIN_SHORTCUTS[btn.key] || []).forEach(sc => {
+      const url = resolveShortcutUrl(sc.url, ctx);
+      if (url) { panneau.appendChild(lienRaccourci(sc.label, url, 'hero-shortcut-opt')); return; }
+      const inactif = creerEl('span', 'hero-shortcut-opt disabled', sc.label);
+      inactif.title = sc.url.includes('{spTenant}')
+        ? "Nom de tenant SharePoint non détecté (CNAME DKIM absent). Ouvrez SharePoint via M365 Admin."
+        : sc.url.includes('{domain}')
+          ? 'Domaine inconnu pour ce Tenant ID — lien indisponible.'
+          : 'Lien indisponible pour ce tenant.';
+      panneau.appendChild(inactif);
+    });
+
+    conteneur.appendChild(panneau);
+    raccourciOuvert = btn.key;
+    chev.setAttribute('aria-expanded', 'true');
+  }
+
+  function lienRaccourci(texte, href, classe) {
+    const a = creerEl('a', classe, texte);
+    a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.setAttribute('role', 'menuitem');
+    return a;
+  }
+
+  /* Grille des centres d'administration, dans l'ordre du profil synchronisé depuis
+     l'application — exactement la même config que la popup (tp-core.js). Un clic
+     ouvre un onglet, jamais plusieurs : les postes gérés bloquent les pop-ups. */
+  function bloqueTuiles(etat, conteneur) {
+    if (!etat.tenantId) return null;
+    const profil = normalizeProfile(profilMiroir);
+    const actives = orderedRedirectButtons(profil).filter(b => profil[b.key] !== false);
+    if (!actives.length) return null;
+
+    const ctx = { tenantId: etat.tenantId, domain: etat.domaine || null, spTenant: etat.spTenant || null };
+    const grille = creerEl('div', 'hero-actions');
+
+    actives.forEach(btn => {
+      let href = safeRedirectHref(btn.href, ctx.tenantId, ctx.domain);
+      let inactif = false;
+
+      if (btn.key === 'sharepoint') {
+        const direct = ctx.spTenant
+          ? resolveShortcutUrl('https://{spTenant}-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx', ctx)
+          : null;
+        if (direct) href = direct; else inactif = true;
+      }
+      if (!href) return;   // cible non fiable : tuile non rendue
+      if (!inactif && /[?&]delegatedOrg=(&|$)/.test(href)) inactif = true;
+
+      const cellule = creerEl('div', 'hero-btn-cell');
+
+      const chev = creerEl('button', 'hero-btn-chevron', '▾');
+      chev.type = 'button';
+      chev.setAttribute('aria-expanded', 'false');
+      chev.setAttribute('aria-label', 'Raccourcis ' + btn.label);
+      chev.addEventListener('click', (e) => { e.stopPropagation(); ouvrirRaccourcis(btn, chev, ctx, conteneur); });
+
+      const a = creerEl('a', 'hero-partner-btn'
+        + (btn.key === 'partnerCenter' ? ' recommended' : '')
+        + (inactif ? ' disabled' : ''));
+      if (inactif) {
+        a.setAttribute('aria-disabled', 'true');
+        a.title = btn.key === 'sharepoint'
+          ? "Lien direct SharePoint indisponible (nom de tenant non détecté). Ouvrez SharePoint via la tuile M365 Admin."
+          : "Domaine inconnu pour ce Tenant ID — ce centre a besoin du domaine.";
+        a.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); ouvrirRaccourcis(btn, chev, ctx, conteneur); });
+      } else {
+        a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      }
+
+      const icone = creerEl('img', 'hero-partner-btn-icon' + (btn.key === 'partnerCenter' ? ' hero-icon-invert' : ''));
+      // Les icônes sont des ressources de l'extension : chemin absolu chrome-extension://,
+      // déclaré dans « web_accessible_resources » pour être chargeable depuis la page.
+      try { icone.src = chrome.runtime.getURL(btn.icon); } catch {}
+      icone.alt = '';
+
+      const texte = creerEl('div', 'hero-partner-btn-text');
+      texte.appendChild(creerEl('span', 'hero-partner-btn-label', btn.label));
+      texte.appendChild(creerEl('span', 'hero-partner-btn-sub', btn.sub));
+      a.appendChild(icone); a.appendChild(texte);
+
+      cellule.appendChild(a); cellule.appendChild(chev);
+      grille.appendChild(cellule);
+    });
+
+    return grille;
   }
 
   async function copier(texte, bouton) {
@@ -239,7 +446,8 @@ const tpPanneau = (function () {
       } catch {}
     }
     bouton.textContent = ok ? 'Copié' : 'Échec';
-    setTimeout(() => { bouton.textContent = 'Copier'; }, 1400);
+    if (ok) bouton.classList.add('copied');
+    setTimeout(() => { bouton.textContent = 'Copier'; bouton.classList.remove('copied'); }, 1400);
   }
 
   /* Saisie manuelle du domaine : le champ « site web » d'un compte est souvent vide,
@@ -279,6 +487,7 @@ const tpPanneau = (function () {
 
   function dessiner() {
     if (!corps) return;
+    fermerRaccourcis();
     corps.replaceChildren();
     const etat = etatCourant || {};
 
@@ -295,32 +504,13 @@ const tpPanneau = (function () {
       return;
     }
 
-    if (etat.domaine) {
-      const d = creerEl('div', 'tp-domaine');
-      d.appendChild(creerEl('span', null, etat.domaine));
-      if (etat.source) d.appendChild(creerEl('span', 'tp-source', '· ' + etat.source));
-      corps.appendChild(d);
-    }
-
     if (etat.statut === 'resolu' && etat.tenantId) {
-      corps.appendChild(creerEl('div', 'tp-etiquette', 'Microsoft Tenant ID'));
-      corps.appendChild(creerEl('div', 'tp-tenant', etat.tenantId));
-
-      const ligne = creerEl('div', 'tp-ligne');
-      const bouton = creerEl('button', 'tp-copier', 'Copier');
-      bouton.type = 'button';
-      bouton.addEventListener('click', () => copier(etat.tenantId, bouton));
-      ligne.appendChild(bouton);
-
-      const conf = creerEl('span', 'tp-confiance ' + classeConfiance(etat.confiance || 0),
-        (etat.confiance || 0) + ' % de confiance');
-      ligne.appendChild(conf);
-      corps.appendChild(ligne);
+      corps.appendChild(bloqueHero(etat));
       return;
     }
 
     if (etat.statut === 'sans-tenant') {
-      corps.appendChild(creerEl('div', 'tp-message', 'Aucun tenant Microsoft 365 détecté pour ce domaine.'));
+      corps.appendChild(bloqueHero(etat));
       corps.appendChild(bloquesSaisie(etat));
       return;
     }
@@ -341,8 +531,22 @@ const tpPanneau = (function () {
     rappels = { ...rappels, ...(r || {}) };
   }
 
+  /* Le panneau n'existe que pour une fiche. Hors d'un enregistrement — vue de liste,
+     tableau de bord, page d'accueil — il s'efface au lieu de rester affiché avec le
+     résultat de la fiche précédente.
+
+     L'effacement n'est honoré que s'il vient de la frame qui a produit l'état courant :
+     dans Omnicanal, la frame principale peut afficher une liste pendant qu'une session
+     ouverte, dans sa propre frame, tient toujours son incident. */
+  function effacer(emetteur) {
+    if (etatCourant && etatCourant.emetteur && emetteur && etatCourant.emetteur !== emetteur) return;
+    etatCourant = null;
+    if (hote) hote.style.display = 'none';
+  }
+
   function rendre(etat) {
-    etatCourant = etat || null;
+    if (!etat || etat.statut === 'inactif') { effacer(etat && etat.emetteur); return; }
+    etatCourant = etat;
     if (!hote) creer();
     dessiner();
     positionner();
