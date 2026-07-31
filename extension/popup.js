@@ -517,6 +517,27 @@ async function initD365Toggle() {
   });
 }
 
+/* État de l'annuaire de tags, affiché en clair. Sans lui, « aucun badge » a trois
+   causes indiscernables : annuaire jamais recopié (application pas rouverte depuis la
+   mise à jour), annuaire recopié mais ce tenant n'y figure pas, ou panne de rendu. */
+async function renderTagsDiag() {
+  const box = el('tagsDiag');
+  const stored = await storageGet(TAGS_KEY);
+  const annuaire = stored[TAGS_KEY];
+
+  if (!annuaire || !annuaire.parTenant) {
+    box.textContent = "Annuaire des tags jamais recopié — ouvrez TenantPulse une fois, puis rechargez cet onglet.";
+    box.hidden = false;
+    return;
+  }
+  const n = Object.keys(annuaire.parTenant).length;
+  const age = tempsRelatif(annuaire.at);
+  const defs = Array.isArray(annuaire.definitions) ? annuaire.definitions.length : 0;
+  box.textContent = `Annuaire des tags : ${n} tenant${n > 1 ? 's' : ''}, ${defs} type${defs > 1 ? 's' : ''}`
+    + (age ? ' · ' + age : '');
+  box.hidden = false;
+}
+
 /* Signale le thème courant, que background.js applique à l'icône de la barre d'outils.
    La popup et le script de contenu sont les seuls contextes de l'extension à disposer
    de matchMedia — un service worker n'en a pas. */
@@ -574,7 +595,7 @@ async function init() {
   }
 
   reportTheme();
-  if (auth.ok) renderRecent();
+  if (auth.ok) { renderRecent(); renderTagsDiag(); }
   initD365Toggle();
   bindEvents();
 
