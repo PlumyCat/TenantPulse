@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TenantPulse — Tenant ID & raccourcis",
   "short_name": "TenantPulse",
-  "description": "Recherche le Tenant ID Microsoft 365 d'un domaine et ouvre les centres d'administration, avec le profil de raccourcis configuré dans TenantPulse.",
+  "description": "Recherche Tenant ID Microsoft 365 d'un domaine et reconstruction des liens vers les centres admin M365",
   "version": "0.1.0",
   "minimum_chrome_version": "102",
   "action": {

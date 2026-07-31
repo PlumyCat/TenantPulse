@@ -10,9 +10,13 @@
 > (attestation `/api/me`, voir [README.md](README.md)) qui réserve l'usage à l'organisation.
 > Une personne extérieure qui installerait l'extension obtiendrait une coquille inerte.
 >
-> Le Chrome Web Store couvre les autres navigateurs Chromium, mais demande des frais
-> d'inscription uniques : à faire plus tard. Le champ correspondant existe déjà côté
-> application.
+> **Publication sur les deux magasins**, avec le même ZIP et sans reconstruction :
+> Edge Add-ons en *Hidden* pour Edge, Chrome Web Store en *Unlisted* pour Chrome, Vivaldi,
+> Brave et Opera. Les identifiants attribués diffèrent d'un magasin à l'autre.
+>
+> Prérequis Chrome Web Store : frais d'inscription uniques de 5 $ (jusqu'à 20 extensions), et
+> **double authentification obligatoire sur le compte Google** — sans elle, aucune publication
+> ni mise à jour n'est possible.
 
 Éléments à recopier dans la console de publication. Les limites de caractères indiquées sont
 celles du Chrome Web Store, plus strictes que celles d'Edge.
@@ -71,36 +75,81 @@ Aucune donnée n'est transmise à l'auteur de l'extension. Aucun compte n'est re
 
 ---
 
-## Objet unique (single purpose)
+## Onglet « Confidentialité » — textes prêts à coller
 
-Le Chrome Web Store exige une déclaration d'objet unique.
+Les trois champs ci-dessous sont limités à **1 000 caractères** chacun dans la console Chrome.
+Le formulaire Edge pose les mêmes questions.
+
+### Objectif unique
 
 ```
-Objet unique : identifier le tenant Microsoft 365 d'un domaine et ouvrir les centres
-d'administration Microsoft correspondants. Toutes les fonctions de l'extension servent
-ce seul objectif.
+Identifier le tenant Microsoft 365 associé à un domaine, et ouvrir les centres
+d'administration Microsoft correspondants.
+
+Toutes les fonctions servent cet unique objectif. La saisie accepte un domaine, une
+adresse e-mail ou un Tenant ID. La résolution s'appuie sur l'endpoint OpenID Connect
+public de Microsoft, suivie d'une revalidation du GUID obtenu. Les tuiles et leurs
+sous-menus construisent les URL des centres d'administration — Partner Center,
+Entra ID, Microsoft 365 Admin, Exchange, Intune, Teams, SharePoint, Azure et
+Defender — déjà paramétrées sur le tenant trouvé.
+
+Les deux fonctions annexes servent également cet objectif : la lecture de la
+configuration sur l'application web associée détermine uniquement quels centres
+afficher et dans quel ordre, et l'unique requête DNS sert uniquement à construire
+l'URL du centre d'administration SharePoint.
+
+L'extension n'a aucune autre fonction.
 ```
 
----
+### Justification de l'autorisation `storage`
 
-## Justification des autorisations
+```
+Conserve localement, dans le navigateur, trois éléments : le profil de raccourcis
+synchronisé depuis l'application TenantPulse (tuiles actives et leur ordre), la
+dernière recherche saisie afin de la restituer à l'ouverture, et le thème clair ou
+sombre servant à adapter l'icône de la barre d'outils. Aucune de ces données n'est
+transmise à un serveur tiers ni à l'auteur de l'extension, et aucune donnée
+d'identification n'y est conservée.
+```
 
-À recopier dans les champs correspondants de la console (chaque autorisation demande sa
-propre justification).
+### Justification de l'autorisation d'accès à l'hôte
 
-| Autorisation | Justification à saisir |
-|---|---|
-| `storage` | `Conserve localement le profil de raccourcis synchronisé depuis l'application TenantPulse, la dernière recherche saisie et le thème clair/sombre utilisé pour adapter l'icône. Aucune de ces données ne quitte le navigateur.` |
-| `login.microsoftonline.com` | `Endpoint OpenID Connect public de Microsoft, interrogé en lecture seule pour résoudre et valider le Tenant ID d'un domaine. Requête anonyme, sans authentification.` |
-| `cloudflare-dns.com` | `Une unique requête DNS-over-HTTPS sur l'enregistrement CNAME DKIM du domaine, nécessaire pour construire l'URL du centre d'administration SharePoint. Seul le nom de domaine est transmis.` |
-| `https://*.azurestaticapps.net/*` (script de contenu) | `Origine de l'application web TenantPulse. Un script de contenu y lit la configuration de raccourcis de l'utilisateur pour que l'extension reflète ses réglages, et vérifie son appartenance à l'organisation. Lecture seule, aucune écriture dans la page.` |
+Un seul champ couvre les deux `host_permissions` **et** le motif `content_scripts`.
 
-> L'origine exacte de l'application n'est pas reproduite ici : c'est un domaine de production,
-> que la section « Confidentialité » de `../CLAUDE.md` interdit de versionner. La retrouver dans
-> `extension/local-config.json` (hors dépôt) au moment de remplir le formulaire.
+```
+Trois origines, toutes nécessaires à l'objectif unique de l'extension.
 
-**Code distant** : répondre **non** — tout le code est inclus dans le paquet, aucun script
-n'est chargé depuis un serveur.
+login.microsoftonline.com : endpoint OpenID Connect public de Microsoft, interrogé
+en lecture seule et sans authentification, pour résoudre puis valider le Tenant ID
+d'un domaine. C'est la fonction principale de l'extension.
+
+cloudflare-dns.com : une seule requête DNS-over-HTTPS sur l'enregistrement CNAME
+DKIM du domaine analysé, nécessaire pour construire l'URL du centre d'administration
+SharePoint. Seul le nom de domaine est transmis.
+
+*.azurestaticapps.net : origine de l'application web TenantPulse. Un script de
+contenu y lit la configuration de raccourcis de l'utilisateur, pour que l'extension
+reflète ses réglages, et vérifie son appartenance à l'organisation. Le motif est
+générique car l'adresse exacte de l'application n'est pas publiée ; le script
+contrôle l'origine à l'exécution et reste inactif ailleurs. Lecture seule, aucune
+écriture dans la page.
+```
+
+> L'origine exacte de l'application n'est volontairement reproduite nulle part ici : c'est un
+> domaine de production, que la section « Confidentialité » de `../CLAUDE.md` interdit de
+> versionner. Elle n'est d'ailleurs demandée par aucun des deux formulaires.
+
+### Code distant
+
+Répondre **non**. Vérifiable dans le paquet : aucun `eval()`, aucune `new Function()`, aucun
+import dynamique, aucun `<script src>` externe, et une CSP `script-src 'self'` qui refuserait
+tout script distant. Les appels réseau ramènent des **données** (JSON de configuration OIDC,
+réponse DNS, `/api/me`), jamais du code — c'est la distinction que fait Google.
+
+### Attendez-vous à un examen approfondi
+
+Déclarer un accès à un hôte déclenche systématiquement une relecture manuelle et allonge le
+délai de publication de quelques jours. C'est normal, il n'y a rien à corriger.
 
 ---
 
