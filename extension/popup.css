@@ -270,6 +270,15 @@ body{
 }
 .tp-recent-item:hover{border-color:var(--blue);background:var(--row)}
 
+/* ───── Interrupteur du panneau Dynamics ───── */
+.tp-optin{margin-top:12px;padding-top:9px;border-top:1px solid var(--border)}
+.tp-optin-row{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
+.tp-optin-row input{margin:2px 0 0;flex:none;cursor:pointer}
+.tp-optin-row input:disabled{cursor:not-allowed}
+.tp-optin-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.tp-optin-title{font-size:var(--text-xs);font-weight:600;color:var(--text)}
+.tp-optin-sub{font-size:10px;color:var(--soft);line-height:1.35}
+
 /* ───── Pied ───── */
 .tp-foot{margin-top:12px;padding-top:9px;border-top:1px solid var(--border)}
 .tp-foot-link{

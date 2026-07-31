@@ -7,13 +7,10 @@
    La config des tuiles et des raccourcis vient de tp-core.js.
    ────────────────────────────────────────────────────────────────────────────── */
 
-const MIRROR_KEY = 'tp_mirror_v1';
+/* MIRROR_KEY, authState(), MESSAGES_AUTH et les lookup* viennent de tp-client.js,
+   partagé avec le script de contenu du panneau Dynamics. */
 const POPUP_STATE_KEY = 'tp_popup_v1';
-
-/* Durée de validité de l'attestation d'appartenance produite par sync.js à partir de
-   /api/me. Passé ce délai, il faut rouvrir l'application — donc repasser par
-   l'authentification Entra — pour réactiver l'extension. */
-const AUTH_MAX_AGE_MS = 7 * 24 * 3600 * 1000; // 7 jours
+const D365_ORIGINS = ['https://*.dynamics.com/*'];
 
 /* État courant de la popup (équivalent réduit de currentState dans tenantpulse.js). */
 let mirror = { profile: null, history: [], historyEnabled: false, adminAccounts: {}, auth: null, syncedAt: null };
@@ -26,30 +23,6 @@ const storageGet = (key) => new Promise(resolve => {
 });
 const storageSet = (obj) => { try { chrome.storage.local.set(obj); } catch {} };
 
-/* ── Réseau : délégué au service worker ──
-   La popup n'émet aucun fetch elle-même. Les appels vivent dans tp-net.js, chargé
-   par background.js, pour que le panneau injecté dans une page tierce puisse les
-   réutiliser : un fetch parti d'un script de contenu porte l'origine de la page
-   hôte, donc son CORS et sa CSP.
-
-   Un échec (réseau, worker indisponible, message perdu) rend null, exactement comme
-   le faisait un fetch en échec avant ce découpage — l'appelant n'a rien à changer. */
-function askLookup(kind, value) {
-  return new Promise(resolve => {
-    try {
-      chrome.runtime.sendMessage({ type: 'tp-lookup', kind, value }, res => {
-        // lastError doit être lu, sinon Chromium journalise une erreur non traitée.
-        if (chrome.runtime.lastError || !res || !res.ok) { resolve(null); return; }
-        resolve(res.data);
-      });
-    } catch { resolve(null); }
-  });
-}
-
-const lookupByDomain = domain   => askLookup('domain', domain);
-const lookupById     = tenantId => askLookup('id', tenantId);
-const lookupSpTenant = domain   => askLookup('spTenant', domain);
-
 /* Domaine associé à un Tenant ID : uniquement l'historique du miroir.
    L'annuaire partagé (/api/classification) est hors d'atteinte depuis l'extension —
    le cookie d'authentification SWA n'est pas envoyé sur une requête inter-site. */
@@ -58,34 +31,6 @@ function resolveDomainFromMirror(tenantId) {
   const hit = (mirror.history || []).find(i => i && i.tenantId && i.tenantId.toLowerCase() === t);
   return (hit && hit.domain) ? hit.domain : null;
 }
-
-// ── Attestation d'appartenance ──
-/* L'extension ne cherche rien sans preuve que l'utilisateur appartient à
-   l'organisation. Cette preuve vient de sync.js, qui appelle /api/me sur l'origine de
-   l'application — requête vérifiée par le serveur, derrière l'authentification Entra.
-   Quelqu'un d'extérieur ne peut pas ouvrir l'application, n'obtient donc aucune
-   attestation, et se retrouve avec une extension inerte.
-
-   Portée de ce garde-fou, sans illusion : il empêche l'usage opportuniste et rend une
-   copie égarée inutile. Il n'arrête pas quelqu'un qui modifierait le code — mais cette
-   personne n'obtiendrait alors que ce que des endpoints publics donnent déjà à tous,
-   les données de l'organisation restant derrière l'API authentifiée. */
-function authState() {
-  const a = mirror.auth;
-  if (!a || !a.authenticatedAt) return { ok: false, raison: 'absente' };
-  if (a.blocked) return { ok: false, raison: 'bloque' };
-  const t = Date.parse(a.authenticatedAt);
-  if (!Number.isFinite(t)) return { ok: false, raison: 'absente' };
-  const age = Date.now() - t;
-  if (age > AUTH_MAX_AGE_MS) return { ok: false, raison: 'perimee', depuis: t };
-  return { ok: true, role: a.role || 'user' };
-}
-
-const MESSAGES_AUTH = {
-  absente: "Extension verrouillée : ouvrez TenantPulse et connectez-vous une fois pour l'activer.",
-  perimee: "Accès expiré : rouvrez TenantPulse pour vous réauthentifier et réactiver l'extension.",
-  bloque:  "Votre compte est bloqué dans TenantPulse. Contactez l'équipe support.",
-};
 
 // ── Helpers d'interface ──
 const el = (id) => document.getElementById(id);
@@ -372,7 +317,7 @@ async function runSearch(rawValue) {
   if (!raw) { showError('Veuillez entrer un domaine, une adresse e-mail ou un Tenant ID.'); return; }
 
   // Verrou d'appartenance : aucune requête réseau n'est émise sans attestation valide.
-  const auth = authState();
+  const auth = authState(mirror.auth);
   if (!auth.ok) { showError(MESSAGES_AUTH[auth.raison]); return; }
 
   storageSet({ [POPUP_STATE_KEY]: { lastQuery: raw } });
@@ -467,6 +412,51 @@ function updateEndpointPreview() {
   preview.appendChild(document.createTextNode('/.well-known/openid-configuration'));
 }
 
+/* ── Interrupteur du panneau Dynamics ──
+   L'accès à Dynamics est une permission OPTIONNELLE : tant qu'elle n'est pas accordée,
+   l'extension n'est injectée sur aucune page Dynamics. chrome.permissions.request()
+   exige un geste de l'utilisateur — d'où cette case à cocher plutôt qu'un octroi
+   silencieux au premier lancement. */
+const D365_SUB_DEFAUT = 'Affiche le Tenant ID du client sur la fiche incident.';
+
+async function initD365Toggle() {
+  const box = el('d365Optin');
+  const cb = el('d365Toggle');
+  const sub = el('d365OptinSub');
+
+  // Sans instance configurée, le garde-fou d'origine du script de contenu bloquerait tout.
+  if (typeof TP_D365_ORIGIN !== 'string' || !TP_D365_ORIGIN) {
+    cb.disabled = true;
+    sub.textContent = "Instance Dynamics non configurée — renseignez « d365Origin » dans local-config.json.";
+    box.hidden = false;
+    return;
+  }
+
+  try { cb.checked = await chrome.permissions.contains({ origins: D365_ORIGINS }); } catch {}
+  if (cb.checked) sub.textContent = 'Actif sur votre instance Dynamics.';
+  box.hidden = false;
+
+  cb.addEventListener('change', async () => {
+    const voulu = cb.checked;
+    try {
+      if (voulu) {
+        cb.checked = await chrome.permissions.request({ origins: D365_ORIGINS });
+      } else {
+        await chrome.permissions.remove({ origins: D365_ORIGINS });
+        cb.checked = await chrome.permissions.contains({ origins: D365_ORIGINS });
+      }
+    } catch { cb.checked = !voulu; }
+
+    /* permissions.onAdded / onRemoved réveille déjà le service worker : ce message ne
+       sert qu'à ne pas dépendre du seul ordonnancement des événements. */
+    try { chrome.runtime.sendMessage({ type: 'tp-d365-sync' }, () => void chrome.runtime.lastError); } catch {}
+
+    sub.textContent = cb.checked
+      ? "Actif — rechargez l'onglet Dynamics pour l'appliquer."
+      : D365_SUB_DEFAUT;
+  });
+}
+
 /* Signale le thème courant, que background.js applique à l'icône de la barre d'outils.
    La popup et le script de contenu sont les seuls contextes de l'extension à disposer
    de matchMedia — un service worker n'en a pas. */
@@ -508,7 +498,7 @@ async function init() {
   el('openAppLink').href = `${TP_APP_ORIGIN}/`;
   setDeepLink(null);
 
-  const auth = authState();
+  const auth = authState(mirror.auth);
   const banner = el('mirrorBanner');
   if (!auth.ok) {
     // Extension verrouillée : on neutralise la saisie et on n'affiche pas l'historique.
@@ -525,6 +515,7 @@ async function init() {
 
   reportTheme();
   if (auth.ok) renderRecent();
+  initD365Toggle();
   bindEvents();
 
   const last = stored[POPUP_STATE_KEY];

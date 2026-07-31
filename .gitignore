@@ -37,3 +37,4 @@ extension/dist/
 # et les URL d'hébergement avec leur jeton SAS. Voir local-config.example.json.
 extension/local-config.json
 extension/app-origin.js
+extension/d365-origin.js

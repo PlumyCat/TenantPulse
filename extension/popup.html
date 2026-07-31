@@ -36,6 +36,16 @@
   <div class="tp-recent-list" id="recentList"></div>
 </section>
 
+<section class="tp-optin" id="d365Optin" hidden>
+  <label class="tp-optin-row" for="d365Toggle">
+    <input type="checkbox" id="d365Toggle">
+    <span class="tp-optin-text">
+      <span class="tp-optin-title">Panneau dans Dynamics 365</span>
+      <span class="tp-optin-sub" id="d365OptinSub">Affiche le Tenant ID du client sur la fiche incident.</span>
+    </span>
+  </label>
+</section>
+
 <footer class="tp-foot">
   <a class="tp-foot-link" id="deepLink" href="#" target="_blank" rel="noopener noreferrer">
     Analyse approfondie (DNS · santé · hébergeur) ↗
@@ -43,7 +53,9 @@
 </footer>
 
 <script src="app-origin.js"></script>
+<script src="d365-origin.js"></script>
 <script src="tp-core.js"></script>
+<script src="tp-client.js"></script>
 <script src="popup.js"></script>
 </body>
 </html>

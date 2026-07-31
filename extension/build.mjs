@@ -31,11 +31,16 @@ const DIST = join(EXT_DIR, 'dist');
    d'hébergement du CRX (jeton SAS compris). Voir local-config.example.json. */
 const CONFIG_PATH = join(EXT_DIR, 'local-config.json');
 const ORIGIN_FILE = join(EXT_DIR, 'app-origin.js');
+const D365_ORIGIN_FILE = join(EXT_DIR, 'd365-origin.js');
 
 /* Fichiers embarqués dans les paquets : liste explicite, pour ne jamais expédier
    le script de build, la documentation interne ou les artefacts précédents. */
-const RUNTIME_FILES = ['manifest.json', 'popup.html', 'popup.css', 'popup.js', 'tp-core.js', 'tp-net.js', 'sync.js', 'background.js', 'app-origin.js'];
-const RUNTIME_DIRS  = ['assets'];
+const RUNTIME_FILES = [
+  'manifest.json', 'popup.html', 'popup.css', 'popup.js',
+  'tp-core.js', 'tp-net.js', 'tp-client.js',
+  'sync.js', 'background.js', 'app-origin.js', 'd365-origin.js',
+];
+const RUNTIME_DIRS  = ['assets', 'd365'];
 
 function loadConfig() {
   if (!existsSync(CONFIG_PATH)) {
@@ -57,7 +62,23 @@ function loadConfig() {
     console.error(`« appOrigin » (${origin}) n'est pas un hôte *.azurestaticapps.net : le motif « matches » du manifest ne l'atteindrait pas.`);
     process.exit(1);
   }
-  return { ...cfg, appOrigin: origin };
+  /* Instance Dynamics : facultative. Absente, le panneau reste inerte et la popup
+     l'annonce — le reste de l'extension fonctionne normalement. */
+  const d365 = (cfg.d365Origin || '').replace(/\/+$/, '');
+  if (d365) {
+    if (!/^https:\/\/[^/\s]+$/.test(d365)) {
+      console.error("« d365Origin » doit être une origine https sans chemin, par exemple https://contoso.crm4.dynamics.com");
+      process.exit(1);
+    }
+    /* Le manifest cible « https://*.dynamics.com/* » : hors de ce domaine, la
+       permission optionnelle ne couvrirait pas l'instance et rien ne serait injecté. */
+    if (!/\.dynamics\.com$/.test(new URL(d365).hostname)) {
+      console.error(`« d365Origin » (${d365}) n'est pas un hôte *.dynamics.com : la permission optionnelle du manifest ne l'atteindrait pas.`);
+      process.exit(1);
+    }
+  }
+
+  return { ...cfg, appOrigin: origin, d365Origin: d365 || null };
 }
 
 /* Écrit app-origin.js — la seule définition de TP_APP_ORIGIN, hors dépôt.
@@ -68,6 +89,17 @@ function writeOriginFile(path, origin) {
     + "   Origine de l'application TenantPulse : garde-fou du script de contenu,\n"
     + "   appel /api/me et lien d'analyse approfondie. */\n"
     + `const TP_APP_ORIGIN = ${JSON.stringify(origin)};\n`, 'utf8');
+}
+
+/* Écrit d365-origin.js — origine de l'instance Dynamics, hors dépôt elle aussi.
+   Le fichier est toujours produit, même sans instance configurée : la popup et le
+   script de contenu le chargent inconditionnellement, et `null` les rend inertes. */
+function writeD365OriginFile(path, origin) {
+  writeFileSync(path,
+    '/* Généré par build.mjs depuis local-config.json — ne pas versionner.\n'
+    + "   Origine de l'instance Dynamics : garde-fou du script de contenu, dont le\n"
+    + "   « matches » ne peut être qu'un joker (*.dynamics.com couvre le monde entier). */\n"
+    + `const TP_D365_ORIGIN = ${JSON.stringify(origin)};\n`, 'utf8');
 }
 
 // ── Arguments ──
@@ -275,6 +307,10 @@ const config = loadConfig();
 /* app-origin.js est écrit aussi dans extension/ : c'est ce qui rend le dossier source
    chargeable directement en mode développeur, sans passer par dist/. */
 writeOriginFile(ORIGIN_FILE, config.appOrigin);
+writeD365OriginFile(D365_ORIGIN_FILE, config.d365Origin);
+if (!config.d365Origin) {
+  console.log("« d365Origin » absent de local-config.json : le panneau Dynamics restera inactif.");
+}
 
 mkdirSync(DIST, { recursive: true });
 const results = [];

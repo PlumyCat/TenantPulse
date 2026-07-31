@@ -42,6 +42,14 @@ SharePoint.
 pour vérifier que l'utilisateur appartient bien à l'organisation. Cet appel n'a lieu que sur
 l'origine de l'application, et uniquement lorsque l'utilisateur la visite.
 
+**L'instance Dynamics 365 de l'organisation**, si et seulement si l'utilisateur a activé le
+panneau Dynamics — une permission **optionnelle**, refusée par défaut. L'extension y lit alors,
+en même origine et via l'API OData officielle, le site web et l'adresse de contact du client de
+la fiche ouverte, afin d'en déduire un domaine. Cette lecture s'effectue avec les droits propres
+de l'utilisateur : elle ne donne accès à rien qu'il ne puisse déjà consulter à l'écran. Les noms
+et adresses lus servent au seul calcul du domaine — ils ne sont ni conservés, ni journalisés, ni
+transmis. Seul le domaine obtenu part ensuite vers les endpoints publics décrits plus haut.
+
 Aucune de ces requêtes ne transporte d'identifiant personnel ajouté par l'extension.
 
 ---
@@ -53,9 +61,10 @@ Aucune de ces requêtes ne transporte d'identifiant personnel ajouté par l'exte
 - Elle ne contient **ni analytique, ni télémétrie, ni traceur, ni publicité**.
 - Elle ne lit **pas** l'historique de navigation, les onglets ouverts, les identifiants
   enregistrés ni le contenu des pages visitées.
-- Elle ne s'exécute sur **aucun** site en dehors de l'application TenantPulse elle-même. Le
-  motif déclaré dans son manifeste est générique, mais le script vérifie l'origine à l'exécution
-  et reste inactif partout ailleurs.
+- Elle ne s'exécute que sur **deux** origines : l'application TenantPulse, et — uniquement si
+  l'utilisateur a accordé la permission optionnelle — l'instance Dynamics 365 de l'organisation.
+  Les motifs déclarés dans son manifeste sont génériques, mais les scripts vérifient l'origine à
+  l'exécution et restent inactifs partout ailleurs.
 - Elle n'écrit **jamais** dans les pages web.
 - Elle ne charge **aucun** code distant : tout le code est inclus dans le paquet publié.
 - Elle ne crée aucun compte et ne demande aucun mot de passe.
@@ -100,10 +109,17 @@ DNS-over-HTTPS service (`cloudflare-dns.com`) for a single CNAME lookup used to 
 SharePoint admin URL; and a same-origin `/api/me` call to the companion application to verify
 organisation membership.
 
+**Dynamics 365 panel** — an **optional** permission, denied by default. Once granted, the
+extension reads the open case's customer website and contact address from the organisation's own
+Dynamics instance, same-origin, through the official OData API and with the user's own
+permissions. Those values are used solely to derive a domain; they are never stored, logged or
+transmitted. Only the resulting domain reaches the public endpoints described above.
+
 **Never done**: no data is sent to the extension author; nothing is sold, rented or shared with
 third parties; no analytics, telemetry, tracking or advertising; no reading of browsing history,
-open tabs, stored credentials or visited page content; no execution on any site other than the
-companion application; no writing into web pages; no remote code.
+open tabs, stored credentials or visited page content; no execution on any origin other than the
+companion application and — with explicit permission — the organisation's Dynamics instance; no
+writing into web pages; no remote code.
 
 **Deletion**: uninstalling the extension removes all of its stored data.
 

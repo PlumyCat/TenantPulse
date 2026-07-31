@@ -22,8 +22,11 @@ l'application TenantPulse.
 | `popup.js` | Recherche, rendu des tuiles et des raccourcis, verrou d'appartenance |
 | `tp-core.js` | Config et helpers **copiés** de `../tenantpulse.js` |
 | `tp-net.js` | Résolution du Tenant ID — les seuls appels réseau, portés par le service worker |
-| `background.js` | Service worker : routeur des résolutions + icône de la barre d'outils |
+| `tp-client.js` | Plomberie commune popup / scripts de contenu : verrou d'appartenance, pont vers le worker |
+| `background.js` | Service worker : routeur des résolutions, enregistrement des scripts Dynamics, icône |
 | `sync.js` | Script de contenu : miroir du profil + attestation d'appartenance |
+| `d365/ctx-main.js` | Monde `MAIN` : lit l'enregistrement affiché via les API client de Dynamics |
+| `d365/ctx.js` | Monde isolé : domaine du client (Dataverse) puis Tenant ID |
 | `assets/` | Sous-ensemble des icônes de `../assets` |
 | `build.mjs` | Génère les paquets de distribution |
 | `local-config.example.json` | Modèle de la configuration locale à créer |
@@ -266,8 +269,10 @@ script de contenu n'est réinjecté qu'au rechargement des onglets de l'applicat
 | Permission | Raison |
 |---|---|
 | `storage` | Conserver le miroir du profil, l'attestation d'appartenance et la dernière recherche |
+| `scripting` | Enregistrer les scripts du panneau Dynamics **après** octroi de la permission optionnelle |
 | `https://login.microsoftonline.com/*` | Endpoint OIDC public — détection et validation du Tenant ID |
 | `https://cloudflare-dns.com/*` | Une requête DoH ciblée (CNAME DKIM `selector1`) pour le lien SharePoint direct |
+| `https://*.dynamics.com/*` **(optionnelle)** | Panneau dans Dynamics 365 — non demandée à l'installation |
 
 Ni `tabs`, ni `scripting`, ni `activeTab`, ni `<all_urls>` : les raccourcis sont de simples liens
 `target="_blank"`, qui ne demandent aucune permission. L'origine de l'application n'est pas dans
@@ -289,6 +294,49 @@ de la page hôte : il est donc soumis au CORS et à la politique de sécurité d
 Depuis le service worker, ce sont les `host_permissions` du manifest qui s'appliquent, et l'appel
 aboutit quelle que soit la page à l'origine de la demande. Tout contexte de l'extension partage
 ainsi une seule implémentation, et un seul endroit liste les endpoints publics interrogés.
+
+## Panneau Dynamics 365
+
+Affiche le Tenant ID du client directement sur la fiche incident, sans aucun droit de
+personnalisation sur l'environnement : tout se passe côté navigateur.
+
+**L'accès est optionnel.** `https://*.dynamics.com/*` est déclaré en
+`optional_host_permissions` : rien n'est demandé à l'installation, et tant que l'interrupteur
+« Panneau dans Dynamics 365 » de la popup n'est pas coché, l'extension n'est injectée sur aucune
+page Dynamics. `background.js` enregistre les scripts (`chrome.scripting.registerContentScripts`)
+à l'octroi de la permission et les retire à son retrait.
+
+**Deux mondes, deux rôles.** `d365/ctx-main.js` est injecté en monde `MAIN`, donc dans le contexte
+JavaScript de Dynamics : c'est la seule façon d'atteindre les API client (`Xrm`, `Microsoft.Apm`),
+invisibles depuis un monde isolé. Il ne fait que publier l'identité de l'enregistrement affiché.
+`d365/ctx.js`, isolé, porte les garde-fous et la logique.
+
+**Trois garde-fous, dans cet ordre :**
+
+1. **origine exacte** — le `matches` d'un script de contenu ne peut être qu'un joker, et
+   `*.dynamics.com` couvre toutes les organisations du monde. `d365-origin.js` (généré hors dépôt
+   depuis `d365Origin`) restreint l'exécution réelle à la seule instance configurée ;
+2. **attestation d'appartenance** — la même que pour la popup, aucune requête sans elle ;
+3. **droits de l'utilisateur** — la lecture Dataverse (`/api/data/v9.2/`, même origine, cookie de
+   session) passe par l'API OData officielle : elle refuse ce que l'utilisateur n'a pas le droit
+   de voir. Aucune personnalisation, aucun privilège supplémentaire.
+
+**Domaine du client**, par ordre de fiabilité : site web du compte → domaine de l'adresse du
+contact principal → adresse du compte. Les domaines de comptes personnels Microsoft sont écartés.
+Le résultat est mis en cache par enregistrement, donc une session rouverte ne redéclenche rien.
+
+**Sessions Omnicanal.** Chaque session vit dans une iframe : les scripts sont injectés dans toutes
+les frames, et chacune signale si elle est visible (une session en arrière-plan est masquée, son
+viewport mesure 0). Seule la frame visible déclenche une résolution.
+
+**Coût sur Omnicanal.** Pas de `MutationObserver` — un observateur large sur le DOM de Dynamics est
+la façon classique de plomber la page. Le seul travail périodique est une lecture d'objet en mémoire
+toutes les secondes, suspendue dès que l'onglet passe en arrière-plan. Elle est conservée même quand
+les événements `Microsoft.Apm` sont disponibles : ouvrir un autre enregistrement **dans** un onglet
+de session déjà ouvert ne déclenche ni bascule de session ni navigation d'onglet.
+
+`minimum_chrome_version` est passé à **111** : c'est la version qui introduit `world: "MAIN"` pour
+les scripts enregistrés à l'exécution.
 
 ### Icône adaptée au thème
 

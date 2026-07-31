@@ -3,8 +3,8 @@
   "name": "TenantPulse — Tenant ID & raccourcis",
   "short_name": "TenantPulse",
   "description": "Recherche Tenant ID Microsoft 365 d'un domaine et reconstruction des liens vers les centres admin M365",
-  "version": "0.1.0",
-  "minimum_chrome_version": "102",
+  "version": "0.2.0",
+  "minimum_chrome_version": "111",
   "action": {
     "default_title": "TenantPulse — Tenant ID & raccourcis",
     "default_popup": "popup.html",
@@ -24,11 +24,12 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "scripting"],
   "host_permissions": [
     "https://login.microsoftonline.com/*",
     "https://cloudflare-dns.com/*"
   ],
+  "optional_host_permissions": ["https://*.dynamics.com/*"],
   "content_scripts": [
     {
       "matches": ["https://*.azurestaticapps.net/*"],

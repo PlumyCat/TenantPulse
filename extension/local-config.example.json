@@ -4,6 +4,9 @@
   "_appOrigin": "Origine de l'application TenantPulse, sans barre oblique finale. Injectée dans app-origin.js à la construction ; sert au script de contenu (garde-fou d'origine, appel /api/me) et au lien d'analyse approfondie.",
   "appOrigin": "https://<votre-app>.azurestaticapps.net",
 
+  "_d365Origin": "Facultatif. Origine de l'instance Dynamics 365, sans barre oblique finale. Injectée dans d365-origin.js à la construction : le manifest ne peut cibler qu'un joker *.dynamics.com, cette valeur restreint l'injection à votre seule organisation. Absente, le panneau Dynamics reste inactif.",
+  "d365Origin": "https://<votre-org>.crm4.dynamics.com",
+
   "_updateUrl": "URL du manifeste de mise à jour, jeton SAS compris. Inscrite dans le manifest de la variante auto-hébergée et interrogée anonymement par le navigateur. Doit rester stable d'une version à l'autre.",
   "updateUrl": "https://<compte>.blob.core.windows.net/<conteneur>/updates.xml?<jeton-sas>",
 

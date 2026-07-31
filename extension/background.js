@@ -35,15 +35,84 @@ const LOOKUPS = {
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (!msg || msg.type !== 'tp-lookup') return false;
-  const run = LOOKUPS[msg.kind];
-  if (!run) { sendResponse({ ok: false }); return false; }
-  Promise.resolve()
-    .then(() => run(msg.value))
-    .then(data => sendResponse({ ok: true, data: data === undefined ? null : data }))
-    .catch(() => sendResponse({ ok: false }));
-  return true; // réponse asynchrone : le canal reste ouvert
+  if (!msg) return false;
+
+  if (msg.type === 'tp-lookup') {
+    const run = LOOKUPS[msg.kind];
+    if (!run) { sendResponse({ ok: false }); return false; }
+    Promise.resolve()
+      .then(() => run(msg.value))
+      .then(data => sendResponse({ ok: true, data: data === undefined ? null : data }))
+      .catch(() => sendResponse({ ok: false }));
+    return true; // réponse asynchrone : le canal reste ouvert
+  }
+
+  if (msg.type === 'tp-d365-sync') {
+    syncD365Scripts().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
+    return true;
+  }
+
+  return false;
 });
+
+/* ── Panneau Dynamics : enregistrement conditionnel des scripts de contenu ──
+   L'accès à Dynamics est une permission OPTIONNELLE : tant que l'utilisateur ne
+   l'accorde pas depuis la popup, rien n'est injecté et l'extension ne voit aucune
+   page Dynamics. Les scripts ne peuvent donc pas être déclarés statiquement dans le
+   manifest — ils sont enregistrés ici, à l'exécution, une fois la permission obtenue.
+
+   ctx-main.js va dans le monde « MAIN » pour atteindre les API client de Dynamics
+   (Xrm, Microsoft.Apm), invisibles depuis un monde isolé. Il n'a aucune permission
+   d'extension et ne peut rien faire d'autre que poster un message à ctx.js, qui lui
+   reste isolé et porte tous les garde-fous. */
+const D365_ORIGIN_PATTERN = 'https://*.dynamics.com/*';
+
+const D365_SCRIPTS = [
+  {
+    id: 'tp-d365-main',
+    matches: [D365_ORIGIN_PATTERN],
+    js: ['d365/ctx-main.js'],
+    world: 'MAIN',
+    allFrames: true,
+    runAt: 'document_idle',
+  },
+  {
+    id: 'tp-d365',
+    matches: [D365_ORIGIN_PATTERN],
+    js: ['d365-origin.js', 'tp-core.js', 'tp-client.js', 'd365/ctx.js'],
+    world: 'ISOLATED',
+    allFrames: true,
+    runAt: 'document_idle',
+  },
+];
+
+const D365_SCRIPT_IDS = D365_SCRIPTS.map(s => s.id);
+
+/* Aligne l'état d'enregistrement sur l'état de la permission. Idempotent : appelable
+   au démarrage, à l'installation, et à chaque octroi ou retrait. */
+async function syncD365Scripts() {
+  let granted = false;
+  try { granted = await chrome.permissions.contains({ origins: [D365_ORIGIN_PATTERN] }); } catch { return; }
+
+  let existing = [];
+  try { existing = await chrome.scripting.getRegisteredContentScripts({ ids: D365_SCRIPT_IDS }); } catch {}
+
+  try {
+    if (!granted) {
+      if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing.map(s => s.id) });
+      return;
+    }
+    // Ré-enregistrement complet : une définition modifiée par une mise à jour de
+    // l'extension doit remplacer celle qui persiste depuis la session précédente.
+    if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing.map(s => s.id) });
+    await chrome.scripting.registerContentScripts(D365_SCRIPTS);
+  } catch { /* enregistrement impossible : le panneau reste simplement absent */ }
+}
+
+chrome.runtime.onInstalled.addListener(syncD365Scripts);
+chrome.runtime.onStartup.addListener(syncD365Scripts);
+chrome.permissions.onAdded.addListener(syncD365Scripts);
+chrome.permissions.onRemoved.addListener(syncD365Scripts);
 
 const THEME_KEY = 'tp_theme_v1';
 
