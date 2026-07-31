@@ -34,7 +34,7 @@ const LOOKUPS = {
   spTenant: value => lookupSpTenant(value),
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return false;
 
   if (msg.type === 'tp-lookup') {
@@ -45,6 +45,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .then(data => sendResponse({ ok: true, data: data === undefined ? null : data }))
       .catch(() => sendResponse({ ok: false }));
     return true; // réponse asynchrone : le canal reste ouvert
+  }
+
+  /* Relais entre frames d'un même onglet : deux scripts de contenu ne peuvent pas se
+     parler directement, et le panneau (frame principale) n'est pas toujours dans la
+     frame qui détient l'enregistrement (une session Omnicanal a la sienne).
+
+       tp-d365-etat   → frame 0 seule : l'état à afficher.
+       tp-d365-manuel → toutes les frames : le domaine corrigé ; seule la frame
+                        propriétaire de l'enregistrement y réagit. */
+  if (msg.type === 'tp-d365-etat' || msg.type === 'tp-d365-manuel') {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (typeof tabId === 'number') {
+      // « options » omis plutôt que passé à undefined : la signature de sendMessage
+      // n'accepte pas la valeur, seulement l'absence de l'argument.
+      const suite = () => void chrome.runtime.lastError;
+      try {
+        if (msg.type === 'tp-d365-etat') chrome.tabs.sendMessage(tabId, msg, { frameId: 0 }, suite);
+        else chrome.tabs.sendMessage(tabId, msg, suite);
+      } catch {}
+    }
+    return false;
   }
 
   if (msg.type === 'tp-d365-sync') {
@@ -79,7 +100,7 @@ const D365_SCRIPTS = [
   {
     id: 'tp-d365',
     matches: [D365_ORIGIN_PATTERN],
-    js: ['d365-origin.js', 'tp-core.js', 'tp-client.js', 'd365/ctx.js'],
+    js: ['d365-origin.js', 'tp-core.js', 'tp-client.js', 'd365/panel.js', 'd365/ctx.js'],
     world: 'ISOLATED',
     allFrames: true,
     runAt: 'document_idle',

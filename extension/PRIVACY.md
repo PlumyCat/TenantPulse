@@ -19,6 +19,9 @@ Elles ne sont transmises à aucun serveur de l'auteur, et l'auteur n'y a aucun a
 | Attestation d'appartenance | Réponse du point de terminaison `/api/me` de l'application | Déverrouiller l'extension. Se limite à une date, un rôle et un indicateur de blocage — **jamais l'adresse e-mail, jamais le nom** |
 | Dernière recherche saisie | Saisie de l'utilisateur | La restituer à la réouverture de la fenêtre |
 | Thème clair ou sombre | Réglage du système | Adapter l'icône de la barre d'outils |
+| Domaines corrigés à la main | Saisie de l'utilisateur dans le panneau Dynamics | Retenir le domaine d'un client dont la fiche n'en donne aucun, pour ne pas le ressaisir. Associé à l'identifiant technique du compte — **jamais à son nom** |
+| Panneau replié ou déplié | Geste de l'utilisateur | Restituer le panneau dans l'état où il a été laissé |
+| Dernier signe de vie du panneau | Fonctionnement interne | Diagnostic affiché dans la fenêtre de l'extension : un horodatage et un statut, **jamais un domaine, un identifiant ni un nom** |
 
 L'historique peut contenir des noms de domaine et les identifiants de tenant correspondants. Il
 n'est recopié que si l'utilisateur a explicitement activé l'historique dans l'application ; s'il
@@ -65,7 +68,10 @@ Aucune de ces requêtes ne transporte d'identifiant personnel ajouté par l'exte
   l'utilisateur a accordé la permission optionnelle — l'instance Dynamics 365 de l'organisation.
   Les motifs déclarés dans son manifeste sont génériques, mais les scripts vérifient l'origine à
   l'exécution et restent inactifs partout ailleurs.
-- Elle n'écrit **jamais** dans les pages web.
+- Elle n'écrit dans une page web que pour **afficher son propre panneau**, sur l'instance
+  Dynamics de l'organisation et seulement si l'utilisateur a accordé la permission optionnelle.
+  Ce panneau est isolé dans un Shadow DOM, superposé à la page : il ne modifie, ne remplit et
+  ne soumet **aucun** champ de Dynamics, et ne touche à aucune donnée du CRM.
 - Elle ne charge **aucun** code distant : tout le code est inclus dans le paquet publié.
 - Elle ne crée aucun compte et ne demande aucun mot de passe.
 
@@ -101,7 +107,10 @@ TenantPulse is an internal Microsoft 365 administration tool.
 **Stored locally, in the browser only** (`chrome.storage.local`): the shortcut profile and search
 history mirrored from the companion web application (history only when the user has enabled it
 there), a membership attestation limited to a timestamp, a role and a blocked flag — never an
-email address or a name — plus the last query typed and the current colour theme.
+email address or a name — plus the last query typed, the current colour theme, and, for the
+optional Dynamics panel, any domain the user corrected by hand (keyed by the account's technical
+identifier, never its name), the panel's collapsed state, and a timestamped status used for
+diagnostics.
 
 **Transmitted**, only on user action: the entered domain or tenant identifier to Microsoft's
 public OpenID Connect endpoint (`login.microsoftonline.com`); a domain name to Cloudflare's
@@ -119,7 +128,8 @@ transmitted. Only the resulting domain reaches the public endpoints described ab
 third parties; no analytics, telemetry, tracking or advertising; no reading of browsing history,
 open tabs, stored credentials or visited page content; no execution on any origin other than the
 companion application and — with explicit permission — the organisation's Dynamics instance; no
-writing into web pages; no remote code.
+remote code. The only thing ever written into a web page is the extension's own panel, isolated
+in a Shadow DOM and overlaid on the page: it never modifies, fills or submits a Dynamics field.
 
 **Deletion**: uninstalling the extension removes all of its stored data.
 

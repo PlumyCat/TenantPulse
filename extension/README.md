@@ -27,6 +27,7 @@ l'application TenantPulse.
 | `sync.js` | Script de contenu : miroir du profil + attestation d'appartenance |
 | `d365/ctx-main.js` | Monde `MAIN` : lit l'enregistrement affiché via les API client de Dynamics |
 | `d365/ctx.js` | Monde isolé : domaine du client (Dataverse) puis Tenant ID |
+| `d365/panel.js` / `panel.css` | Le panneau : Shadow DOM, ancrage sur la section, repli |
 | `assets/` | Sous-ensemble des icônes de `../assets` |
 | `build.mjs` | Génère les paquets de distribution |
 | `local-config.example.json` | Modèle de la configuration locale à créer |
@@ -337,6 +338,36 @@ de session déjà ouvert ne déclenche ni bascule de session ni navigation d'ong
 
 `minimum_chrome_version` est passé à **111** : c'est la version qui introduit `world: "MAIN"` pour
 les scripts enregistrés à l'exécution.
+
+### Le panneau
+
+Il se **superpose** à la section « Santé du client », il ne la remplace pas : le contrôle est rendu
+et re-rendu par le framework de Dynamics, tout nœud inséré dans son arbre finirait écrasé au
+premier cycle. Le panneau vit donc dans un élément attaché à `<body>`, en position fixe, calé sur
+le rectangle de la section — et repliable d'un clic, ce qui redonne la section visible en dessous.
+L'état replié est mémorisé.
+
+L'ancrage ne s'appuie sur aucun sélecteur interne de Dynamics : la section est repérée par le
+**texte de son titre**, puis on remonte jusqu'à un conteneur de taille plausible. Un identifiant
+interne survit rarement à une mise à jour, un libellé visible oui. Si aucun titre ne correspond
+après une douzaine de tentatives, le panneau bascule en **tiroir ancré à droite** — mieux vaut un
+placement approximatif qu'un panneau absent.
+
+Le suivi de position se fait par `ResizeObserver` sur la section, plus le redimensionnement et le
+défilement (en capture, car le défilement utile est celui des conteneurs internes de Dynamics et ne
+remonte pas jusqu'à `window`), le tout throttlé en `requestAnimationFrame`. Section masquée — une
+session en arrière-plan — et le panneau s'efface avec elle.
+
+Le contenu tient en trois choses : le domaine et sa provenance, le Tenant ID avec un bouton de
+copie, et l'indice de confiance. Quand la fiche ne donne aucun domaine exploitable, un champ de
+saisie prend le relais ; la valeur est **mémorisée par compte**, vaut pour tous ses incidents, et
+prime ensuite sur ce que dit Dataverse — c'est l'utilisateur qui a raison. Elle accepte aussi bien
+une URL complète qu'une adresse e-mail.
+
+Le panneau ne peut vivre que dans la frame principale, alors que l'enregistrement est détecté par
+la frame qui héberge `Xrm` — celle d'une session Omnicanal, le cas échéant. Deux scripts de contenu
+ne pouvant pas se parler directement, le service worker relaie : l'état vers la frame 0, la saisie
+manuelle vers toutes les frames, dont seule celle qui détient l'enregistrement concerné réagit.
 
 ### Icône adaptée au thème
 

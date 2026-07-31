@@ -1,0 +1,188 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+   d365/panel.css — feuille du panneau, chargée dans un Shadow DOM.
+
+   L'isolation joue dans les deux sens : rien de Dynamics n'entre, rien d'ici ne
+   fuit. Aucune variable n'est héritée de la page — tous les tokens sont redéfinis
+   ci-dessous, et le thème suit celui du système plutôt que celui de Dynamics, qui
+   n'est pas lisible depuis un monde isolé.
+   ────────────────────────────────────────────────────────────────────────────── */
+
+/* Le Shadow DOM empêche déjà les sélecteurs de Dynamics d'atteindre l'intérieur ;
+   restent les propriétés héritées (police, couleur, taille), que .tp redéfinit toutes.
+   Pas de « all: initial » ici : l'hôte est positionné en JavaScript, et une remise à
+   zéro générale entrerait en conflit avec ce positionnement. */
+:host {
+  display: block;
+  contain: layout style;
+}
+
+.tp {
+  font-size: 12px;
+  line-height: 1.4;
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --border: #e2e5ea;
+  --text: #1b1f27;
+  --soft: #626b7a;
+  --muted: #9aa3b0;
+  --blue: #2f5bd7;
+  --green: #1a7f4b;
+  --amber: #9a6a00;
+  --red: #b42318;
+
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(16, 24, 40, .12);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+}
+
+.tp *, .tp *::before, .tp *::after { box-sizing: border-box; }
+
+@media (prefers-color-scheme: dark) {
+  .tp {
+    --bg: #1e222a;
+    --surface: #262b34;
+    --border: #363c47;
+    --text: #eceef2;
+    --soft: #a7b0bd;
+    --muted: #78818f;
+    --blue: #7f9cf5;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  }
+}
+
+/* ── En-tête ── */
+.tp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.tp.est-replie .tp-head { border-bottom: none; }
+
+.tp-logo {
+  width: 18px; height: 18px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 9px; font-weight: 700; letter-spacing: .02em;
+}
+.tp-titre { font-size: 12px; font-weight: 600; flex: 1; min-width: 0; }
+.tp-bouton-replier {
+  flex: none;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--soft);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tp-bouton-replier:hover { background: var(--bg); border-color: var(--border); }
+.tp-bouton-replier:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+/* ── Corps ── */
+.tp-corps {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tp.est-replie .tp-corps { display: none; }
+
+.tp-domaine {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  font-size: 12px; font-weight: 600;
+  word-break: break-all;
+}
+.tp-source { font-size: 10px; font-weight: 400; color: var(--muted); }
+
+.tp-etiquette {
+  font-size: 9px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.tp-tenant {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+
+.tp-ligne { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.tp-copier {
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  padding: 4px 10px;
+  background: var(--blue); color: #fff;
+  border: none; border-radius: 5px; cursor: pointer;
+}
+.tp-copier:hover { filter: brightness(1.08); }
+.tp-copier:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.tp-confiance {
+  font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--soft);
+}
+.tp-confiance.haute { color: var(--green); }
+.tp-confiance.moyenne { color: var(--amber); }
+.tp-confiance.basse { color: var(--red); }
+
+.tp-message { font-size: 11px; line-height: 1.45; color: var(--soft); }
+.tp-message.alerte { color: var(--amber); }
+
+/* ── Saisie manuelle ── */
+.tp-saisie { display: flex; flex-direction: column; gap: 5px; }
+.tp-saisie-ligne { display: flex; gap: 6px; }
+.tp-champ {
+  flex: 1; min-width: 0;
+  font-family: inherit; font-size: 11px;
+  padding: 5px 8px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 5px;
+}
+.tp-champ:focus-visible { outline: 2px solid var(--blue); outline-offset: -1px; border-color: var(--blue); }
+.tp-valider {
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  padding: 5px 10px;
+  background: transparent; color: var(--blue);
+  border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+}
+.tp-valider:hover { border-color: var(--blue); }
+
+.tp-note { font-size: 10px; color: var(--muted); line-height: 1.4; }
+
+/* ── Attente ── */
+.tp-attente { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--soft); }
+.tp-rond {
+  width: 11px; height: 11px; flex: none;
+  border: 2px solid var(--border); border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: tp-tourne .8s linear infinite;
+}
+@keyframes tp-tourne { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tp-rond { animation: none; } }

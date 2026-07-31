@@ -25,6 +25,9 @@
   const CHANNEL = 'tp-d365-ctx';
   const API = '/api/data/v9.2/';
   const DIAG_KEY = 'tp_d365_diag_v1';
+  const MAP_KEY = 'tp_d365_map_v1';
+
+  const EST_PRINCIPALE = window.top === window;
 
   /* Signe de vie lu par la popup. Diagnostiquer par la console est peu fiable ici :
      Omnicanal en produit des centaines de lignes, la page vit dans des iframes, et
@@ -38,8 +41,66 @@
      redéclenche ni lecture Dataverse ni appel réseau. */
   const cache = new Map();
   let currentKey = null;
+  let dernierClient = null;   // { accountId, cle } du dernier enregistrement traité
 
   const log = (...args) => { try { console.info('[TenantPulse]', ...args); } catch {} };
+
+  /* Affichage. La frame qui héberge Xrm n'est pas forcément la frame principale : une
+     session Omnicanal a la sienne. Le panneau, lui, ne peut vivre qu'en haut — les
+     frames de session relaient donc leur état par le service worker, qui le renvoie à
+     la frame 0 du même onglet. */
+  function afficher(etat) {
+    if (EST_PRINCIPALE) { tpPanneau.rendre(etat); return; }
+    try {
+      chrome.runtime.sendMessage({ type: 'tp-d365-etat', etat }, () => void chrome.runtime.lastError);
+    } catch {}
+  }
+
+  /* Deux messages transitent par le service worker, faute de lien direct entre frames :
+       tp-d365-etat   — frame de session → frame principale : état à afficher ;
+       tp-d365-manuel — frame principale → toutes les frames : domaine corrigé, que
+                        seule la frame propriétaire de l'enregistrement traite. */
+  try {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (!msg) return false;
+      if (msg.type === 'tp-d365-etat' && EST_PRINCIPALE) tpPanneau.rendre(msg.etat);
+      if (msg.type === 'tp-d365-manuel') traiterSaisieManuelle(msg.saisi, msg.cle);
+      return false;
+    });
+  } catch {}
+
+  if (EST_PRINCIPALE) {
+    /* La saisie repart vers le service worker, qui la diffuse à toutes les frames de
+       l'onglet — y compris celle-ci. Un seul chemin, donc un seul traitement possible. */
+    tpPanneau.configurer({
+      surDomaineManuel: (saisi, cle) => {
+        try {
+          chrome.runtime.sendMessage({ type: 'tp-d365-manuel', saisi, cle }, () => void chrome.runtime.lastError);
+        } catch {}
+      },
+    });
+  }
+
+  // ── Domaines corrigés à la main, mémorisés par compte ──
+  /* Le champ « site web » d'un compte est souvent vide ou faux. Une correction saisie
+     dans le panneau vaut pour toutes les fiches du même client, et prime sur ce que
+     dit Dataverse — c'est l'utilisateur qui a raison. Stockage strictement local. */
+  function lireCorrections() {
+    return new Promise(resolve => {
+      try {
+        chrome.storage.local.get(MAP_KEY, res => {
+          if (chrome.runtime.lastError) { resolve({}); return; }
+          resolve((res && res[MAP_KEY]) || {});
+        });
+      } catch { resolve({}); }
+    });
+  }
+
+  async function enregistrerCorrection(cle, domaine) {
+    const map = await lireCorrections();
+    map[cle] = domaine;
+    try { chrome.storage.local.set({ [MAP_KEY]: map }); } catch {}
+  }
 
   // ── Lecture Dataverse (OData v4, même origine, droits de l'utilisateur) ──
   async function odata(path) {
@@ -120,12 +181,29 @@
   const READERS = { incident: readFromIncident, account: readFromAccount };
 
   // ── Enchaînement : enregistrement → domaine → Tenant ID ──
+
+  /* Domaine → Tenant ID. Isolé parce qu'une correction manuelle rejoue exactement
+     cette moitié, sans repasser par Dataverse. */
+  async function resoudreDomaine(cle, domaine, source) {
+    afficher({ statut: 'recherche', domaine, source, message: 'Résolution du Tenant ID…' });
+
+    const ms = await lookupByDomain(domaine);            // tp-client.js → service worker
+    const etat = ms
+      ? { statut: 'resolu', cle, domaine, source, tenantId: ms.tenantId, confiance: computeConfidence(ms) }
+      : { statut: 'sans-tenant', cle, domaine, source };
+
+    cache.set(cle, etat);
+    noter(ms ? 'Tenant ID résolu' : 'domaine trouvé, aucun tenant');
+    log('contexte résolu', etat);
+    afficher(etat);
+  }
+
   async function resolve(record) {
     const key = record.entityName + ':' + record.entityId;
     if (key === currentKey) return;
     currentKey = key;
 
-    if (cache.has(key)) { log('contexte (déjà résolu)', cache.get(key)); return; }
+    if (cache.has(key)) { afficher(cache.get(key)); return; }
 
     const reader = READERS[record.entityName];
     noter('enregistrement détecté : ' + record.entityName);
@@ -134,29 +212,83 @@
 
     // Verrou d'appartenance : rien n'est émis sans attestation valide.
     const auth = authState(await readAuthFromMirror());   // tp-client.js
-    if (!auth.ok) { noter('verrouillé (' + auth.raison + ')'); log('verrouillé —', MESSAGES_AUTH[auth.raison]); return; }
-
-    const client = await reader(record.entityId);
-    if (!client) { noter('lecture Dataverse refusée ou vide'); log('lecture Dataverse sans résultat pour', key); return; }
-    if (!client.domain) {
-      noter('aucun domaine exploitable sur la fiche');
-      const res = { entite: key, domaine: null, motif: 'aucun site web ni adresse exploitable' };
-      cache.set(key, res);
-      log('contexte non résolu', res);
+    if (!auth.ok) {
+      noter('verrouillé (' + auth.raison + ')');
+      log('verrouillé —', MESSAGES_AUTH[auth.raison]);
+      afficher({ statut: 'verrouille', cle: key, message: MESSAGES_AUTH[auth.raison] });
       return;
     }
 
-    const ms = await lookupByDomain(client.domain);       // tp-client.js → service worker
-    const res = {
-      entite: key,
-      domaine: client.domain,
-      source: client.source,
-      tenantId: ms ? ms.tenantId : null,
-      confiance: ms ? computeConfidence(ms) : 0,         // tp-core.js
-    };
-    cache.set(key, res);
-    noter(ms ? 'Tenant ID résolu' : 'domaine trouvé, aucun tenant');
-    log('contexte résolu', res);
+    afficher({ statut: 'recherche', cle: key, message: 'Lecture de la fiche client…' });
+
+    const client = await reader(record.entityId);
+    if (!client) {
+      noter('lecture Dataverse refusée ou vide');
+      log('lecture Dataverse sans résultat pour', key);
+      dernierClient = { cle: key, accountId: null };
+      afficher({ statut: 'sans-domaine', cle: key, message: "Fiche client illisible (droits insuffisants ou compte absent)." });
+      return;
+    }
+
+    /* Une correction manuelle prime sur Dataverse : si l'utilisateur a déjà rectifié
+       le domaine de ce compte, c'est lui qui a raison, pas le champ « site web ». */
+    dernierClient = { cle: key, accountId: client.accountId || null };
+    const corrections = await lireCorrections();
+    const corrige = corrections[cleCorrection()];
+    if (corrige) { await resoudreDomaine(key, corrige, 'saisi à la main'); return; }
+
+    if (!client.domain) {
+      noter('aucun domaine exploitable sur la fiche');
+      const etat = { statut: 'sans-domaine', cle: key };
+      cache.set(key, etat);
+      log('contexte non résolu', etat);
+      afficher(etat);
+      return;
+    }
+
+    await resoudreDomaine(key, client.domain, client.source);
+  }
+
+  /* Ce que l'utilisateur tape dans le panneau n'est pas un domaine propre : il colle
+     l'URL du site du client, ou une adresse e-mail prise dans le ticket. Les deux
+     doivent marcher — « https://www.exemple.fr/contact » comme « jean@exemple.fr ». */
+  function normaliserSaisie(valeur) {
+    const brut = String(valeur || '').trim();
+    if (!brut) return null;
+    if (brut.includes('@')) {
+      const parMail = domainFromEmail(brut);
+      if (parMail) return parMail;
+    }
+    return domainFromUrl(brut);
+  }
+
+  /* Clé de mémorisation d'une correction : le compte quand il est connu — la correction
+     vaut alors pour tous ses incidents — sinon l'enregistrement seul. */
+  function cleCorrection() {
+    if (!dernierClient) return null;
+    return dernierClient.accountId ? 'account:' + dernierClient.accountId : dernierClient.cle;
+  }
+
+  /* Domaine corrigé dans le panneau : on mémorise, on purge le cache de la fiche
+     courante, et on rejoue la seule résolution du tenant.
+
+     La diffusion touche toutes les frames de l'onglet : seule celle qui détient
+     l'enregistrement concerné réagit, les autres se taisent. */
+  async function traiterSaisieManuelle(saisi, cle) {
+    if (!dernierClient) return;
+    if (cle && dernierClient.cle !== cle) return;
+
+    const domaine = normaliserSaisie(saisi);
+    if (!domaine) return;
+    if (isMsaPersonalDomain(domaine)) {
+      afficher({ statut: 'sans-tenant', cle: dernierClient.cle, domaine, source: 'saisi à la main' });
+      return;
+    }
+
+    const cleMemo = cleCorrection();
+    if (cleMemo) await enregistrerCorrection(cleMemo, domaine);
+    cache.delete(dernierClient.cle);
+    await resoudreDomaine(dernierClient.cle, domaine, 'saisi à la main');
   }
 
   /* Seuls les messages émis par ctx-main.js dans CETTE frame sont écoutés, et seules
