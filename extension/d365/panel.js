@@ -21,7 +21,7 @@
 const tpPanneau = (function () {
   /* Une page Dynamics compte des dizaines d'iframes : un panneau par frame serait
      absurde. Les frames de session relaient leur état à la frame principale. */
-  if (window.top !== window) return { rendre() {}, configurer() {} };
+  if (window.top !== window) return { rendre() {}, configurer() {}, detruire() {} };
 
 
   /* Titres possibles de la section d'ancrage. La langue de l'interface suit celle de
@@ -628,5 +628,24 @@ const tpPanneau = (function () {
     positionner();
   }
 
-  return { rendre, configurer };
+  /* Extinction complète : le panneau est retiré de la page et tout ce qui l'observait
+     est débranché. Appelé quand l'utilisateur désactive l'intégration — le script de
+     contenu, lui, continue de vivre dans l'onglet jusqu'au prochain rechargement.
+     Un nouvel appel à rendre() le reconstruirait ; c'est à ctx.js de ne plus en
+     émettre tant que l'interrupteur est sur arrêt. */
+  function detruire() {
+    etatCourant = null;
+    cleAffichee = null;
+    raccourciOuvert = null;
+    try { if (observateur) observateur.disconnect(); } catch {}
+    observateur = null;
+    if (rafId !== null) { try { cancelAnimationFrame(rafId); } catch {} rafId = null; }
+    if (hote) { try { hote.remove(); } catch {} }
+    hote = ombre = cadre = corps = chevron = piedBouton = null;
+    ancre = decoupeEl = null;
+    tentatives = 0;
+    modeTiroir = false;
+  }
+
+  return { rendre, configurer, detruire };
 })();

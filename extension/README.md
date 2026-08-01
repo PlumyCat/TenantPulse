@@ -304,9 +304,17 @@ personnalisation sur l'environnement : tout se passe côté navigateur.
 
 **L'accès est optionnel.** `https://*.dynamics.com/*` est déclaré en
 `optional_host_permissions` : rien n'est demandé à l'installation, et tant que l'interrupteur
-« Panneau dans Dynamics 365 » de la popup n'est pas coché, l'extension n'est injectée sur aucune
+« Panneau dans Dynamics 365 » de la popup n'est pas activé, l'extension n'est injectée sur aucune
 page Dynamics. `background.js` enregistre les scripts (`chrome.scripting.registerContentScripts`)
 à l'octroi de la permission et les retire à son retrait.
+
+**Éteindre ne suffit pas à faire disparaître le panneau.** Désenregistrer un script de contenu
+empêche les *futures* injections, mais n'arrête pas celui qui s'exécute déjà dans un onglet
+ouvert : le panneau y resterait affiché jusqu'au prochain rechargement. La popup écrit donc un
+drapeau (`tp_d365_actif_v1`) **avant** de toucher à la permission ; `d365/ctx.js` le surveille via
+`chrome.storage.onChanged` — le seul canal encore accessible une fois la permission retirée — et
+détruit le panneau. La réactivation le reconstruit sans rechargement si le script est resté en
+place ; sinon l'onglet doit être rechargé, ce que le message de la popup indique.
 
 **Deux mondes, deux rôles.** `d365/ctx-main.js` est injecté en monde `MAIN`, donc dans le contexte
 JavaScript de Dynamics : c'est la seule façon d'atteindre les API client (`Xrm`, `Microsoft.Apm`),

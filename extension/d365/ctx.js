@@ -29,6 +29,33 @@
 
   const EST_PRINCIPALE = window.top === window;
 
+  /* Interrupteur de la popup. Le script reste injecté dans les onglets déjà ouverts
+     même après le retrait de la permission : sans ce drapeau, le panneau y survivrait
+     jusqu'au prochain rechargement. Surveillé par chrome.storage.onChanged, qui reste
+     accessible à un script de contenu déjà en place. */
+  let integrationActive = true;
+
+  function appliquerActivation(valeur) {
+    const actif = valeur !== false;
+    if (actif === integrationActive) return;
+    integrationActive = actif;
+    if (actif) return;   // réactivation : le prochain contexte relancera l'affichage
+    currentKey = null;
+    dernierClient = null;
+    cache.clear();
+    try { tpPanneau.detruire(); } catch {}
+  }
+
+  try {
+    chrome.storage.local.get(D365_ACTIF_KEY, (res) => {
+      if (!chrome.runtime.lastError && res) appliquerActivation(res[D365_ACTIF_KEY]);
+    });
+    chrome.storage.onChanged.addListener((changements, zone) => {
+      if (zone !== 'local' || !changements[D365_ACTIF_KEY]) return;
+      appliquerActivation(changements[D365_ACTIF_KEY].newValue);
+    });
+  } catch {}
+
   /* Signe de vie lu par la popup. Diagnostiquer par la console est peu fiable ici :
      Omnicanal en produit des centaines de lignes, la page vit dans des iframes, et
      DevTools ouvert après le chargement rate le démarrage. On ne consigne qu'un
@@ -317,6 +344,7 @@
     if (ev.source !== window || ev.origin !== location.origin) return;
     const data = ev.data;
     if (!data || data.source !== CHANNEL) return;
+    if (!integrationActive) return;   // interrupteur sur arrêt : plus rien n'est calculé
     if (!data.visible) return;
 
     /* Plus d'enregistrement affiché — vue de liste, tableau de bord, fiche fermée :

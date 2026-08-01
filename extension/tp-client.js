@@ -22,6 +22,15 @@
 
 const MIRROR_KEY = 'tp_mirror_v1';
 
+/* Interrupteur du panneau Dynamics, partagé entre la popup et le script de contenu.
+
+   Retirer la permission ne suffit pas : désenregistrer un script de contenu empêche
+   les FUTURES injections, mais n'arrête pas celui qui s'exécute déjà dans un onglet
+   ouvert — le panneau resterait affiché jusqu'au prochain rechargement. Ce drapeau est
+   le signal d'extinction, et il passe par chrome.storage plutôt que par un message :
+   c'est le seul canal qui fonctionne encore une fois la permission retirée. */
+const D365_ACTIF_KEY = 'tp_d365_actif_v1';
+
 /* Durée de validité de l'attestation produite par sync.js à partir de /api/me. Passé
    ce délai, il faut rouvrir l'application — donc repasser par l'authentification
    Entra — pour réactiver l'extension. */

@@ -505,12 +505,19 @@ async function initD365Toggle() {
     poserActif(bouton, voulu);
     sub.textContent = voulu ? "Activation…" : D365_SUB_DEFAUT;
 
+    /* Signal aux onglets Dynamics déjà ouverts, AVANT de toucher à la permission :
+       leur script de contenu continue de tourner une fois celle-ci retirée, et le
+       panneau y resterait affiché jusqu'au prochain rechargement. */
+    storageSet({ [D365_ACTIF_KEY]: voulu });
+
     let obtenu = voulu;
     try {
       if (voulu) obtenu = await chrome.permissions.request({ origins: D365_ORIGINS });
       else obtenu = !(await chrome.permissions.remove({ origins: D365_ORIGINS }));
     } catch { obtenu = !voulu; }
     poserActif(bouton, obtenu);
+    // Permission refusée : on remet le drapeau en accord avec la réalité.
+    if (obtenu !== voulu) storageSet({ [D365_ACTIF_KEY]: obtenu });
 
     /* permissions.onAdded / onRemoved réveille déjà le service worker : ce message ne
        sert qu'à ne pas dépendre du seul ordonnancement des événements, et à récupérer
