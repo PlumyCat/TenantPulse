@@ -520,21 +520,35 @@ async function initD365Toggle() {
 /* État de l'annuaire de tags, affiché en clair. Sans lui, « aucun badge » a trois
    causes indiscernables : annuaire jamais recopié (application pas rouverte depuis la
    mise à jour), annuaire recopié mais ce tenant n'y figure pas, ou panne de rendu. */
+const TAGS_DIAG_KEY = 'tp_tags_diag_v1';
+
 async function renderTagsDiag() {
   const box = el('tagsDiag');
-  const stored = await storageGet(TAGS_KEY);
+  const stored = await storageGet([TAGS_KEY, TAGS_DIAG_KEY]);
   const annuaire = stored[TAGS_KEY];
+  const diag = stored[TAGS_DIAG_KEY];
 
-  if (!annuaire || !annuaire.parTenant) {
-    box.textContent = "Annuaire des tags jamais recopié — ouvrez TenantPulse une fois, puis rechargez cet onglet.";
+  /* Aucun journal : sync.js n'a jamais exécuté sa recopie sur l'application — le plus
+     souvent parce que l'onglet de l'app tourne encore l'ancienne version du script. */
+  if (!diag) {
+    box.textContent = "Annuaire des tags jamais recopié — ouvrez TenantPulse et RECHARGEZ la page (F5).";
     box.hidden = false;
     return;
   }
+
+  const age = tempsRelatif(diag.at);
+  if (!annuaire || !annuaire.parTenant) {
+    box.textContent = `Annuaire indisponible — /api/classification : ${diag.classification},`
+      + ` /api/tags : ${diag.tags}` + (age ? ' · ' + age : '');
+    box.hidden = false;
+    return;
+  }
+
   const n = Object.keys(annuaire.parTenant).length;
-  const age = tempsRelatif(annuaire.at);
   const defs = Array.isArray(annuaire.definitions) ? annuaire.definitions.length : 0;
   box.textContent = `Annuaire des tags : ${n} tenant${n > 1 ? 's' : ''}, ${defs} type${defs > 1 ? 's' : ''}`
-    + (age ? ' · ' + age : '');
+    + (age ? ' · ' + age : '')
+    + (diag.tags !== 'ok' ? ` (libellés : ${diag.tags})` : '');
   box.hidden = false;
 }
 

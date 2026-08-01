@@ -46,6 +46,7 @@
 
   const MIRROR_KEY = 'tp_mirror_v1';
   const TAGS_KEY = 'tp_tags_v1';
+  const TAGS_DIAG_KEY = 'tp_tags_diag_v1';
   const POLL_MS = 2000;
   /* L'annuaire des tags change au rythme des validations, pas à la seconde : un
      rafraîchissement à l'ouverture de l'app puis toutes les dix minutes suffit.
@@ -128,11 +129,24 @@
      « approvedBy » est une adresse professionnelle : elle est écartée ici et n'entre
      jamais dans le stockage de l'extension. */
   async function refreshTags() {
-    const [annuaire, definitions] = await Promise.all([
+    const [rAnnuaire, rDefs] = await Promise.all([
       lireJson('/api/classification?all=1'),
       lireJson('/api/tags'),
     ]);
-    if (!annuaire) return;   // 401, panne réseau : on garde l'annuaire précédent
+    const annuaire = rAnnuaire.data;
+    const definitions = rDefs.data;
+
+    /* Journal de la dernière tentative, affiché par la popup. Sans lui, « aucun
+       badge » ne dit pas si l'API a refusé, si elle a répondu à côté, ou si ce script
+       n'a tout simplement jamais tourné — trois causes qui appellent trois gestes
+       différents. Aucune donnée métier ici, seulement des états HTTP. */
+    const diag = { at: new Date().toISOString(), classification: rAnnuaire.etat, tags: rDefs.etat, nb: 0 };
+
+    if (!annuaire) {
+      // 401, 400, panne réseau : on garde l'annuaire précédent et on dit pourquoi.
+      try { chrome.storage.local.set({ [TAGS_DIAG_KEY]: diag }); } catch {}
+      return;
+    }
 
     const parTenant = {};
     for (const item of (Array.isArray(annuaire.items) ? annuaire.items : [])) {
@@ -159,19 +173,24 @@
         .forEach(t => pousser(t.tagId, t.name, t.color));
     }
 
+    diag.nb = Object.keys(parTenant).length;
+
     try {
       chrome.storage.local.set({
         [TAGS_KEY]: { parTenant, definitions: defs, at: new Date().toISOString() },
+        [TAGS_DIAG_KEY]: diag,
       });
     } catch {}
   }
 
+  /* Rend l'état de la requête en plus des données : un « null » muet ne permettait pas
+     de distinguer un refus d'authentification d'un endpoint absent. */
   async function lireJson(url) {
     try {
       const r = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-      if (!r.ok) return null;
-      return await r.json();
-    } catch { return null; }
+      if (!r.ok) return { data: null, etat: 'HTTP ' + r.status };
+      return { data: await r.json(), etat: 'ok' };
+    } catch { return { data: null, etat: 'injoignable' }; }
   }
 
   /* Détail d'un tenant — la seule voie pour connaître les demandes EN ATTENTE, que
@@ -179,7 +198,7 @@
      worker depuis la popup ou le panneau Dynamics. */
   async function detailTenant(tenantId) {
     if (typeof tenantId !== 'string' || !/^[0-9a-f-]{36}$/i.test(tenantId)) return null;
-    const d = await lireJson('/api/classification?tenantId=' + encodeURIComponent(tenantId));
+    const d = (await lireJson('/api/classification?tenantId=' + encodeURIComponent(tenantId))).data;
     if (!d) return null;
     return {
       approuves: (Array.isArray(d.approvedTags) ? d.approvedTags : [])
