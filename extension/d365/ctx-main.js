@@ -122,6 +122,16 @@
     }
   }
 
+  /* Réveil demandé par le monde isolé (rallumage de l'interrupteur) : la publication
+     n'a lieu que sur changement, et sans cet oubli volontaire du dernier état, une
+     fiche restée identique ne serait jamais redécrite. */
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== window || ev.origin !== location.origin) return;
+    if (!ev.data || ev.data.source !== 'tp-d365-reveil') return;
+    last = null;
+    publish();
+  });
+
   mode = 'attente';
   battement();
   syncPolling();

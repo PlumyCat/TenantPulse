@@ -23,6 +23,7 @@
   if (typeof TP_D365_ORIGIN !== 'string' || !TP_D365_ORIGIN || location.origin !== TP_D365_ORIGIN) return;
 
   const CHANNEL = 'tp-d365-ctx';
+  const CHANNEL_REVEIL = 'tp-d365-reveil';
   const API = '/api/data/v9.2/';
   const DIAG_KEY = 'tp_d365_diag_v1';
   const MAP_KEY = 'tp_d365_map_v1';
@@ -39,11 +40,14 @@
     const actif = valeur !== false;
     if (actif === integrationActive) return;
     integrationActive = actif;
-    if (actif) return;   // réactivation : le prochain contexte relancera l'affichage
-    currentKey = null;
-    dernierClient = null;
-    cache.clear();
-    try { tpPanneau.detruire(); } catch {}
+
+    try { tpPanneau.activer(actif); } catch {}
+    if (!actif) return;
+
+    /* Rallumage : la fiche a pu changer pendant l'arrêt, mais ctx-main ne republie que
+       sur changement — il ne dirait donc rien. On le réveille pour qu'il redécrive
+       l'enregistrement affiché, et l'état se remet à jour tout seul. */
+    try { window.postMessage({ source: CHANNEL_REVEIL }, location.origin); } catch {}
   }
 
   try {

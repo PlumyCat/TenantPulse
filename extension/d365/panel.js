@@ -21,7 +21,7 @@
 const tpPanneau = (function () {
   /* Une page Dynamics compte des dizaines d'iframes : un panneau par frame serait
      absurde. Les frames de session relaient leur état à la frame principale. */
-  if (window.top !== window) return { rendre() {}, configurer() {}, detruire() {} };
+  if (window.top !== window) return { rendre() {}, configurer() {}, activer() {} };
 
 
   /* Titres possibles de la section d'ancrage. La langue de l'interface suit celle de
@@ -36,6 +36,9 @@ const tpPanneau = (function () {
   let cleAffichee = null;
   let ancre = null, decoupeEl = null, observateur = null, rafId = null;
   let replie = false, modeTiroir = false;
+  /* Interrupteur de la popup : masque le panneau sans rien démonter, pour que le
+     rallumer le fasse réapparaître à l'instant, là où il était. */
+  let eteint = false;
   let etatCourant = null;
   let tentatives = 0;
   let rappels = { surDomaineManuel: null };
@@ -169,7 +172,7 @@ const tpPanneau = (function () {
        redimensionnement et tentative d'ancrage, et il rétablissait « display: block »
        juste après un effacement. Hors d'une fiche, le panneau réapparaissait donc
        aussitôt, en tiroir, par-dessus une vue de liste. */
-    if (!etatCourant) { hote.style.display = 'none'; return; }
+    if (eteint || !etatCourant) { hote.style.display = 'none'; return; }
 
     if (modeTiroir || !ancre || !ancre.isConnected) {
       if (!modeTiroir && ancre && !ancre.isConnected) { ancre = null; tentatives = 0; attacher(); return; }
@@ -628,24 +631,17 @@ const tpPanneau = (function () {
     positionner();
   }
 
-  /* Extinction complète : le panneau est retiré de la page et tout ce qui l'observait
-     est débranché. Appelé quand l'utilisateur désactive l'intégration — le script de
-     contenu, lui, continue de vivre dans l'onglet jusqu'au prochain rechargement.
-     Un nouvel appel à rendre() le reconstruirait ; c'est à ctx.js de ne plus en
-     émettre tant que l'interrupteur est sur arrêt. */
-  function detruire() {
-    etatCourant = null;
-    cleAffichee = null;
-    raccourciOuvert = null;
-    try { if (observateur) observateur.disconnect(); } catch {}
-    observateur = null;
-    if (rafId !== null) { try { cancelAnimationFrame(rafId); } catch {} rafId = null; }
-    if (hote) { try { hote.remove(); } catch {} }
-    hote = ombre = cadre = corps = chevron = piedBouton = null;
-    ancre = decoupeEl = null;
-    tentatives = 0;
-    modeTiroir = false;
+  /* Interrupteur : masquage pur, sans rien démonter.
+
+     Détruire le panneau serait sans retour — plus rien ne le reconstruit tant que la
+     fiche ne change pas, et le rallumer ne donnait donc rien tant qu'on restait sur le
+     même ticket. Un simple masquage rend l'opération symétrique : arrêt = invisible,
+     marche = de nouveau là, immédiatement, à sa place. */
+  function activer(actif) {
+    eteint = !actif;
+    if (eteint) { fermerRaccourcis(); if (hote) hote.style.display = 'none'; return; }
+    positionner();   // réaffiche si un état est en place, ne fait rien sinon
   }
 
-  return { rendre, configurer, detruire };
+  return { rendre, configurer, activer };
 })();

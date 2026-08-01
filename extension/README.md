@@ -312,9 +312,15 @@ page Dynamics. `background.js` enregistre les scripts (`chrome.scripting.registe
 empêche les *futures* injections, mais n'arrête pas celui qui s'exécute déjà dans un onglet
 ouvert : le panneau y resterait affiché jusqu'au prochain rechargement. La popup écrit donc un
 drapeau (`tp_d365_actif_v1`) **avant** de toucher à la permission ; `d365/ctx.js` le surveille via
-`chrome.storage.onChanged` — le seul canal encore accessible une fois la permission retirée — et
-détruit le panneau. La réactivation le reconstruit sans rechargement si le script est resté en
-place ; sinon l'onglet doit être rechargé, ce que le message de la popup indique.
+`chrome.storage.onChanged` — le seul canal encore accessible une fois la permission retirée.
+
+L'interrupteur **masque**, il ne démonte pas. Détruire le panneau était sans retour : plus rien ne
+le reconstruit tant que la fiche ne change pas, et le rallumer ne donnait donc rien tant qu'on
+restait sur le même ticket. Le masquage rend l'opération symétrique — arrêt : invisible ; marche :
+de nouveau là, immédiatement, à sa place. Au rallumage, le monde isolé réveille `ctx-main.js`
+(message `tp-d365-reveil`), qui ne republie que sur changement et resterait donc muet sur une fiche
+inchangée. Si l'intégration était éteinte au chargement de la page, il n'y a rien à réveiller et
+l'onglet doit être rechargé — ce que le message de la popup indique.
 
 **Deux mondes, deux rôles.** `d365/ctx-main.js` est injecté en monde `MAIN`, donc dans le contexte
 JavaScript de Dynamics : c'est la seule façon d'atteindre les API client (`Xrm`, `Microsoft.Apm`),
