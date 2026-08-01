@@ -303,10 +303,12 @@ remote code, so the extension cannot load `tenantpulse.js` at runtime).
 
 Le dépôt est public. Les éléments suivants ne doivent **jamais** apparaître dans le code source, les commentaires, les messages de commit, la documentation ou tout autre fichier versionné :
 
-- **"Be Cloud"** (nom de l'entreprise) — ni en clair, ni abrégé, ni en variante de casse (`be cloud`, `BeCloud`, `BE CLOUD`, etc.)
+- **Le nom de l'entreprise**, sous toutes ses formes : en clair, abrégé, accolé, avec ou sans tiret, quelle que soit la casse
 - Tout nom de client, de tenant ou de domaine réel utilisé en production
 - Toute adresse e-mail professionnelle interne
 - Toute clé, secret, token ou chaîne de connexion
+
+La liste littérale des termes à bannir vit dans `.claude/mentions-interdites.md`, **hors dépôt** — l'écrire ici reviendrait à publier ce qu'on cherche à taire.
 
 Si une référence à l'entreprise est nécessaire dans la documentation, utiliser le terme générique **"l'organisation"** ou **"l'équipe support"**.
 
