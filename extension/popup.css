@@ -43,10 +43,15 @@
 }
 
 *{box-sizing:border-box}
+/* Coins arrondis de la fenêtre : le fond transparent sur <html> laisse le navigateur
+   voir à travers les angles. Selon la version d'Edge, un liséré clair peut subsister —
+   c'est le cadre que le navigateur dessine lui-même, hors de portée d'une feuille. */
+html{background:transparent}
 body{
   width:420px;min-height:180px;margin:0;padding:12px;
   background:var(--bg);color:var(--text);
   font-family:var(--font);font-size:var(--text-base);
+  border-radius:var(--r-lg);overflow:hidden
 }
 
 /* ───── En-tête ───── */
@@ -90,15 +95,6 @@ body{
 }
 .tp-submit:hover{background:#3730A3}
 .tp-submit:disabled{opacity:.55;cursor:default}
-/* Une seule ligne tronquée en fin : dans 420 px, le retour à la ligne coupait l'URL
-   en plein milieu d'un mot. La troncature garde visible le début, donc le domaine —
-   la seule partie qui varie. */
-.tp-endpoint{
-  margin:6px 0 0;font-family:var(--mono);font-size:9px;color:var(--muted);
-  line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
-}
-.tp-endpoint .domain{color:var(--blue);font-weight:600}
-@media (prefers-color-scheme:dark){.tp-endpoint .domain{color:#a5b4fc}}
 
 /* ───── États ───── */
 .tp-status{
@@ -288,14 +284,34 @@ body{
 .tp-recent-item:hover{border-color:var(--blue);background:var(--row)}
 
 /* ───── Interrupteur du panneau Dynamics ───── */
-.tp-optin{margin-top:12px;padding-top:9px;border-top:1px solid var(--border)}
-.tp-optin-row{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
-.tp-optin-row input{margin:2px 0 0;flex:none;cursor:pointer}
-.tp-optin-row input:disabled{cursor:not-allowed}
-.tp-optin-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.tp-optin{
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:10px
+}
+.tp-optin-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
 .tp-optin-title{font-size:var(--text-xs);font-weight:600;color:var(--text)}
 .tp-optin-sub{font-size:10px;color:var(--soft);line-height:1.35}
-.tp-optin-diag{font-size:10px;color:var(--muted);line-height:1.35;font-style:italic}
+.tp-optin-diag{font-size:10px;color:#9a6a00;line-height:1.35;margin-top:2px}
+@media (prefers-color-scheme:dark){.tp-optin-diag{color:#fbbf24}}
+
+/* Bascule instantanée : l'état visuel change au clic, avant même la réponse du
+   navigateur à la demande de permission — et se corrige seulement si elle est refusée. */
+.tp-switch{
+  flex:none;width:38px;height:22px;padding:2px;
+  border:1px solid var(--border);border-radius:var(--r-pill);
+  background:var(--surface);cursor:pointer;
+  display:flex;align-items:center;
+  transition:background .15s,border-color .15s
+}
+.tp-switch-poignee{
+  width:16px;height:16px;border-radius:50%;
+  background:var(--muted);
+  transition:transform .15s,background .15s
+}
+.tp-switch[aria-checked="true"]{background:var(--blue);border-color:var(--blue)}
+.tp-switch[aria-checked="true"] .tp-switch-poignee{transform:translateX(16px);background:#fff}
+.tp-switch:disabled{opacity:.5;cursor:not-allowed}
+.tp-switch:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 
 /* ───── Diagnostic de l'annuaire de tags ───── */
 .tp-tags-diag{

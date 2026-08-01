@@ -24,8 +24,6 @@
   <button class="tp-submit" id="submitBtn" type="submit">Tenant ID</button>
 </form>
 
-<p class="tp-endpoint" id="endpointPreview" aria-live="off"></p>
-
 <div class="tp-status" id="statusBox" hidden></div>
 <div class="tp-error" id="errorBox" role="alert" hidden></div>
 
@@ -37,14 +35,15 @@
 </section>
 
 <section class="tp-optin" id="d365Optin" hidden>
-  <label class="tp-optin-row" for="d365Toggle">
-    <input type="checkbox" id="d365Toggle">
-    <span class="tp-optin-text">
-      <span class="tp-optin-title">Panneau dans Dynamics 365</span>
-      <span class="tp-optin-sub" id="d365OptinSub">Affiche le Tenant ID du client sur la fiche incident.</span>
-      <span class="tp-optin-diag" id="d365Diag" hidden></span>
-    </span>
-  </label>
+  <span class="tp-optin-text">
+    <span class="tp-optin-title">Panneau dans Dynamics 365</span>
+    <span class="tp-optin-sub" id="d365OptinSub">Affiche le Tenant ID du client sur la fiche incident.</span>
+    <span class="tp-optin-diag" id="d365Diag" hidden></span>
+  </span>
+  <button class="tp-switch" id="d365Toggle" type="button" role="switch" aria-checked="false"
+          aria-label="Activer le panneau dans Dynamics 365">
+    <span class="tp-switch-poignee"></span>
+  </button>
 </section>
 
 <p class="tp-tags-diag" id="tagsDiag" hidden></p>

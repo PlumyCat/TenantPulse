@@ -395,7 +395,6 @@ function renderRecent() {
     b.title = item.tenantId || item.domain;
     b.addEventListener('click', () => {
       el('queryInput').value = item.domain;
-      updateEndpointPreview();
       runSearch(item.domain);
     });
     list.appendChild(b);
@@ -403,24 +402,6 @@ function renderRecent() {
   box.hidden = false;
 }
 
-/* Aperçu de l'endpoint interrogé — même retour visuel que le champ de l'app. */
-function updateEndpointPreview() {
-  const raw = el('queryInput').value.trim();
-  const preview = el('endpointPreview');
-  preview.replaceChildren();
-  if (GUID_ONLY_RE.test(raw)) {
-    preview.appendChild(document.createTextNode('https://login.microsoftonline.com/'));
-    const s = document.createElement('span'); s.className = 'domain'; s.textContent = raw;
-    preview.appendChild(s);
-    preview.appendChild(document.createTextNode('/.well-known/openid-configuration'));
-    return;
-  }
-  const d = extractDomain(raw) || 'domaine.com';
-  preview.appendChild(document.createTextNode('https://login.microsoftonline.com/'));
-  const s = document.createElement('span'); s.className = 'domain'; s.textContent = d;
-  preview.appendChild(s);
-  preview.appendChild(document.createTextNode('/.well-known/openid-configuration'));
-}
 
 /* ── Interrupteur du panneau Dynamics ──
    L'accès à Dynamics est une permission OPTIONNELLE : tant qu'elle n'est pas accordée,
@@ -457,63 +438,86 @@ function tempsRelatif(iso) {
   return `il y a ${Math.round(s / 86400)} j`;
 }
 
+/* Ne parle qu'en cas de problème : une fois le panneau vu à l'œuvre, il n'y a rien à
+   dire, et une popup nette vaut mieux qu'un état permanent que personne ne lit. */
 async function renderD365Diag(actif) {
   const box = el('d365Diag');
-  if (!actif) { box.hidden = true; return; }
+  box.hidden = true;
+  if (!actif) return;
+
   const stored = await storageGet(D365_DIAG_KEY);
   const diag = stored[D365_DIAG_KEY];
   if (!diag || !diag.at) {
-    box.textContent = "Jamais vu sur Dynamics — rechargez l'onglet après activation.";
-  } else {
-    const quand = tempsRelatif(diag.at);
-    box.textContent = `Dernier signe de vie ${quand || ''} : ${diag.statut}`;
+    box.textContent = "Pas encore vu sur Dynamics — rechargez l'onglet.";
+    box.hidden = false;
+    return;
   }
-  box.hidden = false;
+  // Statuts d'échec connus de d365/ctx.js : eux seuls méritent d'être remontés.
+  if (/verrouill|refus|aucun domaine/i.test(diag.statut || '')) {
+    box.textContent = diag.statut;
+    box.hidden = false;
+  }
 }
 
-function d365Message(etat, actif) {
+/* Le nombre de scripts enregistrés était un détail d'implémentation ; ne reste que ce
+   qui appelle une action. « Rechargez l'onglet » n'a de sens qu'au moment de la
+   bascule — le répéter à chaque ouverture ferait croire à un problème permanent. */
+function d365Message(etat, actif, vientDeBasculer) {
   if (etat && etat.erreur) return "Échec d'activation : " + etat.erreur;
   if (!actif) return D365_SUB_DEFAUT;
-  if (etat && etat.registered) return `Actif (${etat.registered} scripts) — rechargez l'onglet Dynamics.`;
-  return "Actif — rechargez l'onglet Dynamics.";
+  return vientDeBasculer
+    ? "Activé — rechargez l'onglet Dynamics pour l'appliquer."
+    : 'Actif sur votre instance Dynamics.';
 }
+
+const estActif = (bouton) => bouton.getAttribute('aria-checked') === 'true';
+const poserActif = (bouton, actif) => bouton.setAttribute('aria-checked', actif ? 'true' : 'false');
 
 async function initD365Toggle() {
   const box = el('d365Optin');
-  const cb = el('d365Toggle');
+  const bouton = el('d365Toggle');
   const sub = el('d365OptinSub');
 
   // Sans instance configurée, le garde-fou d'origine du script de contenu bloquerait tout.
   if (typeof TP_D365_ORIGIN !== 'string' || !TP_D365_ORIGIN) {
-    cb.disabled = true;
+    bouton.disabled = true;
     sub.textContent = "Instance Dynamics non configurée — renseignez « d365Origin » dans local-config.json.";
     box.hidden = false;
     return;
   }
 
-  try { cb.checked = await chrome.permissions.contains({ origins: D365_ORIGINS }); } catch {}
+  let actif = false;
+  try { actif = await chrome.permissions.contains({ origins: D365_ORIGINS }); } catch {}
+  poserActif(bouton, actif);
   box.hidden = false;
   /* Réalignement à chaque ouverture : après une mise à jour de l'extension, les scripts
      enregistrés dans la session précédente peuvent être obsolètes ou absents. */
-  if (cb.checked) sub.textContent = d365Message(await askD365Sync(), true);
-  renderD365Diag(cb.checked);
+  if (actif) sub.textContent = d365Message(await askD365Sync(), true, false);
+  else sub.textContent = D365_SUB_DEFAUT;
+  renderD365Diag(actif);
 
-  cb.addEventListener('change', async () => {
-    const voulu = cb.checked;
+  bouton.addEventListener('click', async () => {
+    const voulu = !estActif(bouton);
+
+    /* Bascule visuelle AVANT l'appel : la demande de permission ouvre une bulle du
+       navigateur, et attendre sa réponse pour bouger donnerait un interrupteur mou.
+       L'état se corrige juste après si la permission est refusée. */
+    poserActif(bouton, voulu);
+    sub.textContent = voulu ? "Activation…" : D365_SUB_DEFAUT;
+
+    let obtenu = voulu;
     try {
-      if (voulu) {
-        cb.checked = await chrome.permissions.request({ origins: D365_ORIGINS });
-      } else {
-        await chrome.permissions.remove({ origins: D365_ORIGINS });
-        cb.checked = await chrome.permissions.contains({ origins: D365_ORIGINS });
-      }
-    } catch { cb.checked = !voulu; }
+      if (voulu) obtenu = await chrome.permissions.request({ origins: D365_ORIGINS });
+      else obtenu = !(await chrome.permissions.remove({ origins: D365_ORIGINS }));
+    } catch { obtenu = !voulu; }
+    poserActif(bouton, obtenu);
 
     /* permissions.onAdded / onRemoved réveille déjà le service worker : ce message ne
        sert qu'à ne pas dépendre du seul ordonnancement des événements, et à récupérer
        le diagnostic d'enregistrement. */
-    sub.textContent = d365Message(await askD365Sync(), cb.checked);
-    renderD365Diag(cb.checked);
+    sub.textContent = d365Message(await askD365Sync(), obtenu, true);
+    // Le message ci-dessus dit déjà de recharger : pas de seconde ligne redondante.
+    el('d365Diag').hidden = true;
   });
 }
 
@@ -538,18 +542,14 @@ async function renderTagsDiag() {
 
   const age = tempsRelatif(diag.at);
   if (!annuaire || !annuaire.parTenant) {
-    box.textContent = `Annuaire indisponible — /api/classification : ${diag.classification},`
+    box.textContent = `Tags indisponibles — /api/classification : ${diag.classification},`
       + ` /api/tags : ${diag.tags}` + (age ? ' · ' + age : '');
     box.hidden = false;
     return;
   }
 
-  const n = Object.keys(annuaire.parTenant).length;
-  const defs = Array.isArray(annuaire.definitions) ? annuaire.definitions.length : 0;
-  box.textContent = `Annuaire des tags : ${n} tenant${n > 1 ? 's' : ''}, ${defs} type${defs > 1 ? 's' : ''}`
-    + (age ? ' · ' + age : '')
-    + (diag.tags !== 'ok' ? ` (libellés : ${diag.tags})` : '');
-  box.hidden = false;
+  /* Annuaire en place : rien à dire. Le décompte n'intéresse que le dépannage, et il
+     encombrerait une popup qu'on veut lisible d'un coup d'œil. */
 }
 
 /* Signale le thème courant, que background.js applique à l'icône de la barre d'outils.
@@ -566,7 +566,6 @@ function reportTheme() {
 
 function bindEvents() {
   el('searchForm').addEventListener('submit', e => { e.preventDefault(); runSearch(); });
-  el('queryInput').addEventListener('input', updateEndpointPreview);
   // Un clic hors du panneau de raccourcis le referme (sauf sur un chevron, qui bascule).
   document.addEventListener('click', e => {
     if (!openShortcutKey) return;
@@ -615,7 +614,6 @@ async function init() {
 
   const last = stored[POPUP_STATE_KEY];
   if (last && last.lastQuery) el('queryInput').value = last.lastQuery;
-  updateEndpointPreview();
   if (auth.ok) { el('queryInput').focus(); el('queryInput').select(); }
 }
 
