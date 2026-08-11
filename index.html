@@ -482,7 +482,10 @@
         Utilisateurs
       </button>
       <button class="admin-subtab" data-subtab="banner" data-min-role="admin" role="tab" type="button" hidden>
-        <img src="assets/information.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
+        <!-- information.png est une source NOIRE, contrairement aux autres icônes de
+             sous-onglet qui sont blanches : d'où icon-adaptive et non icon-adaptive-inv,
+             sinon elle reste noire sur la barre sombre. -->
+        <img src="assets/information.png" class="admin-subtab-ico icon-adaptive" alt="">
         Bandeau
       </button>
     </div>
