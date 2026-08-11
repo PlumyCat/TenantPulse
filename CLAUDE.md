@@ -41,6 +41,8 @@ Project App tenant pulse push to github/
     │   ├── tagUtils.js      # tag grouping helpers
     │   └── defaults.js      # fallback config
     ├── me/                  # GET /api/me
+    ├── dns/                 # GET /api/dns — relais DoH (mode de secours)
+    ├── dnsrelay/            # GET + POST /api/dns-relay — interrupteur admin
     ├── banner/              # GET + POST + DELETE /api/banner — bandeau d'info
     ├── classification/      # GET + DELETE /api/classification
     ├── request/             # POST /api/request
@@ -105,8 +107,14 @@ External endpoints:
   si le suivant a réellement répondu — une panne passagère ne condamne pas la session.
 
 > [!IMPORTANT]
-> **Ne jamais faire transiter les résolutions DNS par le backend.** Un relais same-origin a été
-> écrit puis retiré délibérément (voir l'historique git). Les raisons valent d'être rappelées,
+> **Le relais serveur (`GET /api/dns`) est un mode de secours, jamais le fonctionnement
+> normal.** Il est désactivé par défaut, s'active par un admin (`POST /api/dns-relay`), et
+> `/api/dns` répond 403 tant qu'il ne l'est pas — sans ce garde-fou le point d'entrée serait
+> appelable hors interface. Quand il est actif, `dohResolve` l'interroge **en premier** (le
+> direct est bloqué par hypothèse, le tenter d'abord coûterait un délai d'attente à chacune
+> des ~50 résolutions), et une étiquette « Relais DNS actif » est affichée en haut de page.
+>
+> Ne jamais l'activer par défaut ni le rendre implicite. Les raisons valent d'être rappelées,
 > car la tentation revient à chaque incident réseau :
 > - **Coût.** Une analyse complète enchaîne **51 résolutions** (mesuré, la récursion SPF
 >   réinterroge les mêmes `include:`). Côté navigateur c'est gratuit et ça le reste quel que
@@ -155,7 +163,7 @@ env vars). Auth context is injected by the SWA runtime as the `x-ms-client-princ
 | `Roles` | `email → {role, blocked}` |
 | `Classifications` | `tenantId + tagType → approved tag + approver` |
 | `Requests` | Pending tag proposals from users |
-| `Tags` | Custom tag definitions (`PartitionKey` = `tag`), balises par défaut (`default`), et le bandeau d'information sur sa ligne unique (`banner`/`current`) — trois partitions cloisonnées dans une même table, pour ne pas imposer une table Azure de plus pour une seule ligne |
+| `Tags` | Quatre partitions cloisonnées dans une même table, pour ne pas imposer une table Azure de plus par ligne unique : `tag` (définitions de tags), `default` (balises par défaut), `banner`/`current` (bandeau d'information), `config`/`dnsrelay` (interrupteur du relais DNS). Toute lecture doit filtrer sur sa partition |
 | `Locks` | Per-tenant or global modification locks |
 
 **Role hierarchy** (ascending permissions):
@@ -171,6 +179,9 @@ moderation powers; managers and admins can assign it via `/api/roles`.
 | Method | Route | Min role | Description |
 |---|---|---|---|
 | GET | `/api/me` | any auth | `{email, name, role, blocked}` |
+| GET | `/api/dns?name=&type=` | any auth | Relais DoH de secours. **403 si le relais est désactivé.** Types en liste fermée, `name` normalisé en punycode via `new URL()` |
+| GET | `/api/dns-relay` | any auth | `{enabled, updatedBy, updatedAt}` |
+| POST | `/api/dns-relay` | admin | Active/désactive le relais : `{enabled: bool}` |
 | GET | `/api/banner` | any auth | Bandeau d'information courant ou `null`. L'expiration est évaluée **côté serveur** (l'horloge du poste n'est pas une référence) et la ligne périmée est supprimée au passage |
 | POST | `/api/banner` | admin | Publie/remplace le bandeau : `{message, color, icon, durationMinutes}`. `icon` ∈ `warning`\|`info`, durée ≤ 7 jours |
 | DELETE | `/api/banner` | admin | Retire le bandeau (idempotent) |

@@ -1,5 +1,6 @@
 const { getAuthContext } = require("../shared/auth");
 const { rolesClient } = require("../shared/tableClient");
+const { isDnsRelayEnabled } = require("../shared/config");
 
 /**
  * GET /api/me
@@ -42,6 +43,11 @@ module.exports = async function (context, req) {
     const extensionUrl     = process.env.EXTENSION_STORE_URL || null;
     const extensionUrlEdge = process.env.EXTENSION_STORE_URL_EDGE || null;
 
+    /* État du relais DNS, servi ici pour éviter un aller-retour de plus au démarrage :
+       le frontend doit le connaître avant la première analyse, et il appelle déjà /api/me. */
+    let dnsRelay = false;
+    try { dnsRelay = await isDnsRelayEnabled(); } catch { /* défaut : pas de relais */ }
+
     context.res = {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -52,7 +58,8 @@ module.exports = async function (context, req) {
         blocked:      auth.blocked === true,
         contactEmail:     contactEmail || null,
         extensionUrl:     extensionUrl,
-        extensionUrlEdge: extensionUrlEdge
+        extensionUrlEdge: extensionUrlEdge,
+        dnsRelay:         dnsRelay
       })
     };
 

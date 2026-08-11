@@ -9,7 +9,7 @@
 
 // ── Code principal ──
 const PROXY_DATA = {
-  dnsgoogle:      {title:'cloudflare-dns.com', desc:'API DNS-over-HTTPS de Cloudflare (DoH, 1.1.1.1). Résolveur principal, utilisé pour MX, SPF, DKIM, DMARC, DNSSEC, BIMI et MTA-STS. Aucune donnée personnelle transmise — seulement le nom de domaine.', url:'https://cloudflare-dns.com/dns-query'},
+  dnsgoogle:      {title:'cloudflare-dns.com', desc:'API DNS-over-HTTPS de Cloudflare (DoH, 1.1.1.1). Résolveur principal, utilisé pour MX, SPF, DKIM, DMARC, DNSSEC, BIMI et MTA-STS. Aucune donnée personnelle transmise, seulement le nom de domaine. Si votre administrateur a activé le relais DNS (étiquette affichée en haut de page), ces requêtes partent du serveur de l\'application au lieu de votre navigateur.', url:'https://cloudflare-dns.com/dns-query'},
   dnsgoogle2:     {title:'dns.google', desc:'API DNS-over-HTTPS de Google (DoH, 8.8.8.8). Résolveur de secours : interrogé uniquement si Cloudflare est injoignable, ce qui arrive sur les réseaux d\'entreprise filtrant le protocole QUIC. Mêmes requêtes, mêmes données — seulement le nom de domaine.', url:'https://dns.google/resolve'},
   rdap:           {title:'rdap.org',   desc:'Service RDAP public (Registration Data Access Protocol). Utilisé pour récupérer les données WHOIS : registrar, serveurs NS, dates de création/expiration. Lecture seule.', url:'https://rdap.org/domain/'},
   mslogin:        {title:'login.microsoftonline.com', desc:'Endpoint public officiel Microsoft. Utilisé pour détecter le Tenant ID (OpenID Connect) et valider le GUID du tenant.', url:'https://login.microsoftonline.com/common/.well-known/openid-configuration'},
@@ -1360,6 +1360,7 @@ async function initAuth() {
       // fiche versionnée, qui reste le repli quand il n'est pas renseigné.
       TP_EXTENSION.url     = data.extensionUrl     || TP_EXTENSION_STORE_URL;
       TP_EXTENSION.urlEdge = data.extensionUrlEdge || null;
+      TP_DNS_RELAY = data.dnsRelay === true;
     }
   } catch {
     // Pas d'API disponible (dev local) — on reste en utilisateur anonyme.
@@ -1367,7 +1368,16 @@ async function initAuth() {
   /* Hors du try, et sans retour anticipé : le bouton d'installation s'appuie sur la
      fiche versionnée, il ne doit donc pas disparaître parce que /api/me est en erreur. */
   syncExtensionUI();
+  syncDnsRelayUI();
   applyAuthToUI();
+}
+
+/* Étiquette en haut à gauche quand le relais est actif. Les utilisateurs doivent savoir
+   que leurs résolutions ne partent plus directement de leur navigateur : c'est la
+   contrepartie du mode de secours, et la page Confidentialité annonce l'inverse. */
+function syncDnsRelayUI() {
+  const tag = document.getElementById('dnsRelayTag');
+  if (tag) tag.hidden = !TP_DNS_RELAY;
 }
 
 /* Reflète l'état d'auth dans l'interface : rôle en bas à gauche + bouton Admin. */
@@ -2039,7 +2049,7 @@ function switchAdminSubtab(name) {
   document.querySelectorAll('.admin-subtab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.subtab === name);
   });
-  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers', banner: 'adminPaneBanner' };
+  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers', banner: 'adminPaneBanner', relay: 'adminPaneRelay' };
   Object.entries(panes).forEach(([key, id]) => {
     const pane = document.getElementById(id);
     if (pane) pane.hidden = (key !== name);
@@ -2051,6 +2061,7 @@ function switchAdminSubtab(name) {
   else if (name === 'tags' && typeof loadAdminTags === 'function') loadAdminTags();
   else if (name === 'users' && typeof loadAdminUsers === 'function') loadAdminUsers();
   else if (name === 'banner' && typeof loadAdminBanner === 'function') loadAdminBanner();
+  else if (name === 'relay' && typeof loadAdminRelay === 'function') loadAdminRelay();
   else adminPanePlaceholder(panes[name]);
 }
 
@@ -2063,6 +2074,74 @@ function adminPanePlaceholder(paneId) {
   p.className = 'admin-empty';
   p.textContent = 'Module en cours de mise en place…';
   pane.appendChild(p);
+}
+
+// ── Panneau admin : relais DNS (admin uniquement) ──
+async function loadAdminRelay() {
+  const pane = document.getElementById('adminPaneRelay');
+  if (!pane) return;
+  pane.replaceChildren();
+
+  let etat = { enabled: false, updatedBy: null, updatedAt: null };
+  try {
+    const r = await fetch('/api/dns-relay', { headers: { 'Accept': 'application/json' } });
+    if (r.ok) etat = await r.json();
+  } catch { /* hors ligne : on affiche l'état par défaut */ }
+  TP_DNS_RELAY = etat.enabled === true;
+  syncDnsRelayUI();
+
+  const form = document.createElement('div'); form.className = 'admin-tag-form';
+  const title = document.createElement('div'); title.className = 'admin-section-title';
+  title.textContent = 'Relais des résolutions DNS';
+  form.appendChild(title);
+
+  const explique = document.createElement('div'); explique.className = 'analysis-mode-hint';
+  explique.textContent =
+    'Normalement, les résolutions DNS partent directement du navigateur de chaque utilisateur : '
+    + "aucun serveur intermédiaire ne les voit, et ça ne coûte rien. Certains réseaux d'entreprise "
+    + 'bloquent ces requêtes, et l\'analyse ressort alors vide (SPF, DKIM, DMARC). '
+    + "Ce relais fait passer les résolutions par le serveur de l'application, qui n'est pas soumis "
+    + 'à ce filtrage. À n\'activer que le temps nécessaire : une analyse complète représente une '
+    + "cinquantaine de requêtes serveur, et les domaines analysés transitent alors par l'application. "
+    + 'Les utilisateurs en sont avertis par une étiquette en haut de la page.';
+  form.appendChild(explique);
+
+  const ligne = document.createElement('div'); ligne.className = 'drop-toggle';
+  const gauche = document.createElement('div'); gauche.className = 'drop-toggle-left';
+  const label = document.createElement('span'); label.className = 'drop-toggle-label';
+  label.textContent = etat.enabled ? 'Relais actif' : 'Relais désactivé';
+  gauche.appendChild(label);
+  const bouton = document.createElement('div');
+  bouton.className = 'drop-toggle-switch' + (etat.enabled ? ' on' : '');
+  ligne.appendChild(gauche); ligne.appendChild(bouton);
+  ligne.addEventListener('click', () => setDnsRelay(!etat.enabled));
+  form.appendChild(ligne);
+
+  if (etat.updatedAt) {
+    const trace = document.createElement('div'); trace.className = 'admin-empty';
+    const d = new Date(etat.updatedAt);
+    trace.textContent = 'Dernière modification le ' + d.toLocaleDateString('fr-FR')
+      + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      + (etat.updatedBy ? ' par ' + etat.updatedBy : '');
+    form.appendChild(trace);
+  }
+
+  pane.appendChild(form);
+}
+
+async function setDnsRelay(enabled) {
+  try {
+    const r = await fetch('/api/dns-relay', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { heroTagFeedback(d.error || 'Modification refusée', true); return; }
+    TP_DNS_RELAY = d.enabled === true;
+    syncDnsRelayUI();
+    heroTagFeedback(TP_DNS_RELAY ? 'Relais DNS activé' : 'Relais DNS désactivé');
+    loadAdminRelay();
+  } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3476,8 +3555,19 @@ function syncDohUI() {
   }
 }
 
+/* Relais serveur, activé par un admin quand le réseau des postes bloque le DoH direct.
+   Faux par défaut, et servi par /api/me : ce n'est pas le fonctionnement normal. */
+let TP_DNS_RELAY = false;
+
 async function dohResolve(name, type, timeout=9000) {
   const n = encodeURIComponent(name), t = encodeURIComponent(type);
+  /* Relais actif : on l'interroge en premier, sans tenter le direct. Le relais n'est
+     activé que lorsque le direct est bloqué ; commencer par lui ferait payer un délai
+     d'attente à chacune des cinquantaine de résolutions d'une analyse complète. */
+  if (TP_DNS_RELAY) {
+    const relaye = await fetchJson(`/api/dns?name=${n}&type=${t}`, timeout);
+    if (relaye) return relaye;
+  }
   if (dohPref !== 'auto') {
     const fixe = DOH_RESOLVERS.find(r => r.cle === dohPref);
     if (fixe) return fetchJson(fixe.url(n, t), timeout, DOH_HEADERS);

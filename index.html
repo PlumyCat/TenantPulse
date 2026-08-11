@@ -188,6 +188,11 @@
 <div class="cache-clear-bar" id="cacheClearBar"><div class="cache-clear-bar-fill" id="cacheClearFill"></div></div>
 <div class="topbar">
   <a class="topbar-bug" id="bugReportLink" href="mailto:?subject=Bug%20report%20-%20TenantPulse" title="Signaler un bug par email">Report Bug(s)</a>
+  <!-- Relais DNS actif : les résolutions passent par le serveur au lieu du navigateur.
+       Alimenté par syncDnsRelayUI(). Les utilisateurs doivent le savoir. -->
+  <span class="topbar-relay" id="dnsRelayTag" title="Les résolutions DNS passent temporairement par le serveur de l'application, car le réseau bloque les requêtes directes." hidden>
+    <span class="topbar-relay-dot"></span>Relais DNS actif
+  </span>
   <span class="topbar-tagline">Analyse instantanée &nbsp;|&nbsp; Décisions immédiates</span>
   <div class="topbar-right">
     <!-- État de l'extension navigateur — alimenté par syncExtensionUI() :
@@ -488,6 +493,10 @@
         <img src="assets/information.png" class="admin-subtab-ico icon-adaptive" alt="">
         Bandeau
       </button>
+      <button class="admin-subtab" data-subtab="relay" data-min-role="admin" role="tab" type="button" hidden>
+        <img src="assets/Redirect.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
+        Relais DNS
+      </button>
     </div>
     <div class="admin-body">
       <div class="admin-pane" id="adminPaneRequests" hidden></div>
@@ -495,6 +504,7 @@
       <div class="admin-pane" id="adminPaneTags" hidden></div>
       <div class="admin-pane" id="adminPaneUsers" hidden></div>
       <div class="admin-pane" id="adminPaneBanner" hidden></div>
+      <div class="admin-pane" id="adminPaneRelay" hidden></div>
     </div>
   </div>
 </div>
@@ -566,7 +576,7 @@
         </button>
         <div class="collapsible-body" id="privacyBody">
           <div class="privacy-body">
-            <p class="privacy-intro">Les analyses (Tenant ID, DNS, WHOIS) sont effectuées <strong>directement depuis votre navigateur</strong> vers des APIs publiques. Aucun serveur intermédiaire ne reçoit ces requêtes.</p>
+            <p class="privacy-intro">Les analyses (Tenant ID, DNS, WHOIS) sont effectuées <strong>directement depuis votre navigateur</strong> vers des APIs publiques. Aucun serveur intermédiaire ne reçoit ces requêtes. <strong>Une exception :</strong> si votre administrateur a activé le relais DNS, parce que votre réseau bloque les requêtes directes, les résolutions DNS passent alors par le serveur de l'application. Dans ce cas, et dans ce cas seulement, une étiquette « Relais DNS actif » est affichée en haut de la page.</p>
             <div>
               <div class="privacy-section-lbl">Endpoint OpenID Microsoft 365 interrogé</div>
               <p class="sb-privacy-note">Seuls le domaine ou l'adresse saisis servent à interroger les endpoints publics.</p>
