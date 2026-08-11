@@ -284,6 +284,21 @@
           </div>
         </div>
 
+        <!-- Résolveur DNS — alimenté par syncDohUI() -->
+        <button class="drop-section-btn" data-drop-section>
+          <span>Résolveur DNS</span><span class="ds-arrow">▾</span>
+        </button>
+        <div class="drop-section-body">
+          <div class="analysis-mode-body">
+            <div class="analysis-mode-seg" id="dohSeg" role="radiogroup" aria-label="Résolveur DNS-over-HTTPS">
+              <button type="button" class="analysis-mode-opt active" data-doh="auto" role="radio" aria-checked="true">Automatique</button>
+              <button type="button" class="analysis-mode-opt" data-doh="cloudflare" role="radio" aria-checked="false">Cloudflare</button>
+              <button type="button" class="analysis-mode-opt" data-doh="google" role="radio" aria-checked="false">Google</button>
+            </div>
+            <div class="analysis-mode-hint" id="dohHint"></div>
+          </div>
+        </div>
+
         <!-- APIs utilisées -->
         <button class="drop-section-btn" data-drop-section>
           <span>APIs utilisées</span><span class="ds-arrow">▾</span>

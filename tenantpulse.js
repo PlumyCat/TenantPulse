@@ -816,6 +816,9 @@ function bindEvents() {
       updateAnalysisModeHint(opt.dataset.mode);
     });
   });
+  document.querySelectorAll('#dohSeg .analysis-mode-opt').forEach(opt => {
+    opt.addEventListener('click', () => { setDohPref(opt.dataset.doh); syncDohUI(); });
+  });
   document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
     saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
     renderMhaelleProfilePane();
@@ -1285,6 +1288,7 @@ function applyHashQuery() {
 window.addEventListener('load', () => {
   bindEvents();
   applyAnalysisMode(loadProfile().analysisMode);
+  loadDohPref(); syncDohUI();
   syncHistoryToggleUI();
   renderHistory();
   syncCacheIndicator();
@@ -3237,16 +3241,66 @@ async function fetchJson(url, timeout=9000, headers=null) {
 // C'est un choix d'architecture, pas un hasard — il garde le coût serveur nul quel que soit
 // le volume, et évite de traiter les domaines analysés pour le compte des utilisateurs.
 const DOH_RESOLVERS = [
-  { nom: 'cloudflare-dns.com', url: (n, t) => `https://cloudflare-dns.com/dns-query?name=${n}&type=${t}` },
-  { nom: 'dns.google',         url: (n, t) => `https://dns.google/resolve?name=${n}&type=${t}` }
+  { cle: 'cloudflare', nom: 'cloudflare-dns.com', url: (n, t) => `https://cloudflare-dns.com/dns-query?name=${n}&type=${t}` },
+  { cle: 'google',     nom: 'dns.google',         url: (n, t) => `https://dns.google/resolve?name=${n}&type=${t}` }
 ];
 const DOH_HEADERS = { Accept: 'application/dns-json' };
 /* Index du résolveur qui répond. On n'en change qu'après un échec avéré, et seulement si
    le suivant a réellement répondu : une panne passagère ne condamne pas la session. */
 let dohActif = 0;
 
+/* Préférence de résolveur, réglable dans le panneau (section « Résolveur DNS »).
+   « auto » = bascule automatique. Un choix explicite est en revanche STRICT : pas de
+   repli silencieux, parce qu'on impose un résolveur précisément pour maîtriser qui voit
+   ses requêtes — basculer dans son dos viderait le réglage de son sens.
+   Lue une fois au démarrage plutôt qu'à chaque résolution : une analyse complète en
+   enchaîne une cinquantaine. */
+const DOH_PREF_KEY = 'tenantpulse_doh_v1';
+let dohPref = 'auto';
+
+function loadDohPref() {
+  let v = null;
+  try { v = localStorage.getItem(DOH_PREF_KEY); } catch {}
+  dohPref = DOH_RESOLVERS.some(r => r.cle === v) ? v : 'auto';
+  return dohPref;
+}
+function setDohPref(v) {
+  dohPref = DOH_RESOLVERS.some(r => r.cle === v) ? v : 'auto';
+  try {
+    if (dohPref === 'auto') localStorage.removeItem(DOH_PREF_KEY);
+    else localStorage.setItem(DOH_PREF_KEY, dohPref);
+  } catch {}
+  dohActif = 0; // repartir du résolveur principal
+}
+
+/* Reflète la préférence dans le panneau : segment actif + explication de ce qu'elle implique. */
+function syncDohUI() {
+  const seg = document.getElementById('dohSeg');
+  if (seg) {
+    seg.querySelectorAll('.analysis-mode-opt').forEach(o => {
+      const actif = o.dataset.doh === dohPref;
+      o.classList.toggle('active', actif);
+      o.setAttribute('aria-checked', actif ? 'true' : 'false');
+    });
+  }
+  const hint = document.getElementById('dohHint');
+  if (!hint) return;
+  if (dohPref === 'auto') {
+    hint.textContent = 'Interroge Cloudflare, et ne bascule sur Google que si Cloudflare est injoignable. '
+      + 'Recommandé : c\'est le réglage qui résiste aux réseaux d\'entreprise filtrant le protocole QUIC.';
+  } else {
+    const r = DOH_RESOLVERS.find(x => x.cle === dohPref);
+    hint.textContent = r.nom + ' uniquement, sans repli. Si votre réseau bloque ce résolveur, '
+      + 'les données DNS (MX, SPF, DKIM, DMARC) resteront vides.';
+  }
+}
+
 async function dohResolve(name, type, timeout=9000) {
   const n = encodeURIComponent(name), t = encodeURIComponent(type);
+  if (dohPref !== 'auto') {
+    const fixe = DOH_RESOLVERS.find(r => r.cle === dohPref);
+    if (fixe) return fetchJson(fixe.url(n, t), timeout, DOH_HEADERS);
+  }
   for (let i = 0; i < DOH_RESOLVERS.length; i++) {
     const idx = (dohActif + i) % DOH_RESOLVERS.length;
     const d = await fetchJson(DOH_RESOLVERS[idx].url(n, t), timeout, DOH_HEADERS);

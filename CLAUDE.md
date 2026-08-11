@@ -136,6 +136,8 @@ Opt-in by design. Keys:
   `tenantIdHistory_retentionMs`. Retention uses `RETENTION_STEPS` ladder (13 intervals);
   `pruneExpiredHistory` runs on open, on each save, and on retention change.
 - Profiles: `tenantpulse_profile_v1` (TP button order), `mhaelle_profile_v1` (ML block layout).
+- Résolveur DoH : `tenantpulse_doh_v1` (`cloudflare` | `google`). Absente = mode automatique,
+  et choisir « Automatique » supprime la clé plutôt que d'y écrire une valeur par défaut.
 
 ### Optional backend — Azure Functions + Azure Table Storage
 
