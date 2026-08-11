@@ -41,6 +41,7 @@ Project App tenant pulse push to github/
     │   ├── tagUtils.js      # tag grouping helpers
     │   └── defaults.js      # fallback config
     ├── me/                  # GET /api/me
+    ├── banner/              # GET + POST + DELETE /api/banner — bandeau d'info
     ├── classification/      # GET + DELETE /api/classification
     ├── request/             # POST /api/request
     ├── requests/            # GET /api/requests
@@ -138,6 +139,9 @@ Opt-in by design. Keys:
 - Profiles: `tenantpulse_profile_v1` (TP button order), `mhaelle_profile_v1` (ML block layout).
 - Résolveur DoH : `tenantpulse_doh_v1` (`cloudflare` | `google`). Absente = mode automatique,
   et choisir « Automatique » supprime la clé plutôt que d'y écrire une valeur par défaut.
+- Bandeau : `tenantpulse_banner_hidden_v1` — identifiant du dernier message masqué par
+  l'utilisateur. Masquer ne vaut donc que pour **ce** message : l'`id` renvoyé par l'API change
+  à chaque publication, si bien qu'une nouvelle annonce réapparaît chez tout le monde.
 
 ### Optional backend — Azure Functions + Azure Table Storage
 
@@ -151,7 +155,7 @@ env vars). Auth context is injected by the SWA runtime as the `x-ms-client-princ
 | `Roles` | `email → {role, blocked}` |
 | `Classifications` | `tenantId + tagType → approved tag + approver` |
 | `Requests` | Pending tag proposals from users |
-| `Tags` | Custom tag definitions |
+| `Tags` | Custom tag definitions (`PartitionKey` = `tag`), balises par défaut (`default`), et le bandeau d'information sur sa ligne unique (`banner`/`current`) — trois partitions cloisonnées dans une même table, pour ne pas imposer une table Azure de plus pour une seule ligne |
 | `Locks` | Per-tenant or global modification locks |
 
 **Role hierarchy** (ascending permissions):
@@ -167,6 +171,9 @@ moderation powers; managers and admins can assign it via `/api/roles`.
 | Method | Route | Min role | Description |
 |---|---|---|---|
 | GET | `/api/me` | any auth | `{email, name, role, blocked}` |
+| GET | `/api/banner` | any auth | Bandeau d'information courant ou `null`. L'expiration est évaluée **côté serveur** (l'horloge du poste n'est pas une référence) et la ligne périmée est supprimée au passage |
+| POST | `/api/banner` | admin | Publie/remplace le bandeau : `{message, color, icon, durationMinutes}`. `icon` ∈ `warning`\|`info`, durée ≤ 7 jours |
+| DELETE | `/api/banner` | admin | Retire le bandeau (idempotent) |
 | GET | `/api/classification?tenantId=` | any auth | Approved tags + pending count + lock status |
 | GET | `/api/classification?all=1` | any auth | Read-only directory: all assigned tags across tenants |
 | DELETE | `/api/classification` | moderator | Remove an approved tag |

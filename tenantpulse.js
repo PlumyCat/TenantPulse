@@ -819,6 +819,8 @@ function bindEvents() {
   document.querySelectorAll('#dohSeg .analysis-mode-opt').forEach(opt => {
     opt.addEventListener('click', () => { setDohPref(opt.dataset.doh); syncDohUI(); });
   });
+  const bannerClose = document.getElementById('tpBannerClose');
+  if (bannerClose) bannerClose.addEventListener('click', dismissBanner);
   document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
     saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
     renderMhaelleProfilePane();
@@ -1293,6 +1295,7 @@ window.addEventListener('load', () => {
   renderHistory();
   syncCacheIndicator();
   initAuth();
+  loadBanner();
   bindAdminEvents();
   watchExtensionMarker();
   applyHashQuery();
@@ -2036,7 +2039,7 @@ function switchAdminSubtab(name) {
   document.querySelectorAll('.admin-subtab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.subtab === name);
   });
-  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers' };
+  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers', banner: 'adminPaneBanner' };
   Object.entries(panes).forEach(([key, id]) => {
     const pane = document.getElementById(id);
     if (pane) pane.hidden = (key !== name);
@@ -2047,6 +2050,7 @@ function switchAdminSubtab(name) {
   else if (name === 'known' && typeof loadKnownTenants === 'function') loadKnownTenants();
   else if (name === 'tags' && typeof loadAdminTags === 'function') loadAdminTags();
   else if (name === 'users' && typeof loadAdminUsers === 'function') loadAdminUsers();
+  else if (name === 'banner' && typeof loadAdminBanner === 'function') loadAdminBanner();
   else adminPanePlaceholder(panes[name]);
 }
 
@@ -2059,6 +2063,183 @@ function adminPanePlaceholder(paneId) {
   p.className = 'admin-empty';
   p.textContent = 'Module en cours de mise en place…';
   pane.appendChild(p);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  BANDEAU D'INFORMATION
+//  Message défilant en bas à droite, publié par un admin et visible de tous.
+//  Chaque publication porte un identifiant : masquer un message ne masque que
+//  celui-là, et un nouveau message réapparaît chez tout le monde — sinon un
+//  utilisateur ayant masqué une fois ne verrait plus jamais d'annonce.
+// ══════════════════════════════════════════════════════════════════════════
+const BANNER_HIDDEN_KEY = 'tenantpulse_banner_hidden_v1';
+const BANNER_ICONS = { warning: '⚠️', info: 'ℹ️' };
+const BANNER_COLOR_RE = /^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/;
+let bannerExpiryTimer = null;
+
+function bannerHiddenId() {
+  try { return localStorage.getItem(BANNER_HIDDEN_KEY); } catch { return null; }
+}
+
+/* Affiche le bandeau, sauf s'il a déjà été masqué par cet utilisateur. */
+function renderBanner(b) {
+  const el = document.getElementById('tpBanner');
+  if (!el) return;
+  clearTimeout(bannerExpiryTimer);
+
+  if (!b || !b.message || bannerHiddenId() === b.id) { el.hidden = true; return; }
+
+  document.getElementById('tpBannerIcon').textContent = BANNER_ICONS[b.icon] || BANNER_ICONS.info;
+  document.getElementById('tpBannerText').textContent = b.message;
+  // Couleur revalidée côté client : le serveur la contrôle déjà, mais rien n'est posé
+  // dans le CSS sans avoir la forme attendue.
+  if (BANNER_COLOR_RE.test(b.color || '')) el.style.setProperty('--banner-accent', b.color);
+  el.dataset.bannerId = b.id;
+  el.hidden = false;
+
+  /* Le serveur fait foi sur l'expiration, mais on retire aussi le bandeau en cours de
+     session si l'échéance tombe avant le prochain chargement de page. */
+  const reste = b.expiresAt ? (new Date(b.expiresAt) - new Date()) : 0;
+  if (reste > 0 && reste < 2147483647) bannerExpiryTimer = setTimeout(() => { el.hidden = true; }, reste);
+}
+
+async function loadBanner() {
+  try {
+    const r = await fetch('/api/banner', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) return;
+    renderBanner((await r.json()).banner);
+  } catch { /* pas d'API (dev local) — pas de bandeau */ }
+}
+
+/* Masquage côté utilisateur : mémorisé sur l'identifiant du message courant. */
+function dismissBanner() {
+  const el = document.getElementById('tpBanner');
+  if (!el) return;
+  try { localStorage.setItem(BANNER_HIDDEN_KEY, el.dataset.bannerId || ''); } catch {}
+  el.hidden = true;
+  clearTimeout(bannerExpiryTimer);
+}
+
+// ── Panneau admin : publication du bandeau (admin uniquement) ──
+async function loadAdminBanner() {
+  const pane = document.getElementById('adminPaneBanner');
+  if (!pane) return;
+  pane.replaceChildren();
+
+  let actuel = null;
+  try {
+    const r = await fetch('/api/banner', { headers: { 'Accept': 'application/json' } });
+    if (r.ok) actuel = (await r.json()).banner;
+  } catch { /* hors ligne : on affiche quand même le formulaire */ }
+
+  const form = document.createElement('div'); form.className = 'admin-tag-form';
+  const title = document.createElement('div'); title.className = 'admin-section-title';
+  title.textContent = actuel ? 'Remplacer le bandeau en cours' : 'Publier un bandeau';
+  form.appendChild(title);
+
+  if (actuel) {
+    const etat = document.createElement('div'); etat.className = 'admin-empty';
+    const fin = new Date(actuel.expiresAt);
+    etat.textContent = (BANNER_ICONS[actuel.icon] || '') + ' « ' + actuel.message + ' » — disparaît le '
+      + fin.toLocaleDateString('fr-FR') + ' à ' + fin.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    form.appendChild(etat);
+  }
+
+  const msg = document.createElement('textarea');
+  msg.className = 'admin-input admin-textarea';
+  msg.placeholder = 'Message affiché à tous les utilisateurs (280 caractères max)';
+  msg.maxLength = 280;
+  if (actuel) msg.value = actuel.message;
+
+  const couleur = document.createElement('input');
+  couleur.type = 'color'; couleur.className = 'admin-color';
+  couleur.value = (actuel && BANNER_COLOR_RE.test(actuel.color || '')) ? actuel.color : '#d97706';
+
+  // Icône : même contrôle segmenté que le reste de l'application.
+  const seg = document.createElement('div');
+  seg.className = 'analysis-mode-seg'; seg.setAttribute('role', 'radiogroup');
+  seg.setAttribute('aria-label', 'Icône du bandeau');
+  let icone = (actuel && BANNER_ICONS[actuel.icon]) ? actuel.icon : 'warning';
+  /* Le marquage se fait après l'insertion des deux boutons : appelé pendant la boucle,
+     il ne verrait pas encore les boutons suivants dans le DOM et n'activerait rien. */
+  const marquerIcone = cle => {
+    icone = cle;
+    seg.querySelectorAll('.analysis-mode-opt').forEach(o => {
+      const actif = o.dataset.icon === cle;
+      o.classList.toggle('active', actif);
+      o.setAttribute('aria-checked', actif ? 'true' : 'false');
+    });
+  };
+  [['warning', '⚠️ Alerte'], ['info', 'ℹ️ Information']].forEach(([cle, libelle]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'analysis-mode-opt'; b.textContent = libelle;
+    b.dataset.icon = cle;
+    b.setAttribute('role', 'radio');
+    b.addEventListener('click', () => marquerIcone(cle));
+    seg.appendChild(b);
+  });
+  marquerIcone(icone);
+
+  const duree = document.createElement('input');
+  duree.type = 'number'; duree.className = 'admin-input';
+  duree.min = '1'; duree.max = '10080'; duree.value = '60';
+  duree.placeholder = 'Durée avant disparition (minutes)';
+
+  const aide = document.createElement('div'); aide.className = 'analysis-mode-hint';
+  aide.textContent = 'Durée en minutes avant disparition automatique — 60 = 1 h, 1440 = 1 jour, 10080 = 7 jours (maximum). '
+    + 'Chaque utilisateur peut masquer le message de son côté ; une nouvelle publication réapparaît chez tout le monde.';
+
+  const publier = document.createElement('button');
+  publier.type = 'button'; publier.className = 'admin-btn admin-btn-approve';
+  publier.textContent = actuel ? 'Remplacer' : 'Publier';
+  publier.addEventListener('click', () => publishBanner({
+    message: msg.value.trim(),
+    color: couleur.value,
+    icon: icone,
+    durationMinutes: parseInt(duree.value, 10)
+  }));
+
+  form.appendChild(msg); form.appendChild(couleur); form.appendChild(seg);
+  form.appendChild(duree); form.appendChild(aide); form.appendChild(publier);
+
+  if (actuel) {
+    const retirer = document.createElement('button');
+    retirer.type = 'button'; retirer.className = 'admin-btn admin-btn-small admin-btn-reject';
+    retirer.textContent = 'Retirer maintenant';
+    retirer.addEventListener('click', removeBanner);
+    form.appendChild(retirer);
+  }
+
+  pane.appendChild(form);
+}
+
+async function publishBanner(payload) {
+  if (!payload.message) { heroTagFeedback('Le message est obligatoire', true); return; }
+  if (!Number.isInteger(payload.durationMinutes) || payload.durationMinutes < 1) {
+    heroTagFeedback('Durée invalide (en minutes, 1 minimum)', true); return;
+  }
+  try {
+    const r = await fetch('/api/banner', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { heroTagFeedback(d.error || 'Publication refusée', true); return; }
+    heroTagFeedback('Bandeau publié');
+    // Le nouvel identifiant lève le masquage précédent, y compris pour l'admin.
+    renderBanner(d.banner);
+    loadAdminBanner();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+async function removeBanner() {
+  try {
+    const r = await fetch('/api/banner', { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
+    if (!r.ok) { heroTagFeedback('Suppression refusée', true); return; }
+    heroTagFeedback('Bandeau retiré');
+    renderBanner(null);
+    loadAdminBanner();
+  } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
 /* Met à jour les badges (topbar + sous-onglets) :

@@ -481,15 +481,30 @@
         <img src="assets/user.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
         Utilisateurs
       </button>
+      <button class="admin-subtab" data-subtab="banner" data-min-role="admin" role="tab" type="button" hidden>
+        <img src="assets/information.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
+        Bandeau
+      </button>
     </div>
     <div class="admin-body">
       <div class="admin-pane" id="adminPaneRequests" hidden></div>
       <div class="admin-pane" id="adminPaneKnown"></div>
       <div class="admin-pane" id="adminPaneTags" hidden></div>
       <div class="admin-pane" id="adminPaneUsers" hidden></div>
+      <div class="admin-pane" id="adminPaneBanner" hidden></div>
     </div>
   </div>
 </div>
+
+<!-- Bandeau d'information défilant — alimenté par loadBanner(), publié par un admin.
+     La couleur d'accent arrive du serveur et est posée sur --banner-accent. -->
+<aside class="tp-banner" id="tpBanner" role="status" aria-live="polite" hidden>
+  <span class="tp-banner-icon" id="tpBannerIcon" aria-hidden="true"></span>
+  <div class="tp-banner-track">
+    <span class="tp-banner-text" id="tpBannerText"></span>
+  </div>
+  <button class="tp-banner-close" id="tpBannerClose" type="button" aria-label="Masquer ce message">✕</button>
+</aside>
 
 <div class="app">
   <aside class="sidebar">
