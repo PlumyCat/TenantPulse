@@ -368,12 +368,26 @@ en TCP. Symptôme caractéristique : `ERR_QUIC_PROTOCOL_ERROR.QUIC_NETWORK_IDLE_
 boucle, l'analyse ressort vide (DMARC/SPF/DKIM), **mais la recherche de Tenant ID fonctionne**
 — elle ne tape que `login.microsoftonline.com`, presque toujours en dérogation de proxy.
 
-Le repli sur `dns.google` couvre une partie des cas. Le remède de fond est côté client, et
-c'est un **prérequis à documenter pour l'utilisateur**, pas un défaut de l'application :
+La cause n'est pas toujours le pare-feu périmétrique : un **agent de sécurité sur le poste**
+produit le même effet. Cas observé en production — *Acronis Cyber Protect* avec le filtrage
+réseau actif. Ces modules interceptent le HTTPS via un proxy TLS local, or QUIC n'est pas
+interceptable ainsi : le produit bloque l'UDP 443 ou abandonne la session en cours.
 
-> Intune → Catalogue de paramètres → Microsoft Edge → « Allow QUIC protocol » = **Disabled**
-> (équivalent Chrome : policy `QuicAllowed`). Le navigateur repasse en HTTP/2 sur TCP 443,
-> qui suit le proxy d'entreprise normalement.
+Le repli sur `dns.google` couvre une partie des cas. Le remède de fond est côté client, et
+c'est un **prérequis à documenter pour l'utilisateur**, pas un défaut de l'application.
+
+Deux pannes distinctes se cachent derrière le même symptôme, et elles n'appellent pas la même
+correction. Le test qui les sépare : appliquer la policy ci-dessous, filtrage toujours actif.
+
+> **a. QUIC seul est cassé** → Intune → Catalogue de paramètres → Microsoft Edge →
+> « Allow QUIC protocol » = **Disabled** (équivalent Chrome : policy `QuicAllowed`). Le
+> navigateur repasse en HTTP/2 sur TCP 443, que le proxy d'interception sait traiter.
+>
+> **b. Ça échoue encore en TCP** → le filtrage bloque les **résolveurs DoH eux-mêmes**.
+> C'est délibéré et courant : le DNS-over-HTTPS contourne le filtrage DNS du produit, donc
+> les éditeurs le coupent par principe. La policy ne sert alors à rien, et la seule voie est
+> une exception dans le filtrage d'URL sur `cloudflare-dns.com` **et** `dns.google` — les
+> deux figurent sur les mêmes listes, d'où l'inutilité du repli dans ce cas de figure.
 
 Ne pas traiter ce cas en ajoutant de l'infrastructure côté serveur — voir l'encadré du modèle
 réseau plus haut.
