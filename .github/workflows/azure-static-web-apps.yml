@@ -26,35 +26,6 @@ jobs:
       # navigateur serait publié sur le site statique. Il n'a rien à y faire.
       - name: Retirer l'extension navigateur du déploiement
         run: rm -rf extension
-      # Le GUID du tenant Entra identifie l'organisation : il n'a rien à faire dans un
-      # dépôt public. Le fichier versionné porte un marqueur, remplacé ici par le secret
-      # repo AAD_TENANT_ID. La substitution doit se faire avant l'upload : côté SWA,
-      # openIdIssuer n'accepte pas de référence à un paramètre d'application, contrairement
-      # à clientIdSettingName (voir Azure/static-web-apps#589).
-      # Sécurité : toute anomalie interrompt le job AVANT le déploiement, pour ne jamais
-      # publier une authentification cassée — le site en ligne reste alors intact.
-      - name: Injecter le tenant Entra dans staticwebapp.config.json
-        env:
-          AAD_TENANT_ID: ${{ secrets.AAD_TENANT_ID }}
-        run: |
-          if [ -z "$AAD_TENANT_ID" ]; then
-            echo "::error::Secret AAD_TENANT_ID absent. Le définir dans Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-          if ! printf '%s' "$AAD_TENANT_ID" | grep -Eq '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'; then
-            echo "::error::AAD_TENANT_ID n'a pas le format d'un GUID."
-            exit 1
-          fi
-          if ! grep -q '__AAD_TENANT_ID__' staticwebapp.config.json; then
-            echo "::error::Marqueur __AAD_TENANT_ID__ introuvable dans staticwebapp.config.json."
-            exit 1
-          fi
-          sed -i "s|__AAD_TENANT_ID__|${AAD_TENANT_ID}|g" staticwebapp.config.json
-          if grep -q '__AAD_TENANT_ID__' staticwebapp.config.json; then
-            echo "::error::Substitution incomplète."
-            exit 1
-          fi
-          echo "Tenant Entra injecté dans staticwebapp.config.json."
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1

@@ -321,13 +321,19 @@ La liste littérale des termes à bannir vit dans `.claude/mentions-interdites.m
 
 Si une référence à l'entreprise est nécessaire dans la documentation, utiliser le terme générique **"l'organisation"** ou **"l'équipe support"**.
 
-### GUID du tenant Entra — injecté au déploiement
+### GUID du tenant Entra — écart connu, non résolu
 
-`staticwebapp.config.json` versionne le marqueur `__AAD_TENANT_ID__` dans `auth.identityProviders.azureActiveDirectory.registration.openIdIssuer`, **jamais le GUID réel** : celui-ci identifie l'organisation.
+`staticwebapp.config.json` contient le GUID du tenant Entra en clair dans `auth.identityProviders.azureActiveDirectory.registration.openIdIssuer`. Il identifie l'organisation et tombe donc sous la règle ci-dessus, mais il est **assumé pour l'instant** — ne pas le retirer sans avoir lu ce qui suit.
 
-Le remplacement est fait par l'étape « Injecter le tenant Entra » de `.github/workflows/azure-static-web-apps.yml`, depuis le secret repo `AAD_TENANT_ID`. Ce détour est imposé par SWA : contrairement à `clientIdSettingName`, `openIdIssuer` n'accepte aucune référence à un paramètre d'application (Azure/static-web-apps#589), la valeur doit être littérale dans le fichier déployé.
+Pourquoi il est encore là :
 
-L'étape échoue — et interrompt le job **avant** le déploiement — si le secret est absent, mal formé, ou si le marqueur a disparu. Une erreur laisse donc le site en ligne intact plutôt que de publier une authentification cassée. Ne jamais recoller le GUID en dur dans le fichier pour « débloquer » un build rouge : ajouter le secret manquant.
+- SWA impose une valeur littérale. Contrairement à `clientIdSettingName`, `openIdIssuer` n'accepte aucune référence à un paramètre d'application (Azure/static-web-apps#589). La seule voie propre est une substitution dans `.github/workflows/azure-static-web-apps.yml` depuis un secret repo — **et créer un secret exige le rôle admin sur le dépôt**, que les contributeurs habituels n'ont pas. Une tentative a été faite puis annulée pour cette raison : elle rendait le déploiement impossible.
+- Le GUID est de toute façon déjà présent dans l'historique git public. Le sortir du HEAD seul n'apporte qu'un bénéfice partiel.
+
+Deux issues possibles, toutes deux à la main du propriétaire du dépôt :
+
+1. Ajouter le secret `AAD_TENANT_ID`, puis rétablir la substitution au déploiement (avec un garde-fou qui interrompt le job **avant** l'upload si le secret manque, pour ne jamais publier une authentification cassée).
+2. Passer l'issuer à `https://login.microsoftonline.com/organizations/v2.0`. Ni secret ni GUID, mais la restriction à l'organisation ne repose alors plus que sur le `signInAudience` de l'app registration Entra — **à ne faire qu'après avoir vérifié qu'elle est bien en « comptes de cet annuaire uniquement »**, sinon tout compte professionnel externe peut se connecter et lire l'annuaire de tags.
 
 ---
 
