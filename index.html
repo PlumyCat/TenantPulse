@@ -509,16 +509,6 @@
   </div>
 </div>
 
-<!-- Bandeau d'information défilant — alimenté par loadBanner(), publié par un admin.
-     La couleur d'accent arrive du serveur et est posée sur --banner-accent. -->
-<aside class="tp-banner" id="tpBanner" role="status" aria-live="polite" hidden>
-  <span class="tp-banner-icon" id="tpBannerIcon" aria-hidden="true"></span>
-  <div class="tp-banner-track">
-    <span class="tp-banner-text" id="tpBannerText"></span>
-  </div>
-  <button class="tp-banner-close" id="tpBannerClose" type="button" aria-label="Masquer ce message">✕</button>
-</aside>
-
 <div class="app">
   <aside class="sidebar">
     <div class="sb-head">
@@ -641,6 +631,22 @@
 <footer>
   <div class="footer-role" id="footerRole" hidden>Rôle&nbsp;: <span id="footerRoleValue">—</span></div>
   <div class="powered">Prototype <span> Interne</span> RUNMW N1</div>
+  <!-- Bandeau d'information — alimenté par loadBanner(), publié par un admin.
+       Placé dans le pied de page, en symétrique de .footer-role qui occupe la gauche.
+       Ancré par le bas pour que le dépliage s'ouvre vers le haut, jamais hors écran.
+       La couleur d'accent arrive du serveur et est posée sur --banner-accent. -->
+  <aside class="tp-banner" id="tpBanner" role="status" aria-live="polite" hidden>
+    <span class="tp-banner-icon" id="tpBannerIcon" aria-hidden="true"></span>
+    <div class="tp-banner-track" id="tpBannerTrack" role="button" tabindex="0" aria-expanded="false"
+         title="Afficher le message en entier">
+      <span class="tp-banner-text" id="tpBannerText"></span>
+    </div>
+    <button class="tp-banner-close" id="tpBannerClose" type="button" aria-label="Masquer ce message">✕</button>
+  </aside>
+  <!-- Rappel du message masqué. Occupe la même place que le bandeau, dont il prend le
+       relais : les deux ne sont jamais visibles en même temps. -->
+  <button class="tp-banner-recall" id="tpBannerRecall" type="button"
+          aria-label="Revoir le message d'information masqué" title="Revoir le message masqué" hidden>i</button>
 </footer>
 
 <!--

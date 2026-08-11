@@ -821,6 +821,15 @@ function bindEvents() {
   });
   const bannerClose = document.getElementById('tpBannerClose');
   if (bannerClose) bannerClose.addEventListener('click', dismissBanner);
+  const bannerRecall = document.getElementById('tpBannerRecall');
+  if (bannerRecall) bannerRecall.addEventListener('click', recallBanner);
+  const bannerTrack = document.getElementById('tpBannerTrack');
+  if (bannerTrack) {
+    bannerTrack.addEventListener('click', toggleBannerExpand);
+    bannerTrack.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBannerExpand(); }
+    });
+  }
   document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
     saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
     renderMhaelleProfilePane();
@@ -2155,6 +2164,24 @@ const BANNER_HIDDEN_KEY = 'tenantpulse_banner_hidden_v1';
 const BANNER_ICONS = { warning: '⚠️', info: 'ℹ️' };
 const BANNER_COLOR_RE = /^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/;
 let bannerExpiryTimer = null;
+/* Dernier message reçu du serveur, conservé même une fois masqué : c'est lui que la
+   pastille de rappel réaffiche. */
+let bannerCourant = null;
+
+/* La pastille ne s'affiche que s'il existe un message et qu'il est masqué. */
+function syncBannerRecall() {
+  const btn = document.getElementById('tpBannerRecall');
+  const el  = document.getElementById('tpBanner');
+  if (!btn || !el) return;
+  btn.hidden = !(bannerCourant && el.hidden);
+}
+
+/* Rappel : on lève le masquage mémorisé, sinon le message repartirait au rechargement. */
+function recallBanner() {
+  if (!bannerCourant) return;
+  try { localStorage.removeItem(BANNER_HIDDEN_KEY); } catch {}
+  renderBanner(bannerCourant);
+}
 
 function bannerHiddenId() {
   try { return localStorage.getItem(BANNER_HIDDEN_KEY); } catch { return null; }
@@ -2166,7 +2193,13 @@ function renderBanner(b) {
   if (!el) return;
   clearTimeout(bannerExpiryTimer);
 
-  if (!b || !b.message || bannerHiddenId() === b.id) { el.hidden = true; return; }
+  bannerCourant = (b && b.message) ? b : null;
+  if (!bannerCourant || bannerHiddenId() === b.id) { el.hidden = true; syncBannerRecall(); return; }
+
+  /* Un nouveau message repart replié : l'état déplié valait pour le précédent. */
+  el.classList.remove('is-expanded');
+  const track = document.getElementById('tpBannerTrack');
+  if (track) { track.setAttribute('aria-expanded', 'false'); track.title = 'Afficher le message en entier'; }
 
   document.getElementById('tpBannerIcon').textContent = BANNER_ICONS[b.icon] || BANNER_ICONS.info;
   document.getElementById('tpBannerText').textContent = b.message;
@@ -2179,7 +2212,11 @@ function renderBanner(b) {
   /* Le serveur fait foi sur l'expiration, mais on retire aussi le bandeau en cours de
      session si l'échéance tombe avant le prochain chargement de page. */
   const reste = b.expiresAt ? (new Date(b.expiresAt) - new Date()) : 0;
-  if (reste > 0 && reste < 2147483647) bannerExpiryTimer = setTimeout(() => { el.hidden = true; }, reste);
+  if (reste > 0 && reste < 2147483647) {
+    // À l'échéance le message n'existe plus : pas de pastille de rappel pour un périmé.
+    bannerExpiryTimer = setTimeout(() => { el.hidden = true; bannerCourant = null; syncBannerRecall(); }, reste);
+  }
+  syncBannerRecall();
 }
 
 async function loadBanner() {
@@ -2190,6 +2227,17 @@ async function loadBanner() {
   } catch { /* pas d'API (dev local) — pas de bandeau */ }
 }
 
+/* Le message défile, donc il n'est lisible en entier qu'au bout d'un cycle d'animation.
+   Un clic (ou Entrée/Espace au clavier) l'affiche d'un coup, sur plusieurs lignes. */
+function toggleBannerExpand() {
+  const el = document.getElementById('tpBanner');
+  const track = document.getElementById('tpBannerTrack');
+  if (!el || !track) return;
+  const ouvert = el.classList.toggle('is-expanded');
+  track.setAttribute('aria-expanded', ouvert ? 'true' : 'false');
+  track.title = ouvert ? 'Réduire le message' : 'Afficher le message en entier';
+}
+
 /* Masquage côté utilisateur : mémorisé sur l'identifiant du message courant. */
 function dismissBanner() {
   const el = document.getElementById('tpBanner');
@@ -2197,6 +2245,7 @@ function dismissBanner() {
   try { localStorage.setItem(BANNER_HIDDEN_KEY, el.dataset.bannerId || ''); } catch {}
   el.hidden = true;
   clearTimeout(bannerExpiryTimer);
+  syncBannerRecall();
 }
 
 // ── Panneau admin : publication du bandeau (admin uniquement) ──

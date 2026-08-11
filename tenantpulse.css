@@ -1570,7 +1570,7 @@ select.admin-input{cursor:pointer;color-scheme:light}
 .admin-known-badges{display:flex;flex-wrap:wrap;gap:6px}
 
 /* ── Garde-fous [hidden] (les règles display ci-dessus battent le UA [hidden]) ── */
-.topbar-admin[hidden],.topbar-ext[hidden],.topbar-relay[hidden],.tp-banner[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
+.topbar-admin[hidden],.topbar-ext[hidden],.topbar-relay[hidden],.tp-banner[hidden],.tp-banner-recall[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
 
 /* ── Étiquette « Relais DNS actif » (haut à gauche) ──
    Volontairement visible : quand le relais est actif, la promesse « aucun serveur
@@ -1590,14 +1590,26 @@ select.admin-input{cursor:pointer;color-scheme:light}
    en thème clair et 12,2:1 en sombre. La teinte du texte est fixée en clair au lieu de suivre
    var(--text) — le verre reste sombre dans les deux thèmes, donc un texte sombre y
    deviendrait illisible en mode clair. */
-.tp-banner{position:fixed;right:16px;bottom:16px;z-index:900;display:flex;align-items:center;gap:9px;width:max-content;max-width:min(420px,calc(100vw - 32px));padding:9px 10px 9px 12px;border-radius:var(--r-lg);background:linear-gradient(180deg, rgba(46,44,42,.78) 0%, rgba(34,32,30,.78) 100%);-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%);border:1px solid transparent;border-left:3px solid var(--banner-accent,#4B3FBE);box-shadow:0 0 0 1px rgba(255,255,255,.14),0 1px 0 rgba(255,255,255,.12) inset,0 12px 40px rgba(0,0,0,.4);animation:tpRise .3s ease}
+.tp-banner{position:absolute;right:16px;bottom:3px;z-index:900;display:flex;align-items:center;gap:9px;width:max-content;max-width:min(420px,calc(100vw - 32px));padding:6px 8px 6px 11px;border-radius:var(--r-md);background:linear-gradient(180deg, rgba(46,44,42,.78) 0%, rgba(34,32,30,.78) 100%);-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%);border:1px solid transparent;border-left:3px solid var(--banner-accent,#4B3FBE);box-shadow:0 0 0 1px rgba(255,255,255,.14),0 1px 0 rgba(255,255,255,.12) inset,0 12px 40px rgba(0,0,0,.4);animation:tpRise .3s ease}
 .tp-banner-icon{flex-shrink:0;font-size:var(--text-base);line-height:1}
-.tp-banner-track{flex:1;overflow:hidden;min-width:120px}
+.tp-banner-track{flex:1;overflow:hidden;min-width:120px;cursor:pointer}
+.tp-banner-track:focus-visible{outline:2px solid var(--banner-accent,#4B3FBE);outline-offset:2px;border-radius:var(--r-xs)}
 .tp-banner-text{display:inline-block;white-space:nowrap;padding-left:100%;font-size:var(--text-xs);font-weight:600;color:#f0ede8;animation:tpBannerScroll 18s linear infinite}
 .tp-banner:hover .tp-banner-text,.tp-banner:focus-within .tp-banner-text{animation-play-state:paused}
+/* Déplié au clic : message entier, défilement arrêté. Le bandeau étant ancré par le bas
+   du pied de page, il grandit vers le haut et ne sort jamais de l'écran. */
+.tp-banner.is-expanded{align-items:flex-start;max-width:min(560px,calc(100vw - 32px))}
+.tp-banner.is-expanded .tp-banner-track{overflow:visible}
+.tp-banner.is-expanded .tp-banner-text{display:block;white-space:normal;padding-left:0;line-height:1.45;animation:none}
 .tp-banner-close{flex-shrink:0;border:none;background:transparent;color:rgba(240,237,232,.6);font-size:var(--text-xs);line-height:1;padding:3px 5px;border-radius:var(--r-xs);cursor:pointer;transition:color .12s,background .12s}
 .tp-banner-close:hover{color:#f0ede8;background:rgba(255,255,255,.14)}
 .tp-banner-close:focus-visible{outline:2px solid var(--banner-accent,#4B3FBE);outline-offset:1px}
+/* Pastille de rappel, à la place exacte du bandeau une fois celui-ci masqué. Sans elle,
+   fermer un message le rendrait irrécupérable jusqu'à la publication du suivant. */
+.tp-banner-recall{position:absolute;right:16px;top:50%;transform:translateY(-50%);z-index:900;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border-radius:var(--r-pill);border:1px solid var(--border);background:var(--row);color:var(--soft);font-family:var(--font);font-size:var(--text-xs);font-weight:700;font-style:italic;line-height:1;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.tp-banner-recall:hover{background:var(--acc-hover);color:var(--text);border-color:var(--muted)}
+.tp-banner-recall:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
 @keyframes tpBannerScroll{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 /* Défilement supprimé si l'utilisateur a demandé moins d'animations : le texte passe
    alors à la ligne au lieu de défiler, il reste donc entièrement lisible. */
