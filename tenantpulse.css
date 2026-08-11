@@ -1570,7 +1570,7 @@ select.admin-input{cursor:pointer;color-scheme:light}
 .admin-known-badges{display:flex;flex-wrap:wrap;gap:6px}
 
 /* ── Garde-fous [hidden] (les règles display ci-dessus battent le UA [hidden]) ── */
-.topbar-admin[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
+.topbar-admin[hidden],.topbar-ext[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
 
 /* ── Responsive ── */
 @media(max-width:640px){
