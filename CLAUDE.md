@@ -251,9 +251,14 @@ remote code, so the extension cannot load `tenantpulse.js` at runtime).
   Chrome 71). Hidden store listings are a convenience for unmanaged devices only; the
   attestation gate is what actually keeps the extension org-only.
 - The app's topbar shows extension status. Detection is the `data-tp-extension` attribute
-  `sync.js` sets on `<html>`. Store URLs are **never committed**: `GET /api/me` serves them
-  from the `EXTENSION_STORE_URL` / `EXTENSION_STORE_URL_EDGE` app settings, and
-  `safeStoreUrl()` validates them against `ALLOWED_STORE_HOSTS`.
+  `sync.js` sets on `<html>`. The Chrome Web Store listing URL **is committed**, as
+  `TP_EXTENSION_STORE_URL` in `tenantpulse.js` — deliberate: the unlisted listing was never
+  the access control (the `/api/me` attestation is), so publishing the address costs
+  obscurity, not security. `GET /api/me` still overrides it from the `EXTENSION_STORE_URL` /
+  `EXTENSION_STORE_URL_EDGE` app settings when they are set, and `safeStoreUrl()` validates
+  every candidate against `ALLOWED_STORE_HOSTS`. This is the one documented exception to the
+  confidentiality rules below — it covers the store listing only, never the app origin, a
+  real domain, or anything SAS-bearing.
 - The signing key (`*.pem`) fixes the extension ID and is gitignored — losing it forces a
   reinstall for every user. See `extension/README.md`.
 

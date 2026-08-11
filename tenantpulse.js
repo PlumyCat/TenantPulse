@@ -1184,10 +1184,22 @@ function saveMhaelleProfileFromModal() {
 //  EXTENSION NAVIGATEUR
 //  Présence détectée via l'attribut « data-tp-extension » que le script de
 //  contenu de l'extension pose sur <html> (mondes JS isolés, DOM partagé).
-//  L'URL de la fiche vient de /api/me : la fiche est en visibilité masquée,
-//  son adresse n'a donc rien à faire dans un dépôt public.
+//  L'URL de la fiche est versionnée ci-dessous, avec priorité au paramètre
+//  d'application servi par /api/me quand il est renseigné.
 // ══════════════════════════════════════════════════════════════════════════
-const TP_EXTENSION = { present: false, version: null, url: null, urlEdge: null };
+/* Fiche Chrome Web Store, versionnée volontairement.
+   La fiche est en visibilité masquée, mais cette obscurité n'a jamais été le
+   contrôle d'accès : c'est l'attestation serveur (/api/me, voir extension/README.md)
+   qui réserve l'usage à l'organisation, et une personne extérieure qui installerait
+   l'extension n'obtiendrait qu'une coquille inerte. Publier l'adresse coûte donc de
+   l'obscurité, pas de la sécurité — arbitrage assumé pour que le bouton fonctionne
+   sans dépendre d'un paramètre d'application.
+   Le paramètre EXTENSION_STORE_URL reste prioritaire s'il est défini : il permet de
+   pointer une autre fiche (préproduction, republication) sans redéployer le front. */
+// Forme canonique : chrome.google.com/webstore/detail/<id> renvoie un 301 vers celle-ci.
+const TP_EXTENSION_STORE_URL = 'https://chromewebstore.google.com/detail/mojlijcnnaedbmmojkhjdobipijjdjlp';
+
+const TP_EXTENSION = { present: false, version: null, url: TP_EXTENSION_STORE_URL, urlEdge: null };
 
 /* Edge ne peut pas installer depuis le Chrome Web Store sans que l'utilisateur
    autorise « les extensions d'autres magasins » ; les autres navigateurs Chromium
@@ -1324,25 +1336,29 @@ const TP_AUTH = {
 async function initAuth() {
   try {
     const res = await fetch('/api/me', { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) { applyAuthToUI(); return; }
-    const data = await res.json();
-    TP_AUTH.email  = data.email || null;
-    TP_AUTH.name   = data.name  || null;
-    TP_AUTH.role   = ROLE_HIERARCHY.hasOwnProperty(data.role) ? data.role : 'user';
-    TP_AUTH.blocked = data.blocked === true;
-    TP_AUTH.loaded = true;
-    // contactEmail : premier admin de la table Roles, renvoyé par /api/me
-    const link = document.getElementById('bugReportLink');
-    if (link && data.contactEmail) {
-      link.href = 'mailto:' + data.contactEmail + '?subject=Bug%20report%20-%20TenantPulse';
+    if (res.ok) {
+      const data = await res.json();
+      TP_AUTH.email  = data.email || null;
+      TP_AUTH.name   = data.name  || null;
+      TP_AUTH.role   = ROLE_HIERARCHY.hasOwnProperty(data.role) ? data.role : 'user';
+      TP_AUTH.blocked = data.blocked === true;
+      TP_AUTH.loaded = true;
+      // contactEmail : premier admin de la table Roles, renvoyé par /api/me
+      const link = document.getElementById('bugReportLink');
+      if (link && data.contactEmail) {
+        link.href = 'mailto:' + data.contactEmail + '?subject=Bug%20report%20-%20TenantPulse';
+      }
+      // Fiches de l'extension navigateur : le paramètre d'application prime sur la
+      // fiche versionnée, qui reste le repli quand il n'est pas renseigné.
+      TP_EXTENSION.url     = data.extensionUrl     || TP_EXTENSION_STORE_URL;
+      TP_EXTENSION.urlEdge = data.extensionUrlEdge || null;
     }
-    // Fiches de l'extension navigateur (paramètres d'application, hors dépôt)
-    TP_EXTENSION.url     = data.extensionUrl     || null;
-    TP_EXTENSION.urlEdge = data.extensionUrlEdge || null;
-    syncExtensionUI();
   } catch {
-    // Pas d'API disponible (dev local) — on reste en utilisateur anonyme
+    // Pas d'API disponible (dev local) — on reste en utilisateur anonyme.
   }
+  /* Hors du try, et sans retour anticipé : le bouton d'installation s'appuie sur la
+     fiche versionnée, il ne doit donc pas disparaître parce que /api/me est en erreur. */
+  syncExtensionUI();
   applyAuthToUI();
 }
 
