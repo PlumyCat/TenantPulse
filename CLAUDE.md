@@ -41,6 +41,7 @@ Project App tenant pulse push to github/
     │   ├── tagUtils.js      # tag grouping helpers
     │   └── defaults.js      # fallback config
     ├── me/                  # GET /api/me
+    ├── dns/                 # GET /api/dns — relais DoH de secours
     ├── classification/      # GET + DELETE /api/classification
     ├── request/             # POST /api/request
     ├── requests/            # GET /api/requests
@@ -98,6 +99,13 @@ External endpoints:
 - `login.microsoftonline.com/<domain>/.well-known/openid-configuration` → tenant ID;
   `validateTenantGuid` re-queries the GUID and rejects generic MSA tenants (`MS_GENERIC_GUIDS`).
 - `cloudflare-dns.com/dns-query` (DNS-over-HTTPS JSON, header `Accept: application/dns-json`) → MX/TXT/etc via `dohResolve`/`dnsQuery`. Gratuit, usage commercial autorisé.
+  **Exception au modèle « no proxy »** : sur un poste géré, le pare-feu coupe souvent QUIC/UDP 443
+  vers ce domaine (`ERR_QUIC_PROTOCOL_ERROR`) et l'analyse ressort vide alors que la recherche
+  d'ID fonctionne. `dohResolve` bascule alors sur `GET /api/dns`, relais de même origine qui
+  refait la requête côté serveur. La bascule ne s'arme que si le relais a répondu, et vaut pour
+  la session (`dohUseRelay`) — sans backend, le comportement est inchangé. Toute modification de
+  cette bascule doit rester cohérente avec les mentions de confidentialité dans `index.html`
+  (intro « Aucun serveur intermédiaire… » et ligne « APIs utilisées ») et `PROXY_DATA.dnsgoogle`.
 - `accounts.google.com` → Google Workspace detection.
 - `rdap.org` + many registry RDAP servers → WHOIS / hosting detection (`detectHostFromNS`).
 - `google.com/s2/favicons` → service icons.
@@ -148,6 +156,7 @@ moderation powers; managers and admins can assign it via `/api/roles`.
 | Method | Route | Min role | Description |
 |---|---|---|---|
 | GET | `/api/me` | any auth | `{email, name, role, blocked}` |
+| GET | `/api/dns?name=&type=` | any auth | Relais DoH de secours ; renvoie le JSON Cloudflare tel quel. Types en liste fermée, `name` normalisé en punycode via `new URL()` — ne jamais l'ouvrir en anonyme, ce serait un résolveur DNS ouvert |
 | GET | `/api/classification?tenantId=` | any auth | Approved tags + pending count + lock status |
 | GET | `/api/classification?all=1` | any auth | Read-only directory: all assigned tags across tenants |
 | DELETE | `/api/classification` | moderator | Remove an approved tag |
@@ -311,6 +320,14 @@ Le dépôt est public. Les éléments suivants ne doivent **jamais** apparaître
 La liste littérale des termes à bannir vit dans `.claude/mentions-interdites.md`, **hors dépôt** — l'écrire ici reviendrait à publier ce qu'on cherche à taire.
 
 Si une référence à l'entreprise est nécessaire dans la documentation, utiliser le terme générique **"l'organisation"** ou **"l'équipe support"**.
+
+### GUID du tenant Entra — injecté au déploiement
+
+`staticwebapp.config.json` versionne le marqueur `__AAD_TENANT_ID__` dans `auth.identityProviders.azureActiveDirectory.registration.openIdIssuer`, **jamais le GUID réel** : celui-ci identifie l'organisation.
+
+Le remplacement est fait par l'étape « Injecter le tenant Entra » de `.github/workflows/azure-static-web-apps.yml`, depuis le secret repo `AAD_TENANT_ID`. Ce détour est imposé par SWA : contrairement à `clientIdSettingName`, `openIdIssuer` n'accepte aucune référence à un paramètre d'application (Azure/static-web-apps#589), la valeur doit être littérale dans le fichier déployé.
+
+L'étape échoue — et interrompt le job **avant** le déploiement — si le secret est absent, mal formé, ou si le marqueur a disparu. Une erreur laisse donc le site en ligne intact plutôt que de publier une authentification cassée. Ne jamais recoller le GUID en dur dans le fichier pour « débloquer » un build rouge : ajouter le secret manquant.
 
 ---
 
