@@ -9,7 +9,8 @@
 
 // ── Code principal ──
 const PROXY_DATA = {
-  dnsgoogle:      {title:'cloudflare-dns.com', desc:'API DNS-over-HTTPS de Cloudflare (DoH, 1.1.1.1). Utilisée pour résoudre MX, SPF, DKIM, DMARC, DNSSEC, BIMI et MTA-STS. Aucune donnée personnelle transmise — seulement le nom de domaine. Si le réseau de votre poste bloque cet appel direct (courant sur un poste géré, où QUIC est filtré), les résolutions repassent par le serveur de l\'application, qui interroge le même service sans conserver le nom demandé.', url:'https://cloudflare-dns.com/dns-query'},
+  dnsgoogle:      {title:'cloudflare-dns.com', desc:'API DNS-over-HTTPS de Cloudflare (DoH, 1.1.1.1). Résolveur principal, utilisé pour MX, SPF, DKIM, DMARC, DNSSEC, BIMI et MTA-STS. Aucune donnée personnelle transmise — seulement le nom de domaine.', url:'https://cloudflare-dns.com/dns-query'},
+  dnsgoogle2:     {title:'dns.google', desc:'API DNS-over-HTTPS de Google (DoH, 8.8.8.8). Résolveur de secours : interrogé uniquement si Cloudflare est injoignable, ce qui arrive sur les réseaux d\'entreprise filtrant le protocole QUIC. Mêmes requêtes, mêmes données — seulement le nom de domaine.', url:'https://dns.google/resolve'},
   rdap:           {title:'rdap.org',   desc:'Service RDAP public (Registration Data Access Protocol). Utilisé pour récupérer les données WHOIS : registrar, serveurs NS, dates de création/expiration. Lecture seule.', url:'https://rdap.org/domain/'},
   mslogin:        {title:'login.microsoftonline.com', desc:'Endpoint public officiel Microsoft. Utilisé pour détecter le Tenant ID (OpenID Connect) et valider le GUID du tenant.', url:'https://login.microsoftonline.com/common/.well-known/openid-configuration'},
   googleaccounts: {title:'accounts.google.com', desc:'Endpoint public officiel Google. Utilisé pour détecter Google Workspace via OpenID Connect (issuer, token & authorization endpoints). Lecture seule.', url:'https://accounts.google.com/.well-known/openid-configuration'},
@@ -3221,29 +3222,43 @@ async function fetchJson(url, timeout=9000, headers=null) {
   try { const r = await fetch(url, headers ? { signal: ctrl.signal, headers } : { signal: ctrl.signal }); clearTimeout(tid); if (!r.ok) return null; return await r.json(); }
   catch { clearTimeout(tid); return null; }
 }
-// Résolution DNS via Cloudflare DoH (gratuit, usage commercial autorisé). Format JSON identique à Google DoH.
+// Résolveurs DNS-over-HTTPS, dans l'ordre d'essai. Tous deux gratuits, usage commercial
+// autorisé, et surtout : format de réponse JSON identique (Status, Answer), donc les
+// appelants n'ont rien à réinterpréter.
 //
-// Sur un poste géré, le pare-feu coupe fréquemment QUIC/UDP 443 vers cloudflare-dns.com :
-// l'appel direct meurt en ERR_QUIC_PROTOCOL_ERROR et toute l'analyse ressort vide alors que
-// la recherche d'ID, elle, fonctionne. On bascule dans ce cas sur /api/dns, un relais de même
-// origine qui refait la même requête côté serveur et renvoie le même JSON.
+// Pourquoi un second résolveur — sur un poste géré, le pare-feu coupe fréquemment QUIC
+// (HTTP/3, UDP 443) vers un domaine donné : la requête meurt en ERR_QUIC_PROTOCOL_ERROR et
+// toute l'analyse ressort vide, alors que la recherche d'ID, elle, continue de fonctionner.
+// Chaque origine ayant son propre état de cache Alt-Svc, la seconde passe parfois là où la
+// première échoue. Le remède de fond reste côté client (policy « Allow QUIC protocol »
+// désactivée) — voir la note de déploiement dans CLAUDE.md.
 //
-// La bascule ne s'arme que si le relais a effectivement répondu : un échec direct passager
-// ne condamne pas la session au relais, et une app servie sans backend (/api/dns en 404)
-// garde exactement le comportement d'avant.
-let dohUseRelay = false;
+// Tout part du navigateur : aucune résolution ne transite par le serveur de l'application.
+// C'est un choix d'architecture, pas un hasard — il garde le coût serveur nul quel que soit
+// le volume, et évite de traiter les domaines analysés pour le compte des utilisateurs.
+const DOH_RESOLVERS = [
+  { nom: 'cloudflare-dns.com', url: (n, t) => `https://cloudflare-dns.com/dns-query?name=${n}&type=${t}` },
+  { nom: 'dns.google',         url: (n, t) => `https://dns.google/resolve?name=${n}&type=${t}` }
+];
+const DOH_HEADERS = { Accept: 'application/dns-json' };
+/* Index du résolveur qui répond. On n'en change qu'après un échec avéré, et seulement si
+   le suivant a réellement répondu : une panne passagère ne condamne pas la session. */
+let dohActif = 0;
+
 async function dohResolve(name, type, timeout=9000) {
-  const q = `name=${encodeURIComponent(name)}&type=${encodeURIComponent(type)}`;
-  if (!dohUseRelay) {
-    const direct = await fetchJson(`https://cloudflare-dns.com/dns-query?${q}`, timeout, { Accept: 'application/dns-json' });
-    if (direct) return direct;
+  const n = encodeURIComponent(name), t = encodeURIComponent(type);
+  for (let i = 0; i < DOH_RESOLVERS.length; i++) {
+    const idx = (dohActif + i) % DOH_RESOLVERS.length;
+    const d = await fetchJson(DOH_RESOLVERS[idx].url(n, t), timeout, DOH_HEADERS);
+    if (d) {
+      if (idx !== dohActif) {
+        dohActif = idx;
+        console.warn('Résolveur DoH ' + DOH_RESOLVERS[idx].nom + ' retenu pour cette session — le précédent est injoignable.');
+      }
+      return d;
+    }
   }
-  const relayed = await fetchJson(`/api/dns?${q}`, timeout);
-  if (relayed && !dohUseRelay) {
-    dohUseRelay = true;
-    console.warn('Résolveur DoH direct injoignable — bascule sur le relais /api/dns pour cette session.');
-  }
-  return relayed;
+  return null;
 }
 async function dnsQuery(name, type) {
   const d = await dohResolve(name, type);

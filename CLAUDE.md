@@ -41,7 +41,6 @@ Project App tenant pulse push to github/
     │   ├── tagUtils.js      # tag grouping helpers
     │   └── defaults.js      # fallback config
     ├── me/                  # GET /api/me
-    ├── dns/                 # GET /api/dns — relais DoH de secours
     ├── classification/      # GET + DELETE /api/classification
     ├── request/             # POST /api/request
     ├── requests/            # GET /api/requests
@@ -98,14 +97,24 @@ fallback otherwise. **Sub-apps share `../tenantpulse.css`** plus their own overr
 External endpoints:
 - `login.microsoftonline.com/<domain>/.well-known/openid-configuration` → tenant ID;
   `validateTenantGuid` re-queries the GUID and rejects generic MSA tenants (`MS_GENERIC_GUIDS`).
-- `cloudflare-dns.com/dns-query` (DNS-over-HTTPS JSON, header `Accept: application/dns-json`) → MX/TXT/etc via `dohResolve`/`dnsQuery`. Gratuit, usage commercial autorisé.
-  **Exception au modèle « no proxy »** : sur un poste géré, le pare-feu coupe souvent QUIC/UDP 443
-  vers ce domaine (`ERR_QUIC_PROTOCOL_ERROR`) et l'analyse ressort vide alors que la recherche
-  d'ID fonctionne. `dohResolve` bascule alors sur `GET /api/dns`, relais de même origine qui
-  refait la requête côté serveur. La bascule ne s'arme que si le relais a répondu, et vaut pour
-  la session (`dohUseRelay`) — sans backend, le comportement est inchangé. Toute modification de
-  cette bascule doit rester cohérente avec les mentions de confidentialité dans `index.html`
-  (intro « Aucun serveur intermédiaire… » et ligne « APIs utilisées ») et `PROXY_DATA.dnsgoogle`.
+- `cloudflare-dns.com/dns-query` puis `dns.google/resolve` en secours (DNS-over-HTTPS JSON,
+  header `Accept: application/dns-json`) → MX/TXT/etc via `dohResolve`/`dnsQuery`. Tous deux
+  gratuits, usage commercial autorisé, même schéma de réponse. `DOH_RESOLVERS` porte la liste,
+  `dohActif` l'index retenu : on ne change de résolveur qu'après un échec avéré, et seulement
+  si le suivant a réellement répondu — une panne passagère ne condamne pas la session.
+
+> [!IMPORTANT]
+> **Ne jamais faire transiter les résolutions DNS par le backend.** Un relais same-origin a été
+> écrit puis retiré délibérément (voir l'historique git). Les raisons valent d'être rappelées,
+> car la tentation revient à chaque incident réseau :
+> - **Coût.** Une analyse complète enchaîne **51 résolutions** (mesuré, la récursion SPF
+>   réinterroge les mêmes `include:`). Côté navigateur c'est gratuit et ça le reste quel que
+>   soit le nombre d'utilisateurs ; côté serveur, la facture croît linéairement avec l'usage.
+> - **Sous-traitance RGPD.** Aujourd'hui l'application ne traite aucune donnée pour le compte
+>   de ses utilisateurs. Faire transiter les domaines analysés changerait ce statut — et pour
+>   un outil MSP, le flux de domaines révèle la liste des clients de l'utilisateur.
+> - **Argument produit.** « Aucun serveur intermédiaire ne reçoit ces requêtes » est affiché
+>   dans la page Confidentialité et se vend. Ça ne se dépense pas pour contourner un pare-feu.
 - `accounts.google.com` → Google Workspace detection.
 - `rdap.org` + many registry RDAP servers → WHOIS / hosting detection (`detectHostFromNS`).
 - `google.com/s2/favicons` → service icons.
@@ -156,7 +165,6 @@ moderation powers; managers and admins can assign it via `/api/roles`.
 | Method | Route | Min role | Description |
 |---|---|---|---|
 | GET | `/api/me` | any auth | `{email, name, role, blocked}` |
-| GET | `/api/dns?name=&type=` | any auth | Relais DoH de secours ; renvoie le JSON Cloudflare tel quel. Types en liste fermée, `name` normalisé en punycode via `new URL()` — ne jamais l'ouvrir en anonyme, ce serait un résolveur DNS ouvert |
 | GET | `/api/classification?tenantId=` | any auth | Approved tags + pending count + lock status |
 | GET | `/api/classification?all=1` | any auth | Read-only directory: all assigned tags across tenants |
 | DELETE | `/api/classification` | moderator | Remove an approved tag |
@@ -341,6 +349,25 @@ Deux issues possibles, toutes deux à la main du propriétaire du dépôt :
 2. Passer l'issuer à `https://login.microsoftonline.com/organizations/v2.0`. Ni secret ni GUID, mais la restriction à l'organisation ne repose alors plus que sur le `signInAudience` de l'app registration Entra — **à ne faire qu'après avoir vérifié qu'elle est bien en « comptes de cet annuaire uniquement »**, sinon tout compte professionnel externe peut se connecter et lire l'annuaire de tags.
 
 ---
+
+## Prérequis réseau côté client (note de déploiement)
+
+Sur un poste géré (Intune ou équivalent), le pare-feu d'entreprise laisse souvent passer le
+handshake QUIC vers un résolveur DoH puis coupe la session UDP. Le navigateur ayant mis en
+cache l'`Alt-Svc: h3` du résolveur, il retente en QUIC à chaque requête au lieu de retomber
+en TCP. Symptôme caractéristique : `ERR_QUIC_PROTOCOL_ERROR.QUIC_NETWORK_IDLE_TIMEOUT` en
+boucle, l'analyse ressort vide (DMARC/SPF/DKIM), **mais la recherche de Tenant ID fonctionne**
+— elle ne tape que `login.microsoftonline.com`, presque toujours en dérogation de proxy.
+
+Le repli sur `dns.google` couvre une partie des cas. Le remède de fond est côté client, et
+c'est un **prérequis à documenter pour l'utilisateur**, pas un défaut de l'application :
+
+> Intune → Catalogue de paramètres → Microsoft Edge → « Allow QUIC protocol » = **Disabled**
+> (équivalent Chrome : policy `QuicAllowed`). Le navigateur repasse en HTTP/2 sur TCP 443,
+> qui suit le proxy d'entreprise normalement.
+
+Ne pas traiter ce cas en ajoutant de l'infrastructure côté serveur — voir l'encadré du modèle
+réseau plus haut.
 
 ## Known issues
 

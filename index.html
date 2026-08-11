@@ -14,6 +14,7 @@
   img-src 'self' https://www.google.com https://*.gstatic.com data:;
   connect-src 'self'
     https://cloudflare-dns.com
+    https://dns.google
     https://login.microsoftonline.com
     https://accounts.google.com
     https://rdap.org
@@ -289,10 +290,11 @@
         </button>
         <div class="drop-section-body">
           <div class="proxy-row" data-proxy-key="dnsgoogle"><span class="proxy-row-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="proxy-row-title">cloudflare-dns.com</span><span class="proxy-row-chev">›</span></div>
+          <div class="proxy-row" data-proxy-key="dnsgoogle2"><span class="proxy-row-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="proxy-row-title">dns.google</span><span class="proxy-row-chev">›</span></div>
           <div class="proxy-row" data-proxy-key="rdap"><span class="proxy-row-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="proxy-row-title">rdap.org</span><span class="proxy-row-chev">›</span></div>
           <div class="proxy-row" data-proxy-key="mslogin"><span class="proxy-row-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="proxy-row-title">login.microsoftonline.com</span><span class="proxy-row-chev">›</span></div>
           <div class="proxy-row" data-proxy-key="googleaccounts"><span class="proxy-row-icon"><img src="assets/google.png" class="icon-plain" alt=""></span><span class="proxy-row-title">accounts.google.com</span><span class="proxy-row-chev">›</span></div>
-          <div class="drop-info-row"><span><img src="assets/checked.png" class="icon-adaptive" alt=""></span><span>Requêtes directes vers APIs officielles Microsoft, Google DNS, Google Accounts et RDAP. Aucun proxy tiers. Aucune donnée stockée côté serveur. Si le réseau bloque l'appel DNS direct, seules les résolutions DNS repassent par le serveur de l'application, qui interroge le même service sans rien conserver.</span></div>
+          <div class="drop-info-row"><span><img src="assets/checked.png" class="icon-adaptive" alt=""></span><span>Requêtes directes vers APIs officielles Microsoft, Google DNS, Google Accounts et RDAP. Aucun proxy tiers. Aucune donnée stockée côté serveur.</span></div>
         </div>
 
         <!-- Stockage local -->
@@ -531,7 +533,7 @@
         </button>
         <div class="collapsible-body" id="privacyBody">
           <div class="privacy-body">
-            <p class="privacy-intro">Les analyses (Tenant ID, DNS, WHOIS) sont effectuées <strong>directement depuis votre navigateur</strong> vers des APIs publiques. Aucun serveur intermédiaire ne reçoit ces requêtes. <strong>Seule exception :</strong> quand le réseau de votre poste bloque la résolution DNS directe, les requêtes DNS — et elles seules — repassent par le serveur de l'application, qui relaie le nom de domaine au même service sans le conserver.</p>
+            <p class="privacy-intro">Les analyses (Tenant ID, DNS, WHOIS) sont effectuées <strong>directement depuis votre navigateur</strong> vers des APIs publiques. Aucun serveur intermédiaire ne reçoit ces requêtes.</p>
             <div>
               <div class="privacy-section-lbl">Endpoint OpenID Microsoft 365 interrogé</div>
               <p class="sb-privacy-note">Seuls le domaine ou l'adresse saisis servent à interroger les endpoints publics.</p>
@@ -541,6 +543,7 @@
               <div class="privacy-section-lbl">APIs contactées lors d'une analyse</div>
               <div class="privacy-api-list">
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">cloudflare-dns.com</span><span class="privacy-api-item-tag">DNS</span></div>
+                <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">dns.google</span><span class="privacy-api-item-tag">DNS secours</span></div>
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="privacy-api-item-name">login.microsoftonline.com</span><span class="privacy-api-item-tag">MS</span></div>
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/google.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">accounts.google.com</span><span class="privacy-api-item-tag">Google</span></div>
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">rdap.org</span><span class="privacy-api-item-tag">WHOIS</span></div>
