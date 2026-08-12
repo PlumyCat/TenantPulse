@@ -975,14 +975,16 @@ function renderTpProfilePane() {
     list.appendChild(lockedWrap);
   }
 
-  /* Grille glissable (les 8 autres raccourcis) */
+  /* Grille glissable (tous les raccourcis sauf Partner Center).
+     On passe par orderedRedirectButtons plutôt que de relire profile.order : c'est lui
+     qui rattrape les tuiles ajoutées après l'enregistrement du profil. Lire l'ordre brut
+     ici laissait une tuile récente affichée sur la page mais sans réglage dans ce
+     panneau, donc impossible à désactiver ou à déplacer. */
   const sortable = document.createElement('div'); sortable.className = 'profiles-grid';
   sortable.id = 'tpSortableGrid';
-  const order = profile.order || REDIRECT_BUTTONS.filter(b => b.key !== 'partnerCenter').map(b => b.key);
-  order.forEach(key => {
-    const btn = REDIRECT_BUTTONS.find(b => b.key === key);
-    if (btn) sortable.appendChild(makeTpProfileItem(btn, profile, false));
-  });
+  orderedRedirectButtons(profile)
+    .filter(b => b.key !== 'partnerCenter')
+    .forEach(btn => sortable.appendChild(makeTpProfileItem(btn, profile, false)));
   list.appendChild(sortable);
   setupTpDragReorder(sortable);
 }
