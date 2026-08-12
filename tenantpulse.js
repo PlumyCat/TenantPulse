@@ -27,6 +27,7 @@ const REDIRECT_BUTTONS = [
   { key:'sharepoint',    label:'SharePoint',        sub:'Sites & documents',             icon:'assets/MicrosoftSharepoint.png',   href: (id, dom) => `https://admin.microsoft.com/sharepoint?delegatedOrg=${encodeURIComponent(dom || '')}` },
   { key:'azure',         label:'Azure',             sub:'Ressources cloud',              icon:'assets/MicrosoftAzure.png',        href: id => `https://portal.azure.com/${encodeURIComponent(id)}` },
   { key:'defender',      label:'Defender',          sub:'Sécurité & menaces',            icon:'assets/MicrosoftDefender.png',     href: id => `https://security.microsoft.com/?tid=${encodeURIComponent(id)}` },
+  { key:'purview',       label:'Purview',           sub:'Conformité & gouvernance',      icon:'assets/purview.png',               href: id => `https://purview.microsoft.com/home?tid=${encodeURIComponent(id)}` },
 ];
 
 /* Hôtes Microsoft autorisés pour les boutons de redirection.
@@ -35,7 +36,8 @@ const REDIRECT_BUTTONS = [
 const ALLOWED_REDIRECT_HOSTS = new Set([
   'partner.microsoft.com', 'entra.microsoft.com', 'admin.microsoft.com',
   'admin.cloud.microsoft', 'admin.exchange.microsoft.com', 'intune.microsoft.com',
-  'admin.teams.microsoft.com', 'portal.azure.com', 'security.microsoft.com'
+  'admin.teams.microsoft.com', 'portal.azure.com', 'security.microsoft.com',
+  'purview.microsoft.com'
 ]);
 
 /* Hôte de redirection autorisé : liste fixe MS + centres SharePoint admin dynamiques
@@ -112,6 +114,10 @@ const ADMIN_SHORTCUTS = {
     { label: 'Alerte',               url: 'https://security.microsoft.com/alerts?tid={tenantId}' },
     { label: 'Incidents',            url: 'https://security.microsoft.com/incidents?tid={tenantId}' },
     { label: 'Analyse des menaces',  url: 'https://security.microsoft.com/threatanalytics3?tid={tenantId}' },
+  ],
+  purview: [
+    { label: 'Gestion du cycle de vie des données', url: 'https://purview.microsoft.com/datalifecyclemanagement/overview?tid={tenantId}' },
+    { label: 'eDiscovery',                          url: 'https://purview.microsoft.com/ediscovery/casespage?tid={tenantId}' },
   ],
 };
 
@@ -342,6 +348,12 @@ function orderedRedirectButtons(profile) {
   const rest = saved
     .map(k => REDIRECT_BUTTONS.find(b => b.key === k))
     .filter(Boolean);
+  /* Tuiles ajoutées après l'enregistrement du profil : sans ce rattrapage elles
+     resteraient invisibles pour quiconque a déjà un ordre mémorisé, c'est-à-dire
+     tous les utilisateurs existants. On les place à la fin. */
+  REDIRECT_BUTTONS.forEach(b => {
+    if (b.key !== 'partnerCenter' && !rest.includes(b)) rest.push(b);
+  });
   const pc = REDIRECT_BUTTONS.find(b => b.key === 'partnerCenter');
   return pc ? [pc, ...rest] : rest;
 }
