@@ -1,10 +1,10 @@
 /* ──────────────────────────────────────────────────────────────
-   Mhaelle — Analyseur Header Email V9 PRO
+   Diagnostic Messagerie — Analyseur Header Email V9 PRO
    Surcharges et composants spécifiques (chargé après tenantpulse.css)
    Tokens partagés définis dans tenantpulse.css.
    ────────────────────────────────────────────────────────────── */
 
-/* ── Tokens spécifiques Mhaelle (statuts email) ── */
+/* ── Tokens spécifiques Diagnostic Messagerie (statuts email) ── */
 :root {
   --good:       #16a34a;
   --good-bg:    #ecfdf5;
@@ -16,10 +16,10 @@
   --unknown-bg: #f3f4f6;
 }
 
-/* ── Mode sombre — tokens Mhaelle uniquement ──
+/* ── Mode sombre — tokens Diagnostic Messagerie uniquement ──
    Les tokens partagés (bg, surface, border, text…) sont définis une seule
    fois dans ../tenantpulse.css (manuel + fallback OS). Ici, seuls les tokens
-   propres à Mhaelle (statuts email) sont surchargés pour le mode sombre. */
+   propres à Diagnostic Messagerie (statuts email) sont surchargés pour le mode sombre. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --good-bg:    rgba(34,197,94,.15);
@@ -680,7 +680,7 @@ html.embedded .topbar,
 html.embedded nav { display: none !important; }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ACCESSIBILITÉ — Focus visible Mhaelle
+   ACCESSIBILITÉ — Focus visible Diagnostic Messagerie
    Complète les règles globales de tenantpulse.css pour les composants ML.
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -721,7 +721,7 @@ details summary:focus-visible {
    HIÉRARCHIE VISUELLE — MODE CLAIR
    ════════════════════════════════════════ */
 
-/* Fond Mhaelle — même teinte gris-bleu que TenantPulse */
+/* Fond Diagnostic Messagerie — même teinte gris-bleu que TenantPulse */
 [data-theme="light"] body,
 html:not([data-theme="dark"]) body { background: #e8edf5; }
 
@@ -747,7 +747,7 @@ html:not([data-theme="dark"]) .card-details[open] > summary { background: #edf0f
 /* ════════════════════════════════════════════════════════════
    MODERNISATION 2026 — alignement de la finesse des boutons sur le shell.
    Le bouton principal « Analyser » réutilise .btn-go (aminci côté tenantpulse.css).
-   Ici on amincit les boutons secondaires propres à Mhaelle. Bloc isolé.
+   Ici on amincit les boutons secondaires propres à Diagnostic Messagerie. Bloc isolé.
    ════════════════════════════════════════════════════════════ */
 .btn-sec { padding-top: 6px; padding-bottom: 6px; }
 .ml-sec  { padding: 6px 8px; }

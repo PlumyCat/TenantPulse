@@ -15,7 +15,7 @@ Single-page app à 3 colonnes, encadrée par une topbar noire et une nav violett
 │  TOPBAR  #121212 — Report Bug | tagline | Admin | Déco  │
 ├─────────────────────────────────────────────────────────┤
 │  NAV  #4B3FBE                                            │
-│  [TP] [Diagnostic M365] [Mhaelle dev]                    │
+│  [TP] [Diagnostic M365] [Diagnostic Messagerie dev]                    │
 │            [cache] [v1.5] [Profils ▾] [Paramètres ▾]    │
 ├──────────────┬──────────────────────┬───────────────────┤
 │  SIDEBAR     │  CENTRE (Résultats)  │  PANNEAU DÉTAIL   │
@@ -25,7 +25,7 @@ Single-page app à 3 colonnes, encadrée par une topbar noire et une nav violett
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Mhaelle** (`ML/`) est une iframe lazy-loaded qui
+- **Diagnostic Messagerie** (`ML/`) est une iframe lazy-loaded qui
   remplace `.app` au changement d'onglet (`body.view-ml`).
   Elle partage `../tenantpulse.css` et reçoit le thème par `postMessage`.
 
@@ -201,7 +201,7 @@ Services détectés (chips).
 
 Affinage **purement visuel** (aucune logique modifiée), regroupé dans un **bloc
 isolé** en fin de `tenantpulse.css` (`/* MODERNISATION 2026 */`) → retirable d'un
-seul tenant. Un bloc miroir existe en fin de `ML/mhaelle.css` pour l'alignement des
+seul tenant. Un bloc miroir existe en fin de `ML/messagerie.css` pour l'alignement des
 boutons de la sous-app.
 
 ### Tokens ajoutés
@@ -228,8 +228,8 @@ boutons de la sous-app.
 - **Champ de recherche** (`.input-wrap input`) : capsule `--r-pill`, fine (padding `6px 16px`).
 - **Boutons de recherche** (`.btn-go`, `.btn-full-analysis`) : padding vertical 11→8 px
   pour s'aligner sur la finesse de la barre. `.btn-go` étant partagé, le bouton
-  « Analyser » de **Mhaelle** hérite automatiquement de cette finesse.
-- **Mhaelle** (`ML/mhaelle.css`) : `.btn-sec` / `.ml-sec` amincis (padding vertical 8→6 px).
+  « Analyser » de **Diagnostic Messagerie** hérite automatiquement de cette finesse.
+- **Diagnostic Messagerie** (`ML/messagerie.css`) : `.btn-sec` / `.ml-sec` amincis (padding vertical 8→6 px).
 
 ### Motion
 - `@keyframes tpRise` (fade + translateY 8→0) en `backwards` sur `.tenant-hero`,

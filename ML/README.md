@@ -1,4 +1,4 @@
-# Mhaelle — Analyseur d'en-têtes email (V9 PRO)
+# Diagnostic Messagerie — Analyseur d'en-têtes email (V9 PRO)
 
 Sous-app de **TenantPulse**. Analyse les en-têtes complets d'un message email
 (SPF, DKIM, DMARC, EOP/Forefront, chaîne SMTP, URLs) **100 % en local** dans le
@@ -14,12 +14,12 @@ navigateur. Aucune donnée n'est transmise à un serveur.
 
 | Fichier | Rôle |
 |---|---|
-| `mhaelle.html` | Shell HTML : sidebar de saisie + zone de résultats. CSP stricte inline. |
-| `mhaelle.js` | Toute la logique (~1300 lignes) : parsing, scoring, rendu DOM. |
-| `mhaelle.css` | Surcharges spécifiques par-dessus `../tenantpulse.css`. |
+| `messagerie.html` | Shell HTML : sidebar de saisie + zone de résultats. CSP stricte inline. |
+| `messagerie.js` | Toute la logique (~1300 lignes) : parsing, scoring, rendu DOM. |
+| `messagerie.css` | Surcharges spécifiques par-dessus `../tenantpulse.css`. |
 
-`mhaelle.html` charge d'abord `../tenantpulse.css` (layout, nav, tokens) puis
-`mhaelle.css`. Le `<script>` est dans le `<head>` pour que la détection d'iframe
+`messagerie.html` charge d'abord `../tenantpulse.css` (layout, nav, tokens) puis
+`messagerie.css`. Le `<script>` est dans le `<head>` pour que la détection d'iframe
 et la synchro thème s'exécutent avant le rendu du `<body>` (évite le flash navbar/FOUC).
 
 ---
@@ -40,7 +40,7 @@ Boutons annexes : **Effacer**, **Exemple** (jeu de données de démo via `loadSa
 
 ## Ce qui est analysé
 
-Pipeline central dans `analyse()` (`mhaelle.js:778`) :
+Pipeline central dans `analyse()` (`messagerie.js:778`) :
 
 - **Authentification** — `parseAuthResults` extrait SPF / DKIM / DMARC / CompAuth
   depuis `Authentication-Results`. `statusClass` colore pass / fail / neutre.
@@ -74,7 +74,7 @@ en `createElement` + `textContent` (jamais `innerHTML` sur entrée utilisateur).
 
 ## Persistance (localStorage)
 
-Une seule clé : **`mhaelle_profile_v1`** — ordre / visibilité des blocs de résultats
+Une seule clé : **`messagerie_profile_v1`** — ordre / visibilité des blocs de résultats
 (`ML_PROFILE_KEY`, défaut dans `ML_BLOCKS_DEFAULT`). Aucune donnée d'email n'est stockée.
 
 ---
@@ -83,6 +83,6 @@ Une seule clé : **`mhaelle_profile_v1`** — ordre / visibilité des blocs de r
 
 - **Rester sans réseau** : ne pas ajouter d'appel `fetch` externe — CSP `connect-src 'self'`.
 - **Pas d'inline** : aucun `<script>`/`onclick`/`style=` inline ; tous les listeners
-  sont enregistrés au `DOMContentLoaded` (`mhaelle.js:1279`).
+  sont enregistrés au `DOMContentLoaded` (`messagerie.js:1279`).
 - **Pas de build** : ES2020+ natif, pas de `import`/`export`, pas de framework.
 - **Français** : commentaires, libellés UI et messages en français.

@@ -242,15 +242,30 @@ function makeInfoIcon(variant) {
 }
 
 const PROFILE_KEY = 'tenantpulse_profile_v1';
-const MHAELLE_PROFILE_KEY = 'mhaelle_profile_v1';
+const MESSAGERIE_PROFILE_KEY = 'messagerie_profile_v1';
+/* Ancien nom de la clé, avant que la sous-application ne soit renommée. Sans reprise,
+   le renommage réinitialiserait la disposition des blocs de chaque utilisateur. */
+const MESSAGERIE_PROFILE_KEY_LEGACY = 'mhaelle_profile_v1';
 
-/* Origine cible des postMessage vers l'iframe Mhaelle.
+/* Recopie l'ancienne clé vers la nouvelle, une seule fois, puis efface l'ancienne.
+   Ne touche à rien si la nouvelle existe déjà : elle fait foi. */
+function migrateMessagerieProfileKey() {
+  try {
+    if (localStorage.getItem(MESSAGERIE_PROFILE_KEY) !== null) return;
+    const ancien = localStorage.getItem(MESSAGERIE_PROFILE_KEY_LEGACY);
+    if (ancien === null) return;
+    localStorage.setItem(MESSAGERIE_PROFILE_KEY, ancien);
+    localStorage.removeItem(MESSAGERIE_PROFILE_KEY_LEGACY);
+  } catch {}
+}
+
+/* Origine cible des postMessage vers l'iframe Diagnostic Messagerie.
    En prod (http/https) les iframes sont même origine → on restreint à location.origin.
    Sur file:// : Chrome retourne 'null', Edge retourne 'file://' — dans les deux cas
    les iframes ont une origine opaque ('null') distincte, donc on utilise le wildcard. */
 const FRAME_TARGET_ORIGIN = (location.origin && location.origin !== 'null' && location.origin !== 'file://') ? location.origin : '*';
 
-/* Blocs Mhaelle configurables (label + colonne par défaut) */
+/* Blocs Diagnostic Messagerie configurables (label + colonne par défaut) */
 const ML_BLOCKS = [
   { key: 'message', label: 'Message',          col: 'left'  },
   { key: 'smtp',    label: 'Chaîne SMTP',       col: 'left'  },
@@ -261,9 +276,10 @@ const ML_BLOCKS = [
   { key: 'signals', label: 'Signaux détectés',  col: 'right' },
 ];
 
-function loadMhaelleProfile() {
+function loadMessagerieProfile() {
+  migrateMessagerieProfileKey();
   try {
-    const raw = localStorage.getItem(MHAELLE_PROFILE_KEY);
+    const raw = localStorage.getItem(MESSAGERIE_PROFILE_KEY);
     if (raw) {
       const p = JSON.parse(raw);
       if (Array.isArray(p.left) && Array.isArray(p.right)) {
@@ -279,8 +295,8 @@ function loadMhaelleProfile() {
     defaultOpen: []
   };
 }
-function saveMhaelleProfile(profile) {
-  try { localStorage.setItem(MHAELLE_PROFILE_KEY, JSON.stringify(profile)); } catch {}
+function saveMessagerieProfile(profile) {
+  try { localStorage.setItem(MESSAGERIE_PROFILE_KEY, JSON.stringify(profile)); } catch {}
 }
 
 function loadProfile() {
@@ -701,8 +717,8 @@ function setAdminAccount(tenantId, val) {
   saveAdminAccounts(map);
 }
 
-// ── Onglets TenantPulse / Mhaelle (vue type navigateur) ──
-// L'iframe Mhaelle est lazy-loaded au premier clic puis reste montée,
+// ── Onglets TenantPulse / Diagnostic Messagerie (vue type navigateur) ──
+// L'iframe Diagnostic Messagerie est lazy-loaded au premier clic puis reste montée,
 // ce qui préserve l'état de l'analyse des deux côtés au switch.
 function switchAppTab(target) {
   const tabs = document.querySelectorAll('.app-tab');
@@ -711,9 +727,9 @@ function switchAppTab(target) {
     t.classList.toggle('active', active);
     t.setAttribute('aria-selected', active ? 'true' : 'false');
   });
-  const mlFrame = document.getElementById('mhaelleFrame');
+  const mlFrame = document.getElementById('messagerieFrame');
   if (target === 'ml') {
-    if (!mlFrame.src) mlFrame.src = 'ML/mhaelle.html?embedded=1';
+    if (!mlFrame.src) mlFrame.src = 'ML/messagerie.html?embedded=1';
     document.body.classList.add('view-ml');
   } else {
     document.body.classList.remove('view-ml');
@@ -722,8 +738,8 @@ function switchAppTab(target) {
 
 // ── Central event binding ──
 function bindEvents() {
-  // ── Onglets TenantPulse / Mhaelle (architecture type navigateur) ──
-  // L'iframe Mhaelle reste montée → l'état est préservé des deux côtés
+  // ── Onglets TenantPulse / Diagnostic Messagerie (architecture type navigateur) ──
+  // L'iframe Diagnostic Messagerie reste montée → l'état est préservé des deux côtés
   document.querySelectorAll('.app-tab').forEach(tab => {
     tab.addEventListener('click', () => switchAppTab(tab.dataset.appTab));
   });
@@ -831,8 +847,8 @@ function bindEvents() {
     });
   }
   document.getElementById('btnMlBlocksReset').addEventListener('click', () => {
-    saveMhaelleProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
-    renderMhaelleProfilePane();
+    saveMessagerieProfile({ left: ['message','smtp','urls','reports'], right: ['auth','ms','signals'], hidden: [], defaultOpen: [] });
+    renderMessagerieProfilePane();
   });
   const dropInfoBtn = document.getElementById('btnDropInfoToggle');
   if (dropInfoBtn) {
@@ -907,7 +923,7 @@ function openProfilesModal() {
     _profilesActiveTab = 'tp';
   }
   renderTpProfilePane();
-  renderMhaelleProfilePane();
+  renderMessagerieProfilePane();
   switchProfilesTab(_profilesActiveTab);
   document.getElementById('profilesModal').classList.add('open');
 }
@@ -1022,15 +1038,15 @@ function setupTpDragReorder(grid) {
   });
 }
 
-/* ── Onglet Mhaelle : toggles + drag-to-reorder ── */
-function renderMhaelleProfilePane() {
-  const mlProfile = loadMhaelleProfile();
+/* ── Onglet Diagnostic Messagerie : toggles + drag-to-reorder ── */
+function renderMessagerieProfilePane() {
+  const mlProfile = loadMessagerieProfile();
   const hidden      = new Set(mlProfile.hidden || []);
   const defaultOpen = new Set(mlProfile.defaultOpen || []);
   const leftOrder   = mlProfile.left  || ['message', 'smtp', 'urls', 'reports'];
   const rightOrder  = mlProfile.right || ['auth', 'ms', 'signals'];
 
-  const container = document.getElementById('mhaelleBlockList');
+  const container = document.getElementById('messagerieBlockList');
   container.replaceChildren();
 
   const cols = document.createElement('div'); cols.className = 'ml-block-cols';
@@ -1144,7 +1160,7 @@ function setupMlCrossColDrag(cols) {
 /* ── Sauvegarde commune ── */
 function saveProfilesModal() {
   if (_profilesActiveTab === 'ml') {
-    saveMhaelleProfileFromModal();
+    saveMessagerieProfileFromModal();
   } else {
     saveTpProfileFromModal();
   }
@@ -1176,7 +1192,7 @@ function saveTpProfileFromModal() {
   }
 }
 
-function saveMhaelleProfileFromModal() {
+function saveMessagerieProfileFromModal() {
   const leftList  = document.querySelector('.ml-block-list[data-col="left"]');
   const rightList = document.querySelector('.ml-block-list[data-col="right"]');
   const left  = leftList  ? [...leftList.querySelectorAll('.ml-block-item')].map(i => i.dataset.key)  : [];
@@ -1186,9 +1202,9 @@ function saveMhaelleProfileFromModal() {
   const defaultOpen = [];
   document.querySelectorAll('.ml-block-default-open.checked').forEach(el => defaultOpen.push(el.dataset.key));
   const profile = { left, right, hidden, defaultOpen };
-  saveMhaelleProfile(profile);
+  saveMessagerieProfile(profile);
   /* Envoyer au iframe */
-  const frame = document.getElementById('mhaelleFrame');
+  const frame = document.getElementById('messagerieFrame');
   if (frame && frame.contentWindow) {
     try { frame.contentWindow.postMessage({ type: 'ml-profile', profile }, FRAME_TARGET_ORIGIN); } catch {}
   }
@@ -1309,15 +1325,15 @@ window.addEventListener('load', () => {
   watchExtensionMarker();
   applyHashQuery();
 
-  // ── Synchronisation thème clair/sombre → iframe Mhaelle ──
+  // ── Synchronisation thème clair/sombre → iframe Diagnostic Messagerie ──
   // Utilise postMessage (fonctionne même avec le protocole file://)
-  const mhaelleFrame = document.getElementById('mhaelleFrame');
+  const messagerieFrame = document.getElementById('messagerieFrame');
   function postThemeToFrames() {
     const msg = { type: 'tp-theme', theme: document.documentElement.getAttribute('data-theme') || 'light' };
-    if (mhaelleFrame && mhaelleFrame.contentWindow) try { mhaelleFrame.contentWindow.postMessage(msg, FRAME_TARGET_ORIGIN); } catch(e) {}
+    if (messagerieFrame && messagerieFrame.contentWindow) try { messagerieFrame.contentWindow.postMessage(msg, FRAME_TARGET_ORIGIN); } catch(e) {}
   }
   // Envoie le thème dès que l'iframe est chargée (1er accès ou rechargement)
-  mhaelleFrame.addEventListener('load', postThemeToFrames);
+  messagerieFrame.addEventListener('load', postThemeToFrames);
   // Suit tous les changements ultérieurs de data-theme sur le document parent
   new MutationObserver(postThemeToFrames)
     .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -3780,7 +3796,7 @@ function showStoragePanel() {
   const body = document.getElementById('storageInspectorBody');
   body.replaceChildren();
 
-  /* Clés du shell (TenantPulse + profil Mhaelle). */
+  /* Clés du shell (TenantPulse + profil Diagnostic Messagerie). */
   const keys = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k) keys.push(k); } } catch {}
   keys.sort().forEach(key => {
@@ -3801,7 +3817,7 @@ function hideStoragePanel() {
   document.getElementById('storageModal').classList.remove('open');
 }
 function clearAllStorage() {
-  /* Shell : toutes les clés (historique, profils TP & Mhaelle) */
+  /* Shell : toutes les clés (historique, profils TP & Diagnostic Messagerie) */
   try {
     const ks = [];
     for (let i = 0; i < localStorage.length; i++) ks.push(localStorage.key(i));

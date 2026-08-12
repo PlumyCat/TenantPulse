@@ -23,10 +23,10 @@ Project App tenant pulse push to github/
 ├── tenantpulse.css          # Shared stylesheet (root + sub-apps)
 ├── staticwebapp.config.json # Azure Static Web Apps: routes, auth, CSP headers
 ├── assets/                  # PNG/JPEG logos and icons
-├── ML/                      # Mhaelle sub-app (email header analyzer)
-│   ├── mhaelle.html
-│   ├── mhaelle.js
-│   └── mhaelle.css
+├── ML/                      # Diagnostic Messagerie sub-app (email header analyzer)
+│   ├── messagerie.html
+│   ├── messagerie.js
+│   └── messagerie.css
 ├── extension/               # Chromium browser extension (MV3) — Tenant ID + shortcuts
 │   ├── manifest.json
 │   ├── popup.html / popup.css / popup.js
@@ -81,12 +81,12 @@ cd api && func start
 
 - **TenantPulse** (root): `index.html` + `tenantpulse.js` + `tenantpulse.css` — the M365/DNS
   diagnostic tool and shell.
-- **Mhaelle** (`ML/`): email-header analyzer. Loaded into `#mhaelleFrame` as
-  `ML/mhaelle.html?embedded=1`. Status: `dev`.
+- **Diagnostic Messagerie** (`ML/`): email-header analyzer. Loaded into `#messagerieFrame` as
+  `ML/messagerie.html?embedded=1`. Status: `dev`.
 Tab switching (`switchAppTab`) lazily sets the iframe `src` on first open. The shell talks to
 frames via `postMessage`:
 - `{type:'tp-theme', theme}` → push light/dark theme into frames.
-- `{type:'ml-profile', profile}` → push Mhaelle block layout into the ML frame.
+- `{type:'ml-profile', profile}` → push Diagnostic Messagerie block layout into the ML frame.
 
 Sub-apps detect embedding (`window.self !== window.top` or `?embedded=1`) to hide their
 navbar and sync theme two ways: direct parent-DOM read when same-origin, `postMessage`
@@ -144,7 +144,7 @@ Opt-in by design. Keys:
 - History: `tenantIdHistory_v1`, plus `tenantIdHistory_enabled`, `tenantIdHistory_max`,
   `tenantIdHistory_retentionMs`. Retention uses `RETENTION_STEPS` ladder (13 intervals);
   `pruneExpiredHistory` runs on open, on each save, and on retention change.
-- Profiles: `tenantpulse_profile_v1` (TP button order), `mhaelle_profile_v1` (ML block layout).
+- Profiles: `tenantpulse_profile_v1` (TP button order), `messagerie_profile_v1` (ML block layout).
 - Résolveur DoH : `tenantpulse_doh_v1` (`cloudflare` | `google`). Absente = mode automatique,
   et choisir « Automatique » supprime la clé plutôt que d'y écrire une valeur par défaut.
 - Bandeau : `tenantpulse_banner_hidden_v1` — identifiant du dernier message masqué par
@@ -234,7 +234,7 @@ CSP is declared via `<meta http-equiv>` in each HTML file with `script-src 'self
 - **Adding any new external API/origin requires editing the `connect-src` (or `img-src`)
   list in `index.html`'s CSP meta AND in `staticwebapp.config.json`.**
 - **`ML/` is `connect-src 'self'` only — it must stay network-free.**
-  Do not add external fetch calls to `mhaelle.js`.
+  Do not add external fetch calls to `messagerie.js`.
 
 ### No build step — no bundlers, no transpilation
 

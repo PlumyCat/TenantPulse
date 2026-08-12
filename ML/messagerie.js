@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────────────────
-   Mhaelle — Analyseur Header Email V9 PRO
+   Diagnostic Messagerie — Analyseur Header Email V9 PRO
    Script externe (CSP-compliant : script-src 'self')
 
    Conformité :
@@ -105,8 +105,20 @@ const STATIC_TOOLS = [
 
 let lastReports = { client: "", tech: "" };
 
-/* ── Profil Mhaelle : ordre et visibilité des blocs ── */
-const ML_PROFILE_KEY = 'mhaelle_profile_v1';
+/* ── Profil Diagnostic Messagerie : ordre et visibilité des blocs ── */
+const ML_PROFILE_KEY = 'messagerie_profile_v1';
+/* Ancien nom, avant renommage de la sous-application. La reprise est refaite ici et pas
+   seulement dans le shell : cette page s'ouvre aussi seule, hors iframe. */
+const ML_PROFILE_KEY_LEGACY = 'mhaelle_profile_v1';
+(function migrerCleProfil() {
+  try {
+    if (localStorage.getItem(ML_PROFILE_KEY) !== null) return;
+    const ancien = localStorage.getItem(ML_PROFILE_KEY_LEGACY);
+    if (ancien === null) return;
+    localStorage.setItem(ML_PROFILE_KEY, ancien);
+    localStorage.removeItem(ML_PROFILE_KEY_LEGACY);
+  } catch {}
+})();
 const ML_BLOCKS_DEFAULT = {
   left:        ['message', 'smtp', 'urls', 'reports'],
   right:       ['auth', 'ms', 'signals'],

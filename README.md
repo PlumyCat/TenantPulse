@@ -38,7 +38,7 @@ No build step: these are static files (HTML + CSS + JS + images).
 - `index.html` + `tenantpulse.js` + `tenantpulse.css`: the shell (M365 Diagnostic).
 - `ML/`: sub-app loaded as `<iframe ...?embedded=1>` inside the shell. Shares
   `tenantpulse.css` and communicates with the shell via `postMessage` (theme sync `tp-theme`,
-  Mhaelle profile `ml-profile`). Also works standalone.
+  Diagnostic Messagerie profile `ml-profile`). Also works standalone.
 - **Strict CSP** (`script-src 'self'`, no `unsafe-inline`): no inline scripts, no `onclick`
   handlers, no `innerHTML` from input — the DOM is built via `createElement`/`textContent`.
 

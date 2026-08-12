@@ -84,7 +84,7 @@ nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-i
 .nav-brand-link{cursor:pointer;opacity:.9}
 .nav-brand-link:hover{opacity:1}
 .nav-brand-icon{width:20px;height:20px;object-fit:contain;flex-shrink:0;border-radius:var(--r-xs)}
-/* ── Onglets type navigateur (TenantPulse / Mhaelle) ── */
+/* ── Onglets type navigateur (TenantPulse / Diagnostic Messagerie) ── */
 .app-tabs{display:flex;align-items:center;gap:4px;height:100%}
 .app-tab{
   display:flex;align-items:center;gap:8px;
@@ -108,16 +108,16 @@ nav{background:#4B3FBE!important;padding:0 24px;height:52px;display:flex;align-i
   color:#f59e0b;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.35);
   border-radius:var(--r-xs);padding:1px 5px;line-height:1.2;
 }
-/* iframe Mhaelle — onglet secondaire (lazy-loaded, état préservé) */
-.mhaelle-frame{
+/* iframe Diagnostic Messagerie — onglet secondaire (lazy-loaded, état préservé) */
+.messagerie-frame{
   display:none;flex:1 1 0;width:100%;border:none;background:var(--bg);
   min-height:calc(100vh - 100px);
 }
 body.view-ml .app{display:none}
-body.view-ml .mhaelle-frame{display:block}
+body.view-ml .messagerie-frame{display:block}
 body.view-ml footer{display:none}
 @media(max-width:768px){
-  .mhaelle-frame{min-height:calc(100vh - 90px)}
+  .messagerie-frame{min-height:calc(100vh - 90px)}
 }
 .nav-right{display:flex;align-items:center;gap:6px;position:relative}
 /* ───── Nav buttons — glassmorphism translucide blanc (typo allégée) ───── */
@@ -693,7 +693,7 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .profiles-footer-hidden{display:none!important}
 .profiles-save-btn-hidden{display:none!important}
 #profilesFooterTP,#profilesFooterML{display:flex;align-items:center;gap:6px;flex:1}
-/* ── Mhaelle block list ── */
+/* ── Diagnostic Messagerie block list ── */
 .ml-block-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
 /* .ml-block-section — pas de surcharge nécessaire, héritage suffisant */
 .ml-block-section-title{
