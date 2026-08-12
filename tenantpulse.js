@@ -1381,7 +1381,8 @@ async function initAuth() {
   applyAuthToUI();
 }
 
-/* Étiquette en haut à gauche quand le relais est actif. Les utilisateurs doivent savoir
+/* Étiquette dans la barre du haut, à côté de l'état de l'extension, quand le relais est
+   actif. Les utilisateurs doivent savoir
    que leurs résolutions ne partent plus directement de leur navigateur : c'est la
    contrepartie du mode de secours, et la page Confidentialité annonce l'inverse. */
 function syncDnsRelayUI() {

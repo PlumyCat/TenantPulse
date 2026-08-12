@@ -188,13 +188,20 @@
 <div class="cache-clear-bar" id="cacheClearBar"><div class="cache-clear-bar-fill" id="cacheClearFill"></div></div>
 <div class="topbar">
   <a class="topbar-bug" id="bugReportLink" href="mailto:?subject=Bug%20report%20-%20TenantPulse" title="Signaler un bug par email">Report Bug(s)</a>
-  <!-- Relais DNS actif : les résolutions passent par le serveur au lieu du navigateur.
-       Alimenté par syncDnsRelayUI(). Les utilisateurs doivent le savoir. -->
-  <span class="topbar-relay" id="dnsRelayTag" title="Les résolutions DNS passent temporairement par le serveur de l'application, car le réseau bloque les requêtes directes." hidden>
-    <span class="topbar-relay-dot"></span>Relais DNS actif
-  </span>
-  <span class="topbar-tagline">Analyse instantanée &nbsp;|&nbsp; Décisions immédiates</span>
   <div class="topbar-right">
+    <!-- Indicateurs d'état, remontés de la barre de navigation : ils sont stylés en blanc
+         translucide, donc taillés pour un fond sombre. -->
+    <div class="cache-indicator state-inactive" id="cacheIndicator">
+      <span class="cache-dot"></span>
+      <span id="cacheIndicatorLabel">Cache inactif</span>
+    </div>
+    <div class="nav-badge">v1.5</div>
+    <!-- Relais DNS actif : les résolutions passent par le serveur au lieu du navigateur.
+         Alimenté par syncDnsRelayUI(). Placé avec l'état de l'extension, les deux étant
+         des indicateurs de fonctionnement. Les utilisateurs doivent le savoir. -->
+    <span class="topbar-relay" id="dnsRelayTag" title="Les résolutions DNS passent temporairement par le serveur de l'application, car le réseau bloque les requêtes directes." hidden>
+      <span class="topbar-relay-dot"></span><span class="topbar-relay-label">Relais DNS actif</span>
+    </span>
     <!-- État de l'extension navigateur — alimenté par syncExtensionUI() :
          pastille « active » si le script de contenu a posé son marqueur,
          bouton d'installation sinon (et seulement si une fiche est configurée). -->
@@ -233,11 +240,6 @@
     </div>
   </div>
   <div class="nav-right">
-    <div class="cache-indicator state-inactive" id="cacheIndicator">
-      <span class="cache-dot"></span>
-      <span id="cacheIndicatorLabel">Cache inactif</span>
-    </div>
-    <div class="nav-badge">v1.5</div>
     <button class="nav-drop-btn" id="btnOpenProfiles">
       <img src="assets/user.png" width="14" height="14" alt=""> Profils <span class="drop-arrow">▾</span>
     </button>

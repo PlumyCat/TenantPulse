@@ -61,7 +61,10 @@
 html{height:100%}
 body{background:var(--bg);font-family:var(--font);font-size:var(--text-base);color:var(--text);height:100%;overflow:hidden;display:flex;flex-direction:column;transition:background .25s,color .25s}
 
-.topbar{background:#121212!important;color:#fff;text-align:center;font-size:var(--text-sm);font-weight:400;padding:6px 20px;letter-spacing:.03em;position:relative}
+/* min-height indispensable : les deux enfants (.topbar-bug et .topbar-right) sont en
+   position absolue, donc hors flux. Depuis le retrait du slogan, plus rien ne donne sa
+   hauteur à la barre et elle s'effondrerait sur son seul padding. */
+.topbar{background:#121212!important;color:#fff;text-align:center;font-size:var(--text-sm);font-weight:400;padding:6px 20px;min-height:35px;letter-spacing:.03em;position:relative}
 .topbar-logout{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:5px;color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
 .topbar-logout:hover{opacity:1;text-decoration:underline}
 .topbar-bug{position:absolute;left:20px;top:50%;transform:translateY(-50%);color:#fff;text-decoration:none;font-weight:600;font-size:var(--text-sm);letter-spacing:.01em;opacity:.85;transition:opacity .2s}
@@ -1130,7 +1133,13 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
   .topbar{font-size:10px;padding:4px 12px;letter-spacing:.02em}
   .topbar-logout{right:12px}
   .topbar-bug{left:12px}
-  .topbar-tagline{display:none}  /* place aux deux boutons fonctionnels sur mobile */
+  /* Sur mobile, la barre du haut ne peut pas porter tous les indicateurs. Le cache et la
+     version disparaissent ; le relais garde sa pastille mais perd son libellé, sinon le
+     bloc de droite passe de 193 à 317 px et recouvre le lien « Report Bug(s) ». Le titre
+     au survol porte toujours l'explication. */
+  .topbar-right .cache-indicator,.topbar-right .nav-badge{display:none}
+  .topbar-relay-label{display:none}
+  .topbar-relay{padding:4px;gap:0}
 
   /* Nav */
   nav{padding:0 10px;height:52px;gap:5px}
@@ -1572,11 +1581,13 @@ select.admin-input{cursor:pointer;color-scheme:light}
 /* ── Garde-fous [hidden] (les règles display ci-dessus battent le UA [hidden]) ── */
 .topbar-admin[hidden],.topbar-ext[hidden],.topbar-relay[hidden],.tp-banner[hidden],.tp-banner-recall[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
 
-/* ── Étiquette « Relais DNS actif » (haut à gauche) ──
+/* ── Étiquette « Relais DNS actif » (barre du haut, à côté de l'état de l'extension) ──
    Volontairement visible : quand le relais est actif, la promesse « aucun serveur
    intermédiaire » de la page Confidentialité ne tient plus, et l'utilisateur doit
    pouvoir le constater sans aller lire un réglage d'administration. */
-.topbar-relay{display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:3px 9px;border-radius:var(--r-pill);background:rgba(217,119,6,.18);border:1px solid rgba(217,119,6,.55);color:#fbbf24;font-family:var(--font);font-size:var(--text-xs);font-weight:600;white-space:nowrap;cursor:default}
+/* line-height:1 comme .topbar-ext : sans lui la pastille fait 6 px de plus que celle de
+   l'extension, juste à côté, et le décalage se voit. */
+.topbar-relay{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:var(--r-pill);background:rgba(217,119,6,.18);border:1px solid rgba(217,119,6,.55);color:#fbbf24;font-family:var(--font);font-size:var(--text-xs);font-weight:600;line-height:1;white-space:nowrap;cursor:default}
 .topbar-relay-dot{width:6px;height:6px;border-radius:50%;background:#f59e0b;flex-shrink:0;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
 
 /* ── Bandeau d'information défilant (bas à droite) ──
