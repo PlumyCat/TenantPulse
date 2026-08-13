@@ -3902,11 +3902,11 @@ function updateStorageSummary() {
 }
 /* Entrée d'inspecteur (header dépliable + valeur + ×). onDelete(entry) décide
    de la suppression. */
-function buildStorageEntry(key, raw, onDelete) {
+function buildStorageEntry(key, raw, onDelete, opts = {}) {
   raw = raw || '';
   const sizeBytes = new Blob([raw]).size;
-  let display = raw;
-  try { display = JSON.stringify(JSON.parse(raw), null, 2); } catch {}
+  let display = opts.displayRaw != null ? opts.displayRaw : raw;
+  try { display = JSON.stringify(JSON.parse(display), null, 2); } catch {}
   const entry = document.createElement('div'); entry.className = 'storage-entry'; entry.dataset.bytes = String(sizeBytes);
   const head  = document.createElement('div'); head.className = 'storage-entry-head';
   const left  = document.createElement('div'); left.className = 'storage-entry-head-left';
@@ -3914,6 +3914,10 @@ function buildStorageEntry(key, raw, onDelete) {
   const size  = document.createElement('span'); size.className = 'storage-entry-size'; size.textContent = fmtStorageSize(sizeBytes);
   const arrow = document.createElement('span'); arrow.className = 'storage-entry-arrow'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '▾';
   left.appendChild(keyEl); left.appendChild(size);
+  if (opts.storeLabel) {
+    const st = document.createElement('span'); st.className = 'storage-entry-size';
+    st.textContent = opts.storeLabel; left.appendChild(st);
+  }
   head.addEventListener('click', e => {
     if (e.target.closest('.storage-entry-del')) return;
     const isOpen = entry.classList.toggle('open');
@@ -3927,6 +3931,24 @@ function buildStorageEntry(key, raw, onDelete) {
   entry.appendChild(head); entry.appendChild(val);
   return entry;
 }
+/* Masque les valeurs réutilisables avant affichage. Ce panneau sert à montrer
+   CE QUI est stocké, pas à afficher un secret exploitable : un jeton
+   d'actualisation Microsoft à l'écran se retrouve dans une capture d'écran ou
+   un partage de session. La détection porte sur le nom de propriété et non sur
+   la clé, pour rester valable si d'autres entrées en portent un jour. */
+const STORAGE_REDACTED = ['refreshToken', 'verifier'];
+function redactStorageValue(raw) {
+  try {
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== 'object') return raw;
+    let touche = false;
+    STORAGE_REDACTED.forEach(p => {
+      if (typeof o[p] === 'string' && o[p]) { o[p] = '« masqué »'; touche = true; }
+    });
+    return touche ? JSON.stringify(o) : raw;
+  } catch { return raw; }
+}
+
 function buildStorageEmptyMsg() {
   const msg = document.createElement('div'); msg.className = 'storage-empty-msg';
   const icon = document.createElement('div'); icon.className = 'storage-empty-icon';
@@ -3964,6 +3986,25 @@ function showStoragePanel() {
     }));
   });
 
+  /* sessionStorage : la connexion Microsoft Graph y dépose son jeton
+     d'actualisation et son vérificateur PKCE. Ces clés disparaissent à la
+     fermeture de l'onglet, mais tant qu'il est ouvert elles sont bien stockées
+     dans ce navigateur — les omettre ferait mentir ce panneau, qui est la
+     promesse de transparence de l'application. */
+  const sKeys = [];
+  try { for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k) sKeys.push(k); } } catch {}
+  sKeys.sort().forEach(key => {
+    let raw = ''; try { raw = sessionStorage.getItem(key) || ''; } catch {}
+    body.appendChild(buildStorageEntry(key, raw, entry => {
+      try { sessionStorage.removeItem(key); } catch {}
+      /* Retirer la clé ne suffit pas pour Graph : le jeton d'accès vit aussi en
+         mémoire. On coupe la session pour de bon. */
+      if (key.indexOf('graph') !== -1 && typeof graphDisconnect === 'function') graphDisconnect();
+      entry.remove();
+      updateStorageSummary(); refreshStorageEmptyState();
+    }, { storeLabel: 'session', displayRaw: redactStorageValue(raw) }));
+  });
+
   refreshStorageEmptyState();
   updateStorageSummary();
   document.getElementById('storageModal').classList.add('open');
@@ -3977,6 +4018,16 @@ function clearAllStorage() {
     const ks = [];
     for (let i = 0; i < localStorage.length; i++) ks.push(localStorage.key(i));
     ks.forEach(k => { try { localStorage.removeItem(k); } catch {} });
+  } catch {}
+
+  /* sessionStorage aussi : sans ça, « Tout effacer » laisserait une session
+     Microsoft Graph active alors que l'utilisateur croit avoir tout nettoyé.
+     graphDisconnect() est appelé en plus, le jeton d'accès étant en mémoire. */
+  if (typeof graphDisconnect === 'function') graphDisconnect();
+  try {
+    const ss = [];
+    for (let i = 0; i < sessionStorage.length; i++) ss.push(sessionStorage.key(i));
+    ss.forEach(k => { try { sessionStorage.removeItem(k); } catch {} });
   } catch {}
 
   syncCacheIndicator(); syncHistoryToggleUI(); renderHistory();

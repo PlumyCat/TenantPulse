@@ -598,6 +598,7 @@
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">cloudflare-dns.com</span><span class="privacy-api-item-tag">DNS</span></div>
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">dns.google</span><span class="privacy-api-item-tag">DNS secours</span></div>
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="privacy-api-item-name">login.microsoftonline.com</span><span class="privacy-api-item-tag">MS</span></div>
+                <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/Microsoft.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">graph.microsoft.com</span><span class="privacy-api-item-tag">Graph — si connecté</span></div>
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/google.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">accounts.google.com</span><span class="privacy-api-item-tag">Google</span></div>
                 <div class="privacy-api-item"><span class="privacy-api-item-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="privacy-api-item-name">rdap.org</span><span class="privacy-api-item-tag">WHOIS</span></div>
               </div>
@@ -611,6 +612,10 @@
             <div class="privacy-storage-row">
               <span class="privacy-storage-icon"><img src="assets/save.png" class="icon-adaptive" alt=""></span>
               <span>L'historique des Tenant ID (optionnel) reste dans le <strong>localStorage</strong> de votre navigateur, jamais transmis.</span>
+            </div>
+            <div class="privacy-storage-row">
+              <span class="privacy-storage-icon"><img src="assets/Microsoft.png" class="icon-plain" alt=""></span>
+              <span>La <strong>connexion Microsoft Graph</strong> est facultative. Si vous l'utilisez, son jeton reste dans le <strong>sessionStorage</strong> de votre navigateur et disparaît à la fermeture de l'onglet&nbsp;; les appels partent directement vers Microsoft, <strong>sans passer par le serveur de l'application</strong>, qui ne voit ni le jeton ni les réponses.</span>
             </div>
             <div class="privacy-storage-row">
               <span class="privacy-storage-icon"><img src="assets/MicrosoftAzure.png" class="icon-plain" alt=""></span>

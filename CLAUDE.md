@@ -214,6 +214,12 @@ Opt-in by design. Keys:
 - Graph : `tenantpulse_graph_v1` et `tenantpulse_graph_pending_v1` sont en **sessionStorage**,
   pas en localStorage — ils portent un jeton d'actualisation et un vérificateur PKCE, qui ne
   doivent pas survivre à la fermeture de l'onglet.
+  L'inspecteur de stockage (`showStoragePanel`) énumère **les deux stockages**, et
+  `clearAllStorage` vide les deux **plus** `graphDisconnect()` : sans ça, « Tout effacer »
+  laisserait une session Graph active alors que l'utilisateur croit avoir tout nettoyé, et
+  le panneau de transparence tairait la donnée la plus sensible de l'application.
+  `redactStorageValue()` masque à l'affichage toute propriété `refreshToken` ou `verifier` —
+  le panneau montre ce qui est stocké, pas un secret réutilisable à l'écran.
   `tenantpulse_graph_dev_clientid` (localStorage) est une dérogation **lue uniquement sur
   localhost** : sans Functions en local, `/api/me` ne sert aucun identifiant client et rien
   ne serait testable. En production, seul `/api/me` fait autorité.
