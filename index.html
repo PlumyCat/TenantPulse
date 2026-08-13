@@ -16,6 +16,7 @@
     https://cloudflare-dns.com
     https://dns.google
     https://login.microsoftonline.com
+    https://graph.microsoft.com
     https://accounts.google.com
     https://rdap.org
     https://rdap.publicinterestregistry.org
@@ -212,6 +213,17 @@
        title="Installer l'extension navigateur TenantPulse" hidden>
       <img src="assets/TP.png" class="topbar-ext-icon" alt="" width="12" height="12">Ajouter l'extension
     </a>
+    <!-- Connexion Microsoft Graph — alimentée par syncGraphUI() dans graph.js.
+         Bouton d'appel à l'action tant que rien n'est connecté, pastille cliquable
+         (qui déconnecte) ensuite. Invisible si le déploiement n'expose pas
+         d'identifiant client : la fonctionnalité est optionnelle de bout en bout. -->
+    <button class="topbar-graph is-active" id="graphStatus" type="button" title="" hidden>
+      <span class="topbar-graph-dot"></span><span id="graphStatusLabel">Graph connecté</span>
+    </button>
+    <button class="topbar-graph is-cta" id="graphConnect" type="button"
+            title="Se connecter à Microsoft Graph" hidden>
+      <img src="assets/Microsoft.png" class="topbar-ext-icon" alt="" width="12" height="12">Connecter Graph
+    </button>
     <button class="topbar-admin" id="btnOpenAdmin" type="button" title="Onglet administration" hidden>
       <span class="topbar-admin-label">Administration</span>
       <span class="admin-badge admin-badge-req" id="adminBadgeReq" title="Demandes en attente" hidden>0</span>
@@ -499,6 +511,10 @@
         <img src="assets/Redirect.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
         Relais DNS
       </button>
+      <button class="admin-subtab" data-subtab="graph" data-min-role="admin" role="tab" type="button" hidden>
+        <img src="assets/Microsoft.png" class="admin-subtab-ico" alt="">
+        Accès Graph
+      </button>
     </div>
     <div class="admin-body">
       <div class="admin-pane" id="adminPaneRequests" hidden></div>
@@ -507,6 +523,7 @@
       <div class="admin-pane" id="adminPaneUsers" hidden></div>
       <div class="admin-pane" id="adminPaneBanner" hidden></div>
       <div class="admin-pane" id="adminPaneRelay" hidden></div>
+      <div class="admin-pane" id="adminPaneGraph" hidden></div>
     </div>
   </div>
 </div>
@@ -542,6 +559,7 @@
       <button class="btn-export" id="exportBtn"><img src="assets/copy.png" class="icon-adaptive" alt=""> Copier le rapport</button>
       <div class="prog-list" id="progList">
         <div class="p-step" id="step-ms"><span class="p-step-icon"><img src="assets/Microsoft.png" width="14" height="14" alt="Microsoft"></span><span class="p-step-label">Microsoft 365…</span><button class="p-step-cancel" data-step="ms">✕ Annuler</button><button class="p-step-retry" data-step="ms">↺ Relancer</button></div>
+        <div class="p-step" id="step-graph"><span class="p-step-icon"><img src="assets/Microsoft.png" width="14" height="14" alt="Microsoft Graph"></span><span class="p-step-label">Microsoft Graph…</span><button class="p-step-cancel" data-step="graph">✕ Annuler</button><button class="p-step-retry" data-step="graph">↺ Relancer</button></div>
         <div class="p-step" id="step-dns"><span class="p-step-icon"><img src="assets/DNS.png" class="icon-plain" alt=""></span><span class="p-step-label">DNS…</span><button class="p-step-cancel" data-step="dns">✕ Annuler</button><button class="p-step-retry" data-step="dns">↺ Relancer</button></div>
         <div class="p-step" id="step-health"><span class="p-step-icon"><img src="assets/Santé.png" class="icon-plain" alt=""></span><span class="p-step-label">Sécurité…</span><button class="p-step-cancel" data-step="health">✕ Annuler</button><button class="p-step-retry" data-step="health">↺ Relancer</button></div>
         <div class="p-step" id="step-others"><span class="p-step-icon"><img src="assets/LOUPE.png" class="icon-adaptive-inv" alt=""></span><span class="p-step-label">Autres services…</span><button class="p-step-cancel" data-step="others">✕ Annuler</button><button class="p-step-retry" data-step="others">↺ Relancer</button></div>
@@ -655,6 +673,9 @@
   Le JS est externalisé dans tenantpulse.js — script-src 'self' est actif.
 -->
 <script src="tenantpulse.js" defer></script>
+<!-- Connexion Microsoft Graph. Chargé après tenantpulse.js : les deux sont différés,
+     donc exécutés dans l'ordre et tous deux avant l'événement load qui amorce l'app. -->
+<script src="graph.js" defer></script>
 <div class="conf-tooltip" id="confTooltip"></div>
 </body>
 </html>

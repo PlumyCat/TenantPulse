@@ -1,13 +1,14 @@
 const { getAuthContext } = require("../shared/auth");
 const { rolesClient } = require("../shared/tableClient");
-const { isDnsRelayEnabled } = require("../shared/config");
+const { isDnsRelayEnabled, isGraphAllowed } = require("../shared/config");
 
 /**
  * GET /api/me
  * Retourne l'email, le nom, le rôle de l'utilisateur connecté,
- * ainsi que le contactEmail (premier admin) pour le lien de rapport de bug
- * et extensionUrl, la fiche de l'extension navigateur.
- * Réponse : { email, name, role, blocked, contactEmail, extensionUrl }
+ * ainsi que le contactEmail (premier admin) pour le lien de rapport de bug,
+ * extensionUrl, la fiche de l'extension navigateur, et graphClientId,
+ * l'inscription d'application de la connexion Microsoft Graph.
+ * Réponse : { email, name, role, blocked, contactEmail, extensionUrl, graphClientId }
  */
 module.exports = async function (context, req) {
   try {
@@ -43,6 +44,21 @@ module.exports = async function (context, req) {
     const extensionUrl     = process.env.EXTENSION_STORE_URL || null;
     const extensionUrlEdge = process.env.EXTENSION_STORE_URL_EDGE || null;
 
+    /* Identifiant de l'inscription d'application utilisée pour la connexion
+       Microsoft Graph du navigateur. Servi depuis un paramètre d'application et
+       non versionné : ce n'est pas un secret au sens OAuth (un client public
+       l'expose forcément), mais il identifie l'organisation, ce que les règles
+       de confidentialité du dépôt interdisent d'écrire en clair.
+
+       Il n'est servi qu'aux utilisateurs autorisés (manager/admin, mode global
+       « all », ou ouverture nominative). C'est ici que se joue le contrôle
+       d'accès : sans identifiant, le frontend n'affiche aucun bouton et ne peut
+       émettre aucune requête Graph. Masquer un bouton ne protège rien ; ne pas
+       servir l'identifiant, si. */
+    let graphAccess = false;
+    try { graphAccess = await isGraphAllowed(auth); } catch { /* défaut : refusé */ }
+    const graphClientId = graphAccess ? (process.env.GRAPH_CLIENT_ID || null) : null;
+
     /* État du relais DNS, servi ici pour éviter un aller-retour de plus au démarrage :
        le frontend doit le connaître avant la première analyse, et il appelle déjà /api/me. */
     let dnsRelay = false;
@@ -59,6 +75,8 @@ module.exports = async function (context, req) {
         contactEmail:     contactEmail || null,
         extensionUrl:     extensionUrl,
         extensionUrlEdge: extensionUrlEdge,
+        graphClientId:    graphClientId,
+        graphAccess:      graphAccess,
         dnsRelay:         dnsRelay
       })
     };

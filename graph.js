@@ -1,0 +1,572 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   MICROSOFT GRAPH — connexion déléguée, exécutée entièrement dans le navigateur
+   ══════════════════════════════════════════════════════════════════════════
+
+   Même modèle réseau que le reste de l'application : le navigateur parle
+   directement à Microsoft, aucun serveur intermédiaire ne voit ni le jeton ni
+   les réponses. C'est ce qui permet de continuer à écrire, en page
+   Confidentialité, que les données analysées ne transitent nulle part — et
+   c'est aussi ce qui évite de devenir sous-traitant au sens du RGPD.
+
+   Flux : OAuth 2.0 code d'autorisation + PKCE (S256), sans secret client.
+   Pas de MSAL : la bibliothèque pèse ~200 Ko et l'application n'a aucune
+   dépendance frontend ni étape de build. Le périmètre ici est étroit — un
+   fournisseur, deux points d'entrée en lecture seule — donc le flux tient en
+   un fichier. Toute la logique d'authentification est confinée ici : si un
+   jour MSAL devient nécessaire, c'est ce fichier qu'on remplace, rien d'autre.
+
+   Redirection plutôt que popup, délibérément : au retour d'Entra la fenêtre
+   surgissante changerait de groupe de contextes de navigation à cause de
+   l'en-tête Cross-Origin-Opener-Policy: same-origin, et perdrait window.opener.
+   Le contourner demanderait de relâcher la COOP. Une connexion par session ne
+   le justifie pas.
+
+   Stockage : le jeton d'accès reste en mémoire. Le jeton d'actualisation va en
+   sessionStorage — il disparaît donc à la fermeture de l'onglet, et jamais dans
+   localStorage où il survivrait à la session.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const TP_GRAPH_AUTHORITY = 'https://login.microsoftonline.com/organizations';
+const TP_GRAPH_BASE      = 'https://graph.microsoft.com/v1.0';
+
+/* Portées déléguées du palier 0 : tout est lu depuis le tenant de l'utilisateur,
+   aucun accès aux tenants clients n'est requis. Les deux premières exigent un
+   consentement administrateur — un technicien ne peut pas se l'accorder seul. */
+const TP_GRAPH_SCOPES = [
+  'https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All',
+  'https://graph.microsoft.com/DelegatedAdminRelationship.Read.All',
+  'offline_access', 'openid', 'profile'
+];
+
+const TP_GRAPH_SESSION_KEY = 'tenantpulse_graph_v1';       // sessionStorage : jeton d'actualisation + compte
+const TP_GRAPH_PENDING_KEY = 'tenantpulse_graph_pending_v1'; // sessionStorage : PKCE en cours de redirection
+
+/* Identifiants de modèles de rôles Entra les plus courants en GDAP. Un identifiant
+   absent de cette table est affiché tel quel : mieux vaut un GUID qu'une étiquette
+   fausse. Ces valeurs sont fixes et documentées par Microsoft. */
+const TP_GRAPH_ROLES = {
+  '62e90394-69f5-4237-9190-012177145e10': 'Administrateur général',
+  'f2ef992c-3afb-46b9-b7cf-a126ee74c451': 'Lecteur général',
+  'fe930be7-5e62-47db-91af-98c3a49a38b1': 'Administrateur utilisateurs',
+  '729827e3-9c14-49f7-bb1b-9608f156bbb8': "Administrateur du support technique",
+  '966707d0-3269-4727-9be2-8c3a10f19b9d': 'Administrateur de mots de passe',
+  '29232cdf-9323-42fd-ade2-1d097af3e4de': 'Administrateur Exchange',
+  'f28a1f50-f6e7-4571-818b-6a12f2af6b6c': 'Administrateur SharePoint',
+  '69091246-20e8-4a56-aa4d-066075b2a7a8': 'Administrateur Teams',
+  '3a2c62db-5318-420d-8d74-23affee5d9d5': 'Administrateur Intune',
+  '194ae4cb-b126-40b2-bd5b-6091b380977d': 'Administrateur de sécurité',
+  '5d6b6bb7-de71-4623-b4af-96380a352509': 'Lecteur de sécurité',
+  'b0f54661-2d74-4c50-afa3-1ec803f12efe': 'Administrateur de facturation'
+};
+
+const TP_GRAPH = {
+  clientId:     null,   // servi par /api/me — jamais versionné, il identifie l'organisation
+  connected:    false,
+  account:      null,   // { username, name, tenantId }
+  accessToken:  null,   // mémoire seulement
+  expiresAt:    0,      // epoch ms
+  refreshToken: null,
+  gdapCache:    null,   // relations GDAP actives, chargées une fois par session
+  lastError:    null
+};
+
+/* ── PKCE ────────────────────────────────────────────────────────────────── */
+
+const graphB64Url = bytes => btoa(String.fromCharCode(...bytes))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const graphRandom = (n = 32) => graphB64Url(crypto.getRandomValues(new Uint8Array(n)));
+
+async function graphChallenge(verifier) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return graphB64Url(new Uint8Array(digest));
+}
+
+/* ── Session ─────────────────────────────────────────────────────────────── */
+
+function graphSaveSession() {
+  try {
+    sessionStorage.setItem(TP_GRAPH_SESSION_KEY, JSON.stringify({
+      refreshToken: TP_GRAPH.refreshToken,
+      account:      TP_GRAPH.account,
+      clientId:     TP_GRAPH.clientId
+    }));
+  } catch { /* stockage indisponible → la session ne survivra pas au rechargement */ }
+}
+
+function graphLoadSession() {
+  let raw; try { raw = sessionStorage.getItem(TP_GRAPH_SESSION_KEY); } catch { return; }
+  if (!raw) return;
+  let data; try { data = JSON.parse(raw); } catch { return; }
+  if (!data?.refreshToken) return;
+  TP_GRAPH.refreshToken = data.refreshToken;
+  TP_GRAPH.account      = data.account || null;
+  TP_GRAPH.clientId     = TP_GRAPH.clientId || data.clientId || null;
+  TP_GRAPH.connected    = true;   // confirmé au premier renouvellement de jeton
+}
+
+function graphClearSession() {
+  TP_GRAPH.connected = false;
+  TP_GRAPH.account = null;
+  TP_GRAPH.accessToken = null;
+  TP_GRAPH.expiresAt = 0;
+  TP_GRAPH.refreshToken = null;
+  TP_GRAPH.gdapCache = null;
+  try { sessionStorage.removeItem(TP_GRAPH_SESSION_KEY); } catch {}
+}
+
+/* Dérogation de développement local. En local il n'y a pas de Functions, donc pas
+   de /api/me, donc pas d'identifiant client : le bouton resterait masqué et rien
+   ne serait testable. On accepte alors une valeur posée à la main dans
+   localStorage — et uniquement sur localhost. En production seul /api/me fait
+   autorité, ce garde-fou ne peut pas y être contourné. */
+const TP_GRAPH_DEV_KEY = 'tenantpulse_graph_dev_clientid';
+function graphDevClientId() {
+  const h = location.hostname;
+  if (h !== 'localhost' && h !== '127.0.0.1' && h !== '[::1]') return null;
+  try { return localStorage.getItem(TP_GRAPH_DEV_KEY) || null; } catch { return null; }
+}
+
+/* ── Connexion ───────────────────────────────────────────────────────────── */
+
+/* Redirige vers Entra. Le vérificateur PKCE et l'état sont déposés en
+   sessionStorage : ils doivent survivre à la navigation, pas à l'onglet.
+   L'identifiant client y est joint pour que le retour soit autonome et n'ait
+   pas à attendre /api/me. */
+async function graphBeginLogin() {
+  if (!TP_GRAPH.clientId) { TP_GRAPH.lastError = 'Connexion Graph non configurée sur ce déploiement.'; syncGraphUI(); return; }
+
+  const verifier  = graphRandom(48);
+  const state     = graphRandom(16);
+  const challenge = await graphChallenge(verifier);
+  /* Racine du site, pas location.pathname : Entra exige une correspondance exacte
+     avec l'URI de redirection inscrite, et un utilisateur arrivé sur /index.html
+     produirait sinon une URI non inscrite. C'est cette valeur-là — origine + « / » —
+     qu'il faut déclarer dans l'inscription d'application, en plateforme SPA. */
+  const redirect  = location.origin + '/';
+
+  try {
+    sessionStorage.setItem(TP_GRAPH_PENDING_KEY, JSON.stringify({
+      verifier, state, redirect,
+      clientId: TP_GRAPH.clientId,
+      // Le champ de recherche est restauré au retour : une redirection ne doit
+      // pas faire perdre ce que l'utilisateur était en train de taper.
+      query: (document.getElementById('emailInput')?.value || '').slice(0, 253)
+    }));
+  } catch {
+    TP_GRAPH.lastError = "Le stockage de session est indisponible, la connexion ne peut pas aboutir.";
+    syncGraphUI(); return;
+  }
+
+  const p = new URLSearchParams({
+    client_id:             TP_GRAPH.clientId,
+    response_type:         'code',
+    redirect_uri:          redirect,
+    response_mode:         'fragment',   // le code reste dans le fragment, hors des journaux serveur
+    scope:                 TP_GRAPH_SCOPES.join(' '),
+    state,
+    code_challenge:        challenge,
+    code_challenge_method: 'S256'
+  });
+
+  /* L'utilisateur a déjà franchi l'authentification Entra de l'application : lui
+     re-proposer un sélecteur de compte n'apporte rien. Avec login_hint et sans
+     prompt, la session existante est réutilisée et la redirection est invisible.
+     Sans indice — API indisponible en local — on retombe sur le sélecteur. */
+  let indice = null;
+  try { indice = TP_AUTH?.email || null; } catch { /* tenantpulse.js absent */ }
+  if (indice) p.set('login_hint', indice); else p.set('prompt', 'select_account');
+
+  location.assign(TP_GRAPH_AUTHORITY + '/oauth2/v2.0/authorize?' + p.toString());
+}
+
+/* Traite le retour d'Entra si le fragment en porte un. Retourne true si un
+   fragment d'authentification a été consommé — l'appelant sait alors qu'il ne
+   doit pas interpréter le fragment autrement. */
+async function graphHandleRedirect() {
+  const hash = location.hash || '';
+  if (!hash.includes('code=') && !hash.includes('error=')) return false;
+
+  const params = new URLSearchParams(hash.slice(1));
+  const code   = params.get('code');
+  const err    = params.get('error');
+  const state  = params.get('state');
+
+  let pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem(TP_GRAPH_PENDING_KEY) || 'null'); } catch {}
+  try { sessionStorage.removeItem(TP_GRAPH_PENDING_KEY); } catch {}
+
+  // Le fragment est retiré dans tous les cas : un rechargement ne doit pas
+  // rejouer un code déjà consommé.
+  try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+
+  if (!pending) return false;                       // fragment orphelin, on l'ignore
+  if (state !== pending.state) {                    // garde anti-CSRF
+    TP_GRAPH.lastError = "Réponse d'authentification inattendue, connexion abandonnée.";
+    syncGraphUI(); return true;
+  }
+  if (err) {
+    TP_GRAPH.lastError = params.get('error_description') || err;
+    syncGraphUI(); return true;
+  }
+  if (!code) return true;
+
+  TP_GRAPH.clientId = TP_GRAPH.clientId || pending.clientId;
+  await graphExchange({ grant_type: 'authorization_code', code, code_verifier: pending.verifier, redirect_uri: pending.redirect });
+
+  // Restauration de ce que l'utilisateur avait saisi avant la redirection.
+  const input = document.getElementById('emailInput');
+  if (input && pending.query && !input.value) {
+    input.value = pending.query;
+    input.dispatchEvent(new Event('input'));
+  }
+  return true;
+}
+
+/* Appel unique au point d'entrée de jetons — code d'autorisation ou
+   actualisation, le corps seul change. Aucun secret client : l'inscription
+   d'application est de type SPA, Entra y autorise le CORS et impose PKCE. */
+async function graphExchange(extra) {
+  const body = new URLSearchParams({
+    client_id: TP_GRAPH.clientId,
+    scope:     TP_GRAPH_SCOPES.join(' '),
+    ...extra
+  });
+
+  let res;
+  try {
+    res = await fetch(TP_GRAPH_AUTHORITY + '/oauth2/v2.0/token', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    body.toString()
+    });
+  } catch {
+    TP_GRAPH.lastError = "Le point d'entrée de jetons Microsoft est injoignable.";
+    syncGraphUI(); return false;
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.access_token) {
+    // invalid_grant sur un renouvellement = jeton d'actualisation expiré ou révoqué :
+    // ce n'est pas une erreur à afficher, c'est une session à refermer proprement.
+    const silencieux = data?.error === 'invalid_grant' && extra.grant_type === 'refresh_token';
+    graphClearSession();
+    TP_GRAPH.lastError = silencieux ? null : (data?.error_description || 'Authentification refusée.');
+    syncGraphUI(); return false;
+  }
+
+  TP_GRAPH.accessToken  = data.access_token;
+  TP_GRAPH.expiresAt    = Date.now() + (Number(data.expires_in) || 3600) * 1000;
+  if (data.refresh_token) TP_GRAPH.refreshToken = data.refresh_token;  // rotatif côté Entra
+  TP_GRAPH.connected    = true;
+  TP_GRAPH.lastError    = null;
+  TP_GRAPH.account      = graphReadIdToken(data.id_token) || TP_GRAPH.account;
+  graphSaveSession();
+  syncGraphUI();
+  return true;
+}
+
+/* Lecture de la charge utile du jeton d'identité, pour afficher qui est connecté.
+   Aucune vérification de signature : ce jeton vient d'être obtenu par un canal
+   TLS direct auprès d'Entra et ne sert qu'à de l'affichage — il n'autorise rien. */
+function graphReadIdToken(idToken) {
+  if (!idToken) return null;
+  const parts = idToken.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const json = decodeURIComponent(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+      .split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+    const c = JSON.parse(json);
+    return { username: c.preferred_username || null, name: c.name || null, tenantId: c.tid || null };
+  } catch { return null; }
+}
+
+/* Jeton d'accès valide, renouvelé 2 minutes avant l'échéance. */
+async function graphToken() {
+  if (TP_GRAPH.accessToken && Date.now() < TP_GRAPH.expiresAt - 120000) return TP_GRAPH.accessToken;
+  if (!TP_GRAPH.refreshToken || !TP_GRAPH.clientId) return null;
+  const ok = await graphExchange({ grant_type: 'refresh_token', refresh_token: TP_GRAPH.refreshToken });
+  return ok ? TP_GRAPH.accessToken : null;
+}
+
+function graphDisconnect() {
+  graphClearSession();
+  TP_GRAPH.lastError = null;
+  syncGraphUI();
+}
+
+/* Applique la décision du serveur, transmise par /api/me.
+   Un accès retiré doit couper une session en cours, pas seulement masquer le
+   bouton : graphLoadSession() restaure le jeton d'actualisation depuis
+   sessionStorage, donc sans ce garde un utilisateur dont l'accès vient d'être
+   révoqué continuerait d'interroger Graph jusqu'à la fermeture de l'onglet.
+   Nulle part ailleurs on ne remet clientId à null — c'est ce qui rend impossible
+   tout appel ultérieur, graphToken() refusant de s'exécuter sans lui. */
+function graphApplyAccess(autorise, clientId) {
+  if (!autorise) {
+    if (TP_GRAPH.connected || TP_GRAPH.refreshToken) graphClearSession();
+    TP_GRAPH.clientId = null;
+    syncGraphUI();
+    return;
+  }
+  if (clientId) TP_GRAPH.clientId = clientId;
+  syncGraphUI();
+}
+
+/* ── Appels ──────────────────────────────────────────────────────────────── */
+
+/* Lecture Graph. Ne lève jamais : retourne { ok, status, data }, l'analyse doit
+   se poursuivre quoi qu'il arrive. Un 401 déclenche un renouvellement et un seul
+   nouvel essai ; un 429 respecte Retry-After une fois. */
+async function graphGet(path, signal, _retried = false) {
+  const token = await graphToken();
+  if (!token) return { ok: false, status: 0, data: null };
+
+  let res;
+  try {
+    res = await fetch(TP_GRAPH_BASE + path, {
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' },
+      signal
+    });
+  } catch (e) {
+    return { ok: false, status: 0, data: null, aborted: e?.name === 'AbortError' };
+  }
+
+  if (res.status === 401 && !_retried) {
+    TP_GRAPH.expiresAt = 0;                       // force le renouvellement
+    return graphGet(path, signal, true);
+  }
+  if ((res.status === 429 || res.status === 503) && !_retried) {
+    const attente = Math.min(Number(res.headers.get('Retry-After')) || 2, 10) * 1000;
+    await new Promise(r => setTimeout(r, attente));
+    return graphGet(path, signal, true);
+  }
+
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, status: res.status, data };
+}
+
+/* Identité du tenant propriétaire d'un domaine. Fonctionne pour n'importe quel
+   domaine avec le seul jeton de l'utilisateur : aucun accès au tenant visé.
+   C'est ce que l'endpoint openid-configuration ne donne pas — le nom lisible du
+   tenant et son domaine .onmicrosoft.com.
+   404 = le domaine n'appartient à aucun tenant Entra ; ce n'est pas une erreur. */
+async function graphFindTenant(domain, signal) {
+  if (!TP_GRAPH.connected || !domain) return null;
+  if (!/^[a-z0-9.-]+$/i.test(domain)) return null;   // le domaine part dans un littéral OData
+  const r = await graphGet(
+    `/tenantRelationships/findTenantInformationByDomainName(domainName='${encodeURIComponent(domain)}')`,
+    signal
+  );
+  if (r.status === 404) return { found: false };
+  if (!r.ok || !r.data) return null;
+  return {
+    found:             true,
+    tenantId:          r.data.tenantId || null,
+    displayName:       r.data.displayName || null,
+    defaultDomainName: r.data.defaultDomainName || null,
+    federationBrand:   r.data.federationBrandName || null
+  };
+}
+
+/* Relations d'administration déléguée du tenant partenaire. Chargées une fois
+   par session et gardées en mémoire : la liste ne change pas en cours d'analyse,
+   et un aller-retour par domaine analysé serait du gaspillage. */
+async function graphLoadGdap(signal) {
+  if (TP_GRAPH.gdapCache) return TP_GRAPH.gdapCache;
+  if (!TP_GRAPH.connected) return null;
+
+  const relations = [];
+  // $filter sur status n'est pas garanti sur toutes les versions du point d'entrée :
+  // en cas de refus, on recharge sans filtre et on trie ici.
+  let next = "/tenantRelationships/delegatedAdminRelationships?$top=100&$filter=status eq 'active'";
+  let filtre = true;
+
+  while (next) {
+    const r = await graphGet(next, signal);
+    if (!r.ok) {
+      if (filtre) { next = '/tenantRelationships/delegatedAdminRelationships?$top=100'; filtre = false; continue; }
+      return null;
+    }
+    (r.data?.value || []).forEach(rel => relations.push(rel));
+    const lien = r.data?.['@odata.nextLink'];
+    next = lien ? lien.replace(TP_GRAPH_BASE, '') : null;
+  }
+
+  TP_GRAPH.gdapCache = relations.filter(r => r.status === 'active');
+  return TP_GRAPH.gdapCache;
+}
+
+/* Relation GDAP active couvrant un tenant donné, ou null. Retient la plus
+   lointaine échéance quand plusieurs relations visent le même client. */
+async function graphGdapForTenant(tenantId, signal) {
+  if (!tenantId) return null;
+  const toutes = await graphLoadGdap(signal);
+  if (!toutes) return null;
+
+  const cible = String(tenantId).toLowerCase();
+  const miennes = toutes.filter(r => String(r.customer?.tenantId || '').toLowerCase() === cible);
+  if (!miennes.length) return { active: false, total: toutes.length };
+
+  const roles = new Set();
+  let fin = null;
+  miennes.forEach(r => {
+    (r.accessDetails?.unifiedRoles || []).forEach(u => roles.add(u.roleDefinitionId));
+    if (r.endDateTime && (!fin || r.endDateTime > fin)) fin = r.endDateTime;
+  });
+
+  return {
+    active:      true,
+    total:       toutes.length,
+    relations:   miennes.length,
+    customerName: miennes[0].customer?.displayName || null,
+    endDateTime: fin,
+    joursRestants: fin ? Math.ceil((Date.parse(fin) - Date.now()) / 86400000) : null,
+    roles: [...roles].map(id => TP_GRAPH_ROLES[id] || id)
+  };
+}
+
+/* ── Étape d'analyse ─────────────────────────────────────────────────────── */
+
+/* Interroge Graph pour un domaine. Retourne null si l'utilisateur n'est pas
+   connecté : l'application doit rester entièrement fonctionnelle sans Graph,
+   c'est un enrichissement, pas un prérequis. */
+async function checkGraph(domain, tenantIdConnu) {
+  if (!TP_GRAPH.connected) return null;
+
+  const ctrl = new AbortController();
+  stepControllers.graph = ctrl;
+  try {
+    const tenant = await graphFindTenant(domain, ctrl.signal);
+    const gdap   = await graphGdapForTenant(tenant?.tenantId || tenantIdConnu, ctrl.signal);
+    if (!tenant && !gdap) return null;
+    return { tenant, gdap };
+  } catch {
+    return null;
+  } finally {
+    delete stepControllers.graph;
+  }
+}
+
+/* ── Rendu ───────────────────────────────────────────────────────────────── */
+
+function graphCardSub(g) {
+  const bouts = [];
+  if (g.tenant?.displayName)       bouts.push(g.tenant.displayName);
+  if (g.tenant?.defaultDomainName) bouts.push(g.tenant.defaultDomainName);
+  if (!bouts.length && g.tenant?.found === false) bouts.push('Domaine hors Entra ID');
+  return bouts.join(' · ') || 'Informations tenant';
+}
+
+function graphCardBadge(g) {
+  if (!g.gdap)         return 'Tenant';
+  if (!g.gdap.active)  return 'Hors GDAP';
+  const j = g.gdap.joursRestants;
+  if (j !== null && j <= 30) return 'GDAP — ' + j + ' j';
+  return 'GDAP actif';
+}
+
+function buildGraphPanel(g) {
+  return b => {
+    const t = g.tenant;
+    if (t?.found === false) {
+      addRow(b, 'Tenant Entra ID', "Aucun tenant ne revendique ce domaine.");
+    } else if (t) {
+      if (t.displayName)       addRow(b, 'Nom du tenant',      t.displayName, 'hi-ms');
+      if (t.defaultDomainName) addRow(b, 'Domaine par défaut', t.defaultDomainName);
+      if (t.tenantId)          addRow(b, 'Tenant ID',          t.tenantId);
+      if (t.federationBrand)   addRow(b, 'Marque de fédération', t.federationBrand);
+    }
+
+    const g2 = g.gdap;
+    if (!g2) return;
+
+    const sub = document.createElement('div');
+    sub.className = 'hc-subhead';
+    sub.textContent = 'Administration déléguée (GDAP)';
+    b.appendChild(sub);
+
+    if (!g2.active) {
+      /* Zéro relation au total ≠ « ce client n'est pas géré » : le compte connecté
+         n'est pas un partenaire CSP, ou n'a pas le rôle pour les lire. Distinguer
+         les deux évite de faire croire à une perte de délégation. */
+      if (!g2.total) {
+        addRow(b, 'Relation', "Le compte connecté n'expose aucune relation d'administration déléguée — tenant non partenaire, ou rôle insuffisant pour les lire.");
+      } else {
+        addRow(b, 'Relation', "Aucune relation GDAP active vers ce tenant.");
+        addRow(b, 'Portefeuille', g2.total + ' tenant(s) sous GDAP actif');
+      }
+      return;
+    }
+
+    addRow(b, 'Relation', g2.relations + ' relation(s) active(s)');
+    if (g2.customerName)  addRow(b, 'Client déclaré', g2.customerName);
+    if (g2.endDateTime) {
+      const j = g2.joursRestants;
+      const alerte = j !== null && j <= 30;
+      addRow(b, 'Expiration', formatDate(g2.endDateTime) + (j !== null ? ` (${j} jour(s))` : ''), alerte ? 'hi-warn' : '');
+    }
+    if (g2.roles?.length) addRow(b, 'Rôles délégués', g2.roles.join('\n'));
+    addRow(b, 'Portefeuille', g2.total + ' tenant(s) sous GDAP actif');
+  };
+}
+
+/* Carte de résultat. Construite ici plutôt que dans tenantpulse.js pour que tout
+   ce qui touche à Graph reste dans un seul fichier — makeCard et openPanel sont
+   des helpers globaux, disponibles à l'exécution. */
+function makeGraphCard(g) {
+  return makeCard({
+    id:       'graph',
+    iconEl:   makeImgIcon('assets/Microsoft.png', 'Microsoft Graph', 20),
+    iconBg:   'ms-clr',
+    title:    'Microsoft Graph',
+    sub:      graphCardSub(g),
+    badge:    graphCardBadge(g),
+    badgeCls: 'ms-b',
+    selCls:   'selected',
+    onClick:  () => openPanel('graph', 'Microsoft Graph', buildGraphPanel(g))
+  });
+}
+
+/* ── Interface ───────────────────────────────────────────────────────────── */
+
+/* Pastille dans la barre du haut, sur le modèle de l'état de l'extension :
+   bouton d'appel à l'action tant que rien n'est connecté, pastille verte ensuite.
+   Rien du tout si le déploiement n'a pas d'identifiant client configuré. */
+function syncGraphUI() {
+  const badge = document.getElementById('graphStatus');
+  const cta   = document.getElementById('graphConnect');
+  const label = document.getElementById('graphStatusLabel');
+  if (!badge || !cta || !label) return;
+
+  if (TP_GRAPH.connected) {
+    label.textContent = 'Graph connecté';
+    badge.title = TP_GRAPH.account?.username
+      ? 'Microsoft Graph — ' + TP_GRAPH.account.username + ' (cliquer pour se déconnecter)'
+      : 'Microsoft Graph connecté (cliquer pour se déconnecter)';
+    badge.hidden = false; cta.hidden = true;
+    return;
+  }
+
+  badge.hidden = true;
+  cta.hidden   = !TP_GRAPH.clientId;
+  cta.title    = TP_GRAPH.lastError
+    ? 'Microsoft Graph — ' + TP_GRAPH.lastError
+    : "Se connecter à Microsoft Graph pour enrichir l'analyse (nom du tenant, GDAP)";
+}
+
+/* Appelé au chargement, avant toute lecture du fragment par le reste de
+   l'application : le retour d'Entra doit être consommé en premier. */
+async function initGraph() {
+  graphLoadSession();
+  TP_GRAPH.clientId = TP_GRAPH.clientId || graphDevClientId();
+  const consomme = await graphHandleRedirect();
+  syncGraphUI();
+  return consomme;
+}
+
+/* Publié explicitement : un `const` de premier niveau ne devient pas une propriété
+   de window, et tenantpulse.js doit pouvoir tester `window.TP_GRAPH?.connected`
+   sans exploser si ce fichier n'a pas été chargé. Graph est un enrichissement —
+   son absence ne doit jamais casser l'analyse. */
+window.TP_GRAPH = TP_GRAPH;

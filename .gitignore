@@ -9,6 +9,13 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
+# Exécutables : aucun n'a sa place dans une application web statique, et le dépôt
+# est public. Deux installeurs de plusieurs dizaines de Mo s'étaient retrouvés dans
+# assets/ ; commités, ils y seraient restés définitivement, un git rm ne les
+# retirant pas de l'historique.
+*.exe
+*.msi
+
 # Azure Functions - config locale (contient la connection string)
 api/local.settings.json
 api/node_modules/

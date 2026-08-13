@@ -756,6 +756,12 @@ function bindEvents() {
     tab.addEventListener('click', () => switchAppTab(tab.dataset.appTab));
   });
 
+  // Connexion / déconnexion Microsoft Graph (graph.js, chargé séparément).
+  const graphCta = document.getElementById('graphConnect');
+  const graphDot = document.getElementById('graphStatus');
+  if (graphCta) graphCta.addEventListener('click', () => { if (typeof graphBeginLogin === 'function') graphBeginLogin(); });
+  if (graphDot) graphDot.addEventListener('click', () => { if (typeof graphDisconnect === 'function') graphDisconnect(); });
+
   document.getElementById('mainDropBtn').addEventListener('click', toggleDropdown);
   document.getElementById('btnDisableDelete').addEventListener('click', confirmDisableAndDelete);
   document.getElementById('btnDisableKeep').addEventListener('click', confirmDisableKeep);
@@ -1337,6 +1343,10 @@ window.addEventListener('load', () => {
   loadBanner();
   bindAdminEvents();
   watchExtensionMarker();
+  /* Avant applyHashQuery : au retour d'Entra le fragment porte le code
+     d'autorisation, il doit être consommé et retiré avant que quoi que ce soit
+     d'autre ne tente de lire location.hash. */
+  if (typeof initGraph === 'function') initGraph();
   applyHashQuery();
 
   // ── Synchronisation thème clair/sombre → iframe Diagnostic Messagerie ──
@@ -1400,6 +1410,12 @@ async function initAuth() {
       TP_EXTENSION.url     = data.extensionUrl     || TP_EXTENSION_STORE_URL;
       TP_EXTENSION.urlEdge = data.extensionUrlEdge || null;
       TP_DNS_RELAY = data.dnsRelay === true;
+      /* Droit d'accès à Graph, décidé par le serveur. Appelé uniquement quand
+         /api/me a répondu : en local l'API est absente, et couper Graph sur une
+         absence de réponse rendrait la dérogation de développement inopérante. */
+      if (typeof graphApplyAccess === 'function') {
+        graphApplyAccess(data.graphAccess === true, data.graphClientId || null);
+      }
     }
   } catch {
     // Pas d'API disponible (dev local) — on reste en utilisateur anonyme.
@@ -1408,6 +1424,7 @@ async function initAuth() {
      fiche versionnée, il ne doit donc pas disparaître parce que /api/me est en erreur. */
   syncExtensionUI();
   syncDnsRelayUI();
+  if (typeof syncGraphUI === 'function') syncGraphUI();
   applyAuthToUI();
 }
 
@@ -2089,7 +2106,7 @@ function switchAdminSubtab(name) {
   document.querySelectorAll('.admin-subtab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.subtab === name);
   });
-  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers', banner: 'adminPaneBanner', relay: 'adminPaneRelay' };
+  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers', banner: 'adminPaneBanner', relay: 'adminPaneRelay', graph: 'adminPaneGraph' };
   Object.entries(panes).forEach(([key, id]) => {
     const pane = document.getElementById(id);
     if (pane) pane.hidden = (key !== name);
@@ -2102,6 +2119,7 @@ function switchAdminSubtab(name) {
   else if (name === 'users' && typeof loadAdminUsers === 'function') loadAdminUsers();
   else if (name === 'banner' && typeof loadAdminBanner === 'function') loadAdminBanner();
   else if (name === 'relay' && typeof loadAdminRelay === 'function') loadAdminRelay();
+  else if (name === 'graph' && typeof loadAdminGraph === 'function') loadAdminGraph();
   else adminPanePlaceholder(panes[name]);
 }
 
@@ -2181,6 +2199,128 @@ async function setDnsRelay(enabled) {
     syncDnsRelayUI();
     heroTagFeedback(TP_DNS_RELAY ? 'Relais DNS activé' : 'Relais DNS désactivé');
     loadAdminRelay();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+// ── Panneau admin : accès à Microsoft Graph (admin uniquement) ──
+// Le contrôle réel est côté serveur : /api/me ne sert l'identifiant client qu'aux
+// utilisateurs autorisés. Cet écran ne fait que piloter ce réglage.
+async function loadAdminGraph() {
+  const pane = document.getElementById('adminPaneGraph');
+  if (!pane) return;
+  pane.replaceChildren(adminLoading());
+
+  let etat;
+  try {
+    const r = await fetch('/api/graph-access', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) { pane.replaceChildren(adminError('Accès refusé ou erreur serveur')); return; }
+    etat = await r.json();
+  } catch { pane.replaceChildren(adminError('Erreur réseau')); return; }
+
+  const ouvertATous = etat.mode === 'all';
+  pane.replaceChildren();
+
+  // ── Mode global ──
+  const form = document.createElement('div'); form.className = 'admin-tag-form';
+  const title = document.createElement('div'); title.className = 'admin-section-title';
+  title.textContent = 'Connexion Microsoft Graph';
+  form.appendChild(title);
+
+  const explique = document.createElement('div'); explique.className = 'analysis-mode-hint';
+  explique.textContent =
+    "La connexion Graph enrichit l'analyse avec le nom du tenant, son domaine par défaut "
+    + "et l'état des relations GDAP. Elle exige que l'utilisateur s'authentifie auprès de "
+    + "Microsoft avec son propre compte : ce qu'il voit dépend donc de ses propres droits, "
+    + "et les données ne transitent par aucun serveur de l'application. "
+    + "Par défaut, seuls les rôles manager et admin peuvent l'utiliser. Ouvrir à tous "
+    + "reste sans danger pour les données, mais chaque utilisateur consomme alors du quota "
+    + "Microsoft Graph sous son propre compte.";
+  form.appendChild(explique);
+
+  const ligne = document.createElement('div'); ligne.className = 'drop-toggle';
+  const gauche = document.createElement('div'); gauche.className = 'drop-toggle-left';
+  const label = document.createElement('span'); label.className = 'drop-toggle-label';
+  label.textContent = ouvertATous ? 'Ouvert à tous les utilisateurs' : 'Réservé aux rôles manager et admin';
+  gauche.appendChild(label);
+  const bouton = document.createElement('div');
+  bouton.className = 'drop-toggle-switch' + (ouvertATous ? ' on' : '');
+  ligne.appendChild(gauche); ligne.appendChild(bouton);
+  ligne.addEventListener('click', () => setGraphAccessMode(ouvertATous ? 'roles' : 'all'));
+  form.appendChild(ligne);
+
+  if (etat.updatedAt) {
+    const trace = document.createElement('div'); trace.className = 'admin-empty';
+    const d = new Date(etat.updatedAt);
+    trace.textContent = 'Dernière modification le ' + d.toLocaleDateString('fr-FR')
+      + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      + (etat.updatedBy ? ' par ' + etat.updatedBy : '');
+    form.appendChild(trace);
+  }
+  pane.appendChild(form);
+
+  // ── Ouverture nominative ──
+  const nominatif = document.createElement('div'); nominatif.className = 'admin-tag-form';
+  const t2 = document.createElement('div'); t2.className = 'admin-section-title';
+  t2.textContent = 'Ouvrir à un utilisateur en particulier';
+  nominatif.appendChild(t2);
+
+  const h2 = document.createElement('div'); h2.className = 'analysis-mode-hint';
+  h2.textContent = ouvertATous
+    ? "Sans effet tant que l'accès est ouvert à tous : la liste reprendra son rôle si vous revenez au mode réservé."
+    : "Donne l'accès à Graph sans changer le rôle de la personne. Utile pour un technicien qui en a besoin ponctuellement.";
+  nominatif.appendChild(h2);
+
+  const input = document.createElement('input');
+  input.type = 'email'; input.className = 'admin-input'; input.placeholder = 'prenom.nom@exemple.com';
+  const submit = document.createElement('button');
+  submit.type = 'button'; submit.className = 'admin-btn'; submit.textContent = "Ouvrir l'accès";
+  submit.addEventListener('click', () => setGraphAccessUser(input.value.trim(), true));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') setGraphAccessUser(input.value.trim(), true); });
+  nominatif.appendChild(input); nominatif.appendChild(submit);
+  pane.appendChild(nominatif);
+
+  const section = adminSection('Accès nominatifs');
+  const users = Array.isArray(etat.users) ? etat.users : [];
+  if (users.length) {
+    users.slice().sort().forEach(email => {
+      const row = document.createElement('div'); row.className = 'admin-role-row';
+      const e = document.createElement('span'); e.className = 'admin-role-email'; e.textContent = email;
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'admin-btn admin-btn-small'; del.textContent = 'Retirer';
+      del.addEventListener('click', () => setGraphAccessUser(email, false));
+      row.appendChild(e); row.appendChild(del);
+      section.appendChild(row);
+    });
+  } else {
+    section.appendChild(adminEmpty('Aucun accès nominatif'));
+  }
+  pane.appendChild(section);
+}
+
+async function setGraphAccessMode(mode) {
+  try {
+    const r = await fetch('/api/graph-access', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { heroTagFeedback(d.error || 'Modification refusée', true); return; }
+    heroTagFeedback(mode === 'all' ? 'Graph ouvert à tous' : 'Graph réservé aux managers et admins');
+    loadAdminGraph();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+async function setGraphAccessUser(email, enabled) {
+  if (!email) { heroTagFeedback('Email obligatoire', true); return; }
+  try {
+    const r = await fetch('/api/graph-access', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, enabled })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { heroTagFeedback(d.error || 'Modification refusée', true); return; }
+    heroTagFeedback(enabled ? 'Accès Graph ouvert pour ' + email : 'Accès Graph retiré pour ' + email);
+    loadAdminGraph();
   } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
@@ -3487,6 +3627,7 @@ const stepRetryFns    = {};
 const STEP_LABELS = {
   ms:     { active:'Interrogation Microsoft 365…', done:'Microsoft 365 ✓',   fail:'Microsoft 365 — Non trouvé',   timeout:'Microsoft 365 — Annulé' },
   google: { active:'Interrogation Google…',        done:'Google Workspace ✓', fail:'Google — Non détecté',         timeout:'Google — Annulé' },
+  graph:  { active:'Interrogation Microsoft Graph…', done:'Microsoft Graph ✓', fail:'Graph — Pas de réponse',      timeout:'Graph — Annulé' },
   dns:    { active:'Récupération DNS…',            done:'DNS ✓',              fail:'DNS — Vide',                   timeout:'DNS — Annulé' },
   health: { active:'Vérification DKIM/DMARC…',    done:'Sécurité analysée ✓',fail:'Sécurité — Partiel',           timeout:'Sécurité — Annulé' },
   others: { active:'Détection services…',          done:'Autres services ✓',  fail:'Services — Partiel',           timeout:'Services — Annulé' },
@@ -4760,7 +4901,7 @@ function healthSubLbl(health) {
 // d'un ticket (tenant, M365/Santé), et l'hébergeur/registrar en dernier. Re-append = déplacement
 // en fin de conteneur, donc l'ordre final suit ce tableau, quel que soit l'ordre d'insertion.
 function reorderResults(center) {
-  ['.tenant-hero', '#card-ms', '#card-google', '#card-health', '#card-dns', '.pills-block', '#card-host', '#btnTriggerFull']
+  ['.tenant-hero', '#card-ms', '#card-graph', '#card-google', '#card-health', '#card-dns', '.pills-block', '#card-host', '#btnTriggerFull']
     .forEach(sel => { const el = center.querySelector(sel); if (el) center.appendChild(el); });
 }
 
@@ -4792,12 +4933,31 @@ async function checkFastById(tenantId) {
     const confidence = computeConfidence(ms);
     if (domain) addToHistory(domain, ms.tenantId);
     center.appendChild(renderHero(ms, domain, confidence));
-    lastReport = { domain: domain || null, analysedAt: new Date().toISOString(), input: tenantId, microsoft: ms, google: null, dns: null, health: null, otherServices: null, host: null, tenantConfidence: confidence, fullDone: false };
+    lastReport = { domain: domain || null, analysedAt: new Date().toISOString(), input: tenantId, microsoft: ms, google: null, dns: null, health: null, otherServices: null, host: null, graph: currentState.graph || null, tenantConfidence: confidence, fullDone: false };
     exportBtn.classList.add('visible');
   } catch (err) {
     document.getElementById('progList').style.display = 'none';
     showError('Erreur : ' + err.message);
   } finally { unlockButtons(); setFastLoading(false); }
+}
+
+/* Graph est utilisable ? La double vérification couvre le cas où graph.js n'a pas
+   été chargé : l'analyse doit rester intégralement fonctionnelle sans lui. */
+function graphConnecte() {
+  return window.TP_GRAPH?.connected === true && typeof checkGraph === 'function';
+}
+
+/* Étape Microsoft Graph, commune à l'analyse rapide et à l'analyse complète.
+   Sans effet et sans bruit si l'utilisateur n'est pas connecté : c'est un
+   enrichissement, il ne doit jamais interrompre une analyse ni la faire échouer. */
+async function runGraphStep(domain) {
+  if (!graphConnecte()) return;
+  stepRetryFns.graph = () => runGraphStep(domain);
+  setStep('step-graph', 'active');
+  currentState.graph = await checkGraph(domain, currentState.ms?.tenantId || null);
+  if (!document.getElementById('step-graph').className.includes('timeout')) {
+    setStep('step-graph', currentState.graph ? 'done' : 'fail');
+  }
 }
 
 async function checkFast() {
@@ -4807,14 +4967,18 @@ async function checkFast() {
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
   errBox.style.display = 'none'; center.replaceChildren(); closePanel();
   exportBtn.classList.remove('visible'); lastReport = null;
-  currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, fullDone:false };
+  currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, graph:null, fullDone:false };
   lockButtons(); setFastLoading(true);
-  showSteps(['ms', 'dns']);
+  // L'étape Graph n'apparaît que si l'utilisateur y est connecté : sans connexion
+  // elle n'a rien à faire, et une étape vide dans la liste ferait croire à un échec.
+  showSteps(graphConnecte() ? ['ms', 'graph', 'dns'] : ['ms', 'dns']);
   try {
     setStep('step-ms', 'active');
     stepRetryFns.ms = async () => { setStep('step-ms', 'active'); currentState.ms = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail'); };
     currentState.ms = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain);
     if (!document.getElementById('step-ms').className.includes('timeout')) setStep('step-ms', currentState.ms ? 'done' : 'fail');
+
+    await runGraphStep(domain);
 
     // Détection Google Workspace silencieuse (pas d'étape visible) : outil orienté M365.
     // La carte « Google Workspace » s'affiche uniquement si le domaine est réellement Google.
@@ -4827,7 +4991,7 @@ async function checkFast() {
 
     document.getElementById('progList').style.display = 'none';
     const confidence = computeConfidence(currentState.ms);
-    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: null, otherServices: null, host: null, tenantConfidence: confidence, fullDone: false };
+    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: null, otherServices: null, host: null, graph: currentState.graph || null, tenantConfidence: confidence, fullDone: false };
     exportBtn.classList.add('visible'); // rapport (partiel) copiable dès l'analyse rapide
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));
@@ -4842,6 +5006,7 @@ async function checkFast() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
+    if (currentState.graph) center.appendChild(makeGraphCard(currentState.graph));
     if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
     if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
@@ -4908,7 +5073,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     const oldHero = center.querySelector('.tenant-hero');
     if (oldHero) center.replaceChild(renderHero(currentState.ms, domain, confidence), oldHero);
 
-    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, bonus: currentState.health.bonus, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, tenantConfidence: confidence, fullDone: true };
+    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, bonus: currentState.health.bonus, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, graph: currentState.graph, tenantConfidence: confidence, fullDone: true };
     exportBtn.classList.add('visible');
 
     const newPb = document.createElement('div'); newPb.className = 'pills-block';
@@ -4953,10 +5118,11 @@ async function checkFull() {
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
   errBox.style.display = 'none'; center.replaceChildren(); closePanel();
   exportBtn.classList.remove('visible'); lastReport = null;
-  currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, fullDone:false };
+  currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, graph:null, fullDone:false };
   lockButtons(); setFullLoading(true);
-  showSteps(['ms', 'dns', 'health', 'others', 'host']);
-  ['ms', 'dns', 'health', 'others', 'host'].forEach(k => setStep('step-' + k, 'pending'));
+  const etapes = graphConnecte() ? ['ms', 'graph', 'dns', 'health', 'others', 'host'] : ['ms', 'dns', 'health', 'others', 'host'];
+  showSteps(etapes);
+  etapes.forEach(k => setStep('step-' + k, 'pending'));
   // Peupler stepRetryFns pour que le bouton "Relancer" fonctionne en mode full
   stepRetryFns.ms     = async () => { setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail'); };
   stepRetryFns.dns    = async () => { setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', currentState.dns?.mx?.length > 0 ? 'done' : 'fail'); };
@@ -4965,6 +5131,7 @@ async function checkFull() {
   stepRetryFns.host   = async () => { setStep('step-host', 'active');   currentState.host   = await checkHost(domain);                                           setStep('step-host', currentState.host ? 'done' : 'fail'); };
   try {
     setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail');
+    await runGraphStep(domain);
     currentState.goog   = await checkGoogle(domain); // détection silencieuse (pas d'étape visible)
     setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', (currentState.dns?.mx?.length ?? 0) > 0 ? 'done' : 'fail');
     setStep('step-health', 'active'); currentState.health = await checkHealth(domain);                                         setStep('step-health', 'done');
@@ -4973,7 +5140,7 @@ async function checkFull() {
     document.getElementById('progList').style.display = 'none';
     currentState.fullDone = true;
     const confidence = computeConfidence(currentState.ms);
-    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, bonus: currentState.health.bonus, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, tenantConfidence: confidence, fullDone: true };
+    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, bonus: currentState.health.bonus, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, graph: currentState.graph, tenantConfidence: confidence, fullDone: true };
     exportBtn.classList.add('visible');
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));
@@ -4996,6 +5163,7 @@ async function checkFull() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
+    if (currentState.graph) center.appendChild(makeGraphCard(currentState.graph));
     if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     if (currentState.host) {
       const logo = hostLogo(currentState.host.hostName);

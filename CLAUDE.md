@@ -20,6 +20,7 @@ The frontend is just HTML + CSS + Vanilla JS + image assets — no build step.
 Project App tenant pulse push to github/
 ├── index.html               # Main shell
 ├── tenantpulse.js           # Core app logic (~3940 lines)
+├── graph.js                 # Connexion Microsoft Graph (OAuth PKCE) — optionnelle
 ├── tenantpulse.css          # Shared stylesheet (root + sub-apps)
 ├── staticwebapp.config.json # Azure Static Web Apps: routes, auth, CSP headers
 ├── assets/                  # PNG/JPEG logos and icons
@@ -127,6 +128,69 @@ External endpoints:
 - `accounts.google.com` → Google Workspace detection.
 - `rdap.org` + many registry RDAP servers → WHOIS / hosting detection (`detectHostFromNS`).
 - `google.com/s2/favicons` → service icons.
+- `graph.microsoft.com` → Microsoft Graph, **si et seulement si** l'utilisateur s'est connecté
+  (voir ci-dessous). Appelé directement par le navigateur, comme tout le reste.
+
+### Microsoft Graph — `graph.js`
+
+Enrichissement **optionnel** : l'application doit rester intégralement fonctionnelle sans lui.
+Toute la logique d'authentification est confinée dans `graph.js`, et le pipeline y accède
+par deux gardes (`graphConnecte()`, `window.TP_GRAPH?.connected`) qui tolèrent l'absence
+totale du fichier.
+
+- **Flux** : OAuth 2.0 code d'autorisation + PKCE (S256), **redirection** (pas de popup —
+  `Cross-Origin-Opener-Policy: same-origin` couperait `window.opener` au retour d'Entra).
+  Pas de MSAL : aucune dépendance frontend, aucune étape de build, le périmètre tient dans
+  un fichier. Si MSAL devient nécessaire un jour, c'est ce fichier qu'on remplace.
+- **Jetons** : jeton d'accès en mémoire seule ; jeton d'actualisation en `sessionStorage`
+  (`tenantpulse_graph_v1`) — jamais `localStorage`, il survivrait à la session.
+  **Aucun jeton, aucune réponse Graph ne transite par les Functions.** C'est ce qui
+  maintient l'application hors du statut de sous-traitant RGPD, exactement comme pour le DNS.
+- **Autorité** : `login.microsoftonline.com/organizations` — jamais le GUID du tenant.
+- **Portées déléguées** (palier 0, aucun accès aux tenants clients requis) :
+  `CrossTenantInformation.ReadBasic.All`, `DelegatedAdminRelationship.Read.All`,
+  plus `openid profile offline_access`. Les deux premières exigent un consentement admin.
+- **Points d'entrée utilisés** : `findTenantInformationByDomainName` (nom du tenant + domaine
+  `.onmicrosoft.com`, pour n'importe quel domaine) et `delegatedAdminRelationships`
+  (relations GDAP, rôles délégués, échéance). Ces dernières sont chargées **une fois par
+  session** et gardées en mémoire (`TP_GRAPH.gdapCache`) — un aller-retour par domaine
+  analysé serait du gaspillage.
+
+> [!IMPORTANT]
+> **`GRAPH_CLIENT_ID` n'est jamais versionné.** L'identifiant est servi par `GET /api/me`
+> depuis un paramètre d'application. Ce n'est pas un secret au sens OAuth — un client public
+> l'expose forcément — mais il identifie l'organisation, ce que les règles de confidentialité
+> plus bas interdisent d'écrire en clair. Absent → aucun bouton, aucune requête.
+
+**Contrôle d'accès.** Graph est réservé par défaut aux rôles **manager et admin**. Deux
+dérogations, pilotées par un admin depuis l'onglet « Accès Graph » du panneau
+d'administration : le mode global `all` (ouvert à tout utilisateur connecté et non bloqué)
+et une liste nominative (ouverture individuelle sans changer le rôle).
+
+Le verrou est **`GET /api/me`, qui ne sert `graphClientId` qu'aux utilisateurs autorisés** —
+masquer un bouton ne protège rien, ne pas servir l'identifiant si. Corollaire à ne pas
+casser : `graphApplyAccess()` **coupe une session en cours** quand `/api/me` répond
+`graphAccess: false`, car `graphLoadSession()` restaure le jeton d'actualisation depuis
+sessionStorage ; sans ce garde, un accès révoqué resterait effectif jusqu'à la fermeture
+de l'onglet.
+
+L'état vit dans la table `Tags`, partition `config`, ligne `graph` (`mode` + `users` en JSON).
+La liste nominative n'est **pas** stockée sur les entités de la table `Roles` :
+`POST /api/roles` écrit en mode `Replace`, l'indicateur disparaîtrait au prochain
+changement de rôle.
+
+**Prérequis d'inscription d'application** (tenant partenaire, à faire une fois) :
+plateforme **SPA** (elle seule active le CORS sur le point d'entrée de jetons et impose
+PKCE), URI de redirection **`https://<origine>/`** exactement — `graph.js` force la racine
+pour que l'URI ne dépende pas de la page d'arrivée —, **aucun secret client**, et
+**octroi implicite décoché** (le flux est en `response_type=code`, l'implicite ne servirait
+qu'à émettre des jetons dans l'URL sans protection PKCE).
+
+> [!IMPORTANT]
+> **`signInAudience` doit valoir `AzureADMultipleOrgs`** (comptes multi-tenant). Ce n'est
+> pas une préparation au palier 1 : l'autorité `/organizations` est **refusée pour toute
+> application mono-tenant créée après octobre 2018** (`AADSTS50194`). Une inscription
+> mono-tenant échoue dès la première redirection.
 
 ### Two analysis depths
 
@@ -147,6 +211,12 @@ Opt-in by design. Keys:
 - Profiles: `tenantpulse_profile_v1` (TP button order), `messagerie_profile_v1` (ML block layout).
 - Résolveur DoH : `tenantpulse_doh_v1` (`cloudflare` | `google`). Absente = mode automatique,
   et choisir « Automatique » supprime la clé plutôt que d'y écrire une valeur par défaut.
+- Graph : `tenantpulse_graph_v1` et `tenantpulse_graph_pending_v1` sont en **sessionStorage**,
+  pas en localStorage — ils portent un jeton d'actualisation et un vérificateur PKCE, qui ne
+  doivent pas survivre à la fermeture de l'onglet.
+  `tenantpulse_graph_dev_clientid` (localStorage) est une dérogation **lue uniquement sur
+  localhost** : sans Functions en local, `/api/me` ne sert aucun identifiant client et rien
+  ne serait testable. En production, seul `/api/me` fait autorité.
 - Bandeau : `tenantpulse_banner_hidden_v1` — identifiant du dernier message masqué par
   l'utilisateur. Masquer ne vaut donc que pour **ce** message : l'`id` renvoyé par l'API change
   à chaque publication, si bien qu'une nouvelle annonce réapparaît chez tout le monde.
@@ -163,7 +233,7 @@ env vars). Auth context is injected by the SWA runtime as the `x-ms-client-princ
 | `Roles` | `email → {role, blocked}` |
 | `Classifications` | `tenantId + tagType → approved tag + approver` |
 | `Requests` | Pending tag proposals from users |
-| `Tags` | Quatre partitions cloisonnées dans une même table, pour ne pas imposer une table Azure de plus par ligne unique : `tag` (définitions de tags), `default` (balises par défaut), `banner`/`current` (bandeau d'information), `config`/`dnsrelay` (interrupteur du relais DNS). Toute lecture doit filtrer sur sa partition |
+| `Tags` | Cinq partitions cloisonnées dans une même table, pour ne pas imposer une table Azure de plus par ligne unique : `tag` (définitions de tags), `default` (balises par défaut), `banner`/`current` (bandeau d'information), `config`/`dnsrelay` (interrupteur du relais DNS), `config`/`graph` (accès à Microsoft Graph). Toute lecture doit filtrer sur sa partition |
 | `Locks` | Per-tenant or global modification locks |
 
 **Role hierarchy** (ascending permissions):
@@ -178,8 +248,10 @@ moderation powers; managers and admins can assign it via `/api/roles`.
 
 | Method | Route | Min role | Description |
 |---|---|---|---|
-| GET | `/api/me` | any auth | `{email, name, role, blocked}` |
+| GET | `/api/me` | any auth | `{email, name, role, blocked, contactEmail, extensionUrl, graphClientId, dnsRelay}` |
 | GET | `/api/dns?name=&type=` | any auth | Relais DoH de secours. **403 si le relais est désactivé.** Types en liste fermée, `name` normalisé en punycode via `new URL()` |
+| GET | `/api/graph-access` | admin | `{mode, users, updatedBy, updatedAt}` — liste nominative, donc admin only |
+| POST | `/api/graph-access` | admin | `{mode:"roles"\|"all"}` ou `{email, enabled:bool}` |
 | GET | `/api/dns-relay` | any auth | `{enabled, updatedBy, updatedAt}` |
 | POST | `/api/dns-relay` | admin | Active/désactive le relais : `{enabled: bool}` |
 | GET | `/api/banner` | any auth | Bandeau d'information courant ou `null`. L'expiration est évaluée **côté serveur** (l'horloge du poste n'est pas une référence) et la ligne périmée est supprimée au passage |

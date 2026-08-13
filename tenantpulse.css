@@ -979,6 +979,12 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .d-row{background:var(--row);border:1.5px solid var(--border);border-radius:var(--r-md);padding:9px 11px;transition:background .25s}
 .d-row.hi-google{border-color:#bfdbfe;background:#fffbeb}
 [data-theme="dark"] .d-row.hi-google{background:#1e1a00;border-color:#92781a}
+/* Mise en avant du nom de tenant renvoyé par Graph, et alerte sur une échéance
+   GDAP proche : ce sont les deux valeurs qu'on vient chercher dans ce panneau. */
+.d-row.hi-ms{border-color:#bfdbfe;background:#f0f7ff}
+[data-theme="dark"] .d-row.hi-ms{background:#0e1a2b;border-color:#1e4976}
+.d-row.hi-warn{border-color:#fcd34d;background:#fffbeb}
+[data-theme="dark"] .d-row.hi-warn{background:#2a1f00;border-color:#a16207}
 .d-label{font-size:var(--text-xs);font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.09em;margin-bottom:3px}
 .d-value{font-size:var(--text-sm);font-weight:500;color:var(--text);word-break:break-all;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .copy-btn{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);color:var(--soft);font-size:var(--text-xs);font-weight:500;font-family:var(--font);padding:2px 7px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
@@ -1373,6 +1379,15 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .topbar-ext.is-cta{color:#fff;padding:4px 11px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);transition:background .18s,border-color .18s}
 .topbar-ext.is-cta:hover{background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.55)}
 .topbar-ext-icon{object-fit:contain;flex-shrink:0}
+/* État de la connexion Microsoft Graph. Même gabarit que .topbar-ext, mais une
+   pastille cliquable (elle déconnecte) et une teinte bleue pour ne pas se
+   confondre avec l'état de l'extension, juste à côté. */
+.topbar-graph{display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:var(--text-xs);font-weight:600;letter-spacing:.01em;white-space:nowrap;text-decoration:none;border-radius:var(--r-pill);line-height:1;border:none}
+.topbar-graph.is-active{color:rgba(255,255,255,.75);padding:3px 9px;background:rgba(255,255,255,.1);cursor:pointer}
+.topbar-graph.is-active:hover{background:rgba(255,255,255,.2)}
+.topbar-graph-dot{width:6px;height:6px;border-radius:50%;background:#60a5fa;flex-shrink:0;box-shadow:0 0 0 2px rgba(96,165,250,.25)}
+.topbar-graph.is-cta{color:#fff;padding:4px 11px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);cursor:pointer;transition:background .18s,border-color .18s}
+.topbar-graph.is-cta:hover{background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.55)}
 
 /* ── Footer : rôle en bas à gauche ── */
 footer{position:relative}
@@ -1579,7 +1594,7 @@ select.admin-input{cursor:pointer;color-scheme:light}
 .admin-known-badges{display:flex;flex-wrap:wrap;gap:6px}
 
 /* ── Garde-fous [hidden] (les règles display ci-dessus battent le UA [hidden]) ── */
-.topbar-admin[hidden],.topbar-ext[hidden],.topbar-relay[hidden],.tp-banner[hidden],.tp-banner-recall[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
+.topbar-admin[hidden],.topbar-ext[hidden],.topbar-graph[hidden],.topbar-relay[hidden],.tp-banner[hidden],.tp-banner-recall[hidden],.admin-overlay[hidden],.admin-subtab[hidden],.admin-badge[hidden],.admin-subtab-badge[hidden],.admin-pane[hidden],.footer-role[hidden]{display:none!important}
 
 /* ── Étiquette « Relais DNS actif » (barre du haut, à côté de l'état de l'extension) ──
    Volontairement visible : quand le relais est actif, la promesse « aucun serveur
