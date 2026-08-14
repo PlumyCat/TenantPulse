@@ -135,7 +135,7 @@ function graphDevClientId() {
    sessionStorage : ils doivent survivre à la navigation, pas à l'onglet.
    L'identifiant client y est joint pour que le retour soit autonome et n'ait
    pas à attendre /api/me. */
-async function graphBeginLogin() {
+async function graphBeginLogin(forcerSelection) {
   if (!TP_GRAPH.clientId) { TP_GRAPH.lastError = 'Connexion Graph non configurée sur ce déploiement.'; syncGraphUI(); return; }
 
   const verifier  = graphRandom(48);
@@ -178,9 +178,17 @@ async function graphBeginLogin() {
   /* L'utilisateur a déjà franchi l'authentification Entra de l'application : lui
      re-proposer un sélecteur de compte n'apporte rien. Avec login_hint et sans
      prompt, la session existante est réutilisée et la redirection est invisible.
-     Sans indice — API indisponible en local — on retombe sur le sélecteur. */
+
+     Sauf quand on le demande explicitement. En contexte partenaire, l'identité
+     qui porte les droits GDAP n'est pas toujours celle du poste de travail :
+     les rôles Partner Center (AdminAgents) vivent souvent sur un compte
+     d'administration distinct. Sans échappatoire, l'utilisateur serait enfermé
+     sur le compte de l'application, sans comprendre pourquoi sa liste GDAP est
+     vide alors qu'il voit ses clients dans Partner Center. */
   let indice = null;
-  try { indice = TP_AUTH?.email || null; } catch { /* tenantpulse.js absent */ }
+  if (!forcerSelection) {
+    try { indice = TP_AUTH?.email || null; } catch { /* tenantpulse.js absent */ }
+  }
   if (indice) p.set('login_hint', indice); else p.set('prompt', 'select_account');
 
   location.assign(TP_GRAPH_AUTHORITY + '/oauth2/v2.0/authorize?' + p.toString());
@@ -471,6 +479,80 @@ async function graphGdapForTenant(tenantId, signal) {
   };
 }
 
+/* ── Palier 1 : jeton pour le tenant d'un client (banc d'essai) ──────────────
+
+   Lire le MFA, le Secure Score ou les licences d'un client suppose un jeton émis
+   pour SON tenant, obtenu grâce à la relation GDAP. La question ouverte, et elle
+   décide de la forme du palier 1 : Entra accorde-t-il ce jeton **sans
+   interaction**, en rejouant le jeton d'actualisation du tenant partenaire sur
+   l'autorité du tenant client ?
+
+   Si oui, un client analysé coûte un appel réseau et rien d'autre. Si non, il
+   faut une redirection et un consentement par client, ce qui est inutilisable
+   dans un outil de diagnostic — et le palier 1 devra alors changer de forme.
+
+   Fonction de diagnostic, volontairement non branchée au pipeline.
+
+   > Attention : Entra fait tourner les jetons d'actualisation. Un essai peut
+   > invalider la session en cours. C'est sans gravité — il suffit de se
+   > reconnecter — mais il ne faut pas s'en étonner.                            */
+
+async function graphTokenForTenant(tenantId, scopes) {
+  if (!TP_GRAPH.connected || !TP_GRAPH.refreshToken || !TP_GRAPH.clientId) {
+    return { ok: false, raison: 'Aucune session Graph active.' };
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(tenantId || ''))) {
+    return { ok: false, raison: 'tenantId attendu sous forme de GUID.' };
+  }
+
+  /* Un jeton déjà obtenu pour ce tenant sert de point de départ : c'est la base
+     d'un cache par tenant si le palier 1 se confirme. */
+  TP_GRAPH.tenantTokens = TP_GRAPH.tenantTokens || {};
+  const connu = TP_GRAPH.tenantTokens[tenantId];
+  const rt    = (connu && connu.refreshToken) || TP_GRAPH.refreshToken;
+
+  const body = new URLSearchParams({
+    client_id:     TP_GRAPH.clientId,
+    grant_type:    'refresh_token',
+    refresh_token: rt,
+    scope:         (Array.isArray(scopes) && scopes.length ? scopes : TP_GRAPH_SCOPES).join(' ')
+  });
+
+  let res, data;
+  try {
+    res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    body.toString()
+    });
+    data = await res.json().catch(() => null);
+  } catch {
+    return { ok: false, raison: "Requête refusée avant réponse (CORS ou réseau)." };
+  }
+
+  if (!res.ok || !data?.access_token) {
+    return {
+      ok: false, status: res.status,
+      erreur: data?.error || null,
+      description: data?.error_description || null,
+      /* Lecture des codes les plus probables, pour que le résultat se passe
+         d'interprétation. */
+      diagnostic:
+        data?.error === 'invalid_grant'          ? "Consentement ou accès manquant sur le tenant client — une interaction serait nécessaire."
+        : data?.error === 'interaction_required' ? "Entra exige une interaction : pas de jeton silencieux pour ce tenant."
+        : data?.error === 'unauthorized_client'  ? "L'application n'est pas autorisée sur ce tenant."
+        : null
+    };
+  }
+
+  TP_GRAPH.tenantTokens[tenantId] = {
+    accessToken:  data.access_token,
+    expiresAt:    Date.now() + (Number(data.expires_in) || 3600) * 1000,
+    refreshToken: data.refresh_token || rt
+  };
+  return { ok: true, tenant: tenantId, expiresIn: data.expires_in, portees: data.scope };
+}
+
 /* ── Étape d'analyse ─────────────────────────────────────────────────────── */
 
 /* Interroge Graph pour un domaine. Retourne null si l'utilisateur n'est pas
@@ -537,6 +619,25 @@ function buildGraphPanel(g) {
          les deux évite de faire croire à une perte de délégation. */
       if (!g2.total) {
         addRow(b, 'Relation', "Le compte connecté n'expose aucune relation d'administration déléguée — tenant non partenaire, ou rôle insuffisant pour les lire.");
+        if (TP_GRAPH.account?.username) {
+          addRow(b, 'Compte utilisé', TP_GRAPH.account.username);
+        }
+        /* Le cas le plus fréquent : les rôles Partner Center (AdminAgents) sont
+           portés par un compte d'administration distinct de celui du poste. On
+           propose la sortie là où l'utilisateur constate le problème, plutôt que
+           de le laisser chercher. */
+        const aide = document.createElement('div');
+        aide.className = 'analysis-mode-hint';
+        aide.textContent = "Si vous administrez vos clients dans Partner Center avec un autre compte, "
+          + "c'est celui-là qui porte les droits d'administration déléguée. Les rôles Partner Center "
+          + "sont indépendants des rôles Entra.";
+        b.appendChild(aide);
+
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'admin-btn';
+        btn.textContent = 'Se connecter avec un autre compte';
+        btn.addEventListener('click', () => { graphDisconnect(); graphBeginLogin(true); });
+        b.appendChild(btn);
       } else {
         addRow(b, 'Relation', "Aucune relation GDAP active vers ce tenant.");
         addRow(b, 'Portefeuille', g2.total + ' tenant(s) sous GDAP actif');
