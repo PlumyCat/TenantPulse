@@ -150,11 +150,20 @@ totale du fichier.
 - **Portées déléguées** (palier 0, aucun accès aux tenants clients requis) :
   `CrossTenantInformation.ReadBasic.All`, `DelegatedAdminRelationship.Read.All`,
   plus `openid profile offline_access`. Les deux premières exigent un consentement admin.
-- **Points d'entrée utilisés** : `findTenantInformationByDomainName` (nom du tenant + domaine
-  `.onmicrosoft.com`, pour n'importe quel domaine) et `delegatedAdminRelationships`
-  (relations GDAP, rôles délégués, échéance). Ces dernières sont chargées **une fois par
-  session** et gardées en mémoire (`TP_GRAPH.gdapCache`) — un aller-retour par domaine
-  analysé serait du gaspillage.
+- **Points d'entrée utilisés** : `findTenantInformationByDomainName` (nom du tenant +
+  domaine `.onmicrosoft.com`, pour n'importe quel domaine, sans aucun accès au tenant visé)
+  et `reports/authenticationMethods/userRegistrationDetails` **dans le tenant du client**,
+  d'où se déduit la couverture MFA.
+- **Deux paliers, deux jetons.** Le premier point d'entrée se lit avec le jeton du tenant
+  partenaire. Le second exige un jeton **émis pour le tenant du client**, obtenu par
+  `graphTenantToken()` : le jeton d'actualisation du partenaire est rejoué sur l'autorité
+  du client, ce qu'Entra accorde grâce à la délégation GDAP. Les jetons obtenus sont mis en
+  cache par tenant (`TP_GRAPH.tenantTokens`).
+- **L'affichage des relations GDAP a été retiré** (commit à retrouver dans l'historique si
+  besoin) : il renseignait sur le lien partenaire, pas sur la santé du tenant, qui est
+  l'objet de l'outil. La portée `DelegatedAdminRelationship.Read.All` reste **consentie
+  côté Entra** mais n'est plus demandée dans le jeton ; la réintroduire ne coûterait qu'une
+  ligne, sans nouvelle sollicitation d'un administrateur.
 
 > [!IMPORTANT]
 > **`GRAPH_CLIENT_ID` n'est jamais versionné.** L'identifiant est servi par `GET /api/me`

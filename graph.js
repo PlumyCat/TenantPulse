@@ -34,7 +34,19 @@ const TP_GRAPH_BASE      = 'https://graph.microsoft.com/v1.0';
    consentement administrateur — un technicien ne peut pas se l'accorder seul. */
 const TP_GRAPH_SCOPES = [
   'https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All',
-  'https://graph.microsoft.com/DelegatedAdminRelationship.Read.All',
+  'offline_access', 'openid', 'profile'
+];
+
+/* Portées demandées sur le tenant d'un CLIENT, via la délégation GDAP.
+   AuditLog.Read.All couvre le rapport d'inscription aux méthodes
+   d'authentification, d'où se déduit la couverture MFA.
+
+   DelegatedAdminRelationship.Read.All a été retirée de la liste ci-dessus :
+   l'affichage des relations GDAP ne servait pas le besoin. Le consentement reste
+   accordé côté Entra, donc la réintroduire un jour ne coûtera qu'une ligne ici,
+   sans nouvelle sollicitation d'un administrateur. */
+const TP_GRAPH_TENANT_SCOPES = [
+  'https://graph.microsoft.com/AuditLog.Read.All',
   'offline_access', 'openid', 'profile'
 ];
 
@@ -43,24 +55,6 @@ const TP_GRAPH_PENDING_KEY = 'tenantpulse_graph_pending_v1'; // sessionStorage :
 const TP_GRAPH_HASH_KEY    = 'tenantpulse_graph_hash_v1';    // sessionStorage : fragment relayé par la page de retour
 const TP_GRAPH_CALLBACK    = '/graph-callback.html';         // route anonyme, voir graph-callback.js
 
-/* Identifiants de modèles de rôles Entra les plus courants en GDAP. Un identifiant
-   absent de cette table est affiché tel quel : mieux vaut un GUID qu'une étiquette
-   fausse. Ces valeurs sont fixes et documentées par Microsoft. */
-const TP_GRAPH_ROLES = {
-  '62e90394-69f5-4237-9190-012177145e10': 'Administrateur général',
-  'f2ef992c-3afb-46b9-b7cf-a126ee74c451': 'Lecteur général',
-  'fe930be7-5e62-47db-91af-98c3a49a38b1': 'Administrateur utilisateurs',
-  '729827e3-9c14-49f7-bb1b-9608f156bbb8': "Administrateur du support technique",
-  '966707d0-3269-4727-9be2-8c3a10f19b9d': 'Administrateur de mots de passe',
-  '29232cdf-9323-42fd-ade2-1d097af3e4de': 'Administrateur Exchange',
-  'f28a1f50-f6e7-4571-818b-6a12f2af6b6c': 'Administrateur SharePoint',
-  '69091246-20e8-4a56-aa4d-066075b2a7a8': 'Administrateur Teams',
-  '3a2c62db-5318-420d-8d74-23affee5d9d5': 'Administrateur Intune',
-  '194ae4cb-b126-40b2-bd5b-6091b380977d': 'Administrateur de sécurité',
-  '5d6b6bb7-de71-4623-b4af-96380a352509': 'Lecteur de sécurité',
-  'b0f54661-2d74-4c50-afa3-1ec803f12efe': 'Administrateur de facturation'
-};
-
 const TP_GRAPH = {
   clientId:     null,   // servi par /api/me — jamais versionné, il identifie l'organisation
   connected:    false,
@@ -68,7 +62,6 @@ const TP_GRAPH = {
   accessToken:  null,   // mémoire seulement
   expiresAt:    0,      // epoch ms
   refreshToken: null,
-  gdapCache:    null,   // relations GDAP actives, chargées une fois par session
   lastError:    null
 };
 
@@ -113,7 +106,6 @@ function graphClearSession() {
   TP_GRAPH.accessToken = null;
   TP_GRAPH.expiresAt = 0;
   TP_GRAPH.refreshToken = null;
-  TP_GRAPH.gdapCache = null;
   try { sessionStorage.removeItem(TP_GRAPH_SESSION_KEY); } catch {}
 }
 
@@ -407,78 +399,6 @@ async function graphFindTenant(domain, signal) {
   };
 }
 
-/* Relations d'administration déléguée du tenant partenaire. Chargées une fois
-   par session et gardées en mémoire : la liste ne change pas en cours d'analyse,
-   et un aller-retour par domaine analysé serait du gaspillage. */
-async function graphLoadGdap(signal) {
-  if (TP_GRAPH.gdapCache) return TP_GRAPH.gdapCache;
-  if (!TP_GRAPH.connected) return null;
-
-  const SANS_FILTRE = '/tenantRelationships/delegatedAdminRelationships?$top=100';
-  let relations = [];
-  // $filter sur status n'est pas garanti sur toutes les versions du point d'entrée :
-  // en cas de refus, on recharge sans filtre et on trie ici.
-  let next = SANS_FILTRE + "&$filter=status eq 'active'";
-  let filtre = true;
-  let pages = 0;
-
-  // Plafond de pagination : une boucle non bornée dépend entièrement de ce que
-  // renvoie le serveur. 50 pages de 100 relations couvrent largement le
-  // portefeuille d'un partenaire, et bornent le pire cas.
-  while (next && pages < 50) {
-    pages++;
-    const r = await graphGet(next, signal);
-    if (!r.ok) {
-      // Repli sans filtre : on repart de la première page, donc on repart aussi
-      // d'une liste vide — sinon les pages déjà lues seraient comptées deux fois.
-      if (filtre) { relations = []; next = SANS_FILTRE; filtre = false; continue; }
-      return null;
-    }
-    (r.data?.value || []).forEach(rel => relations.push(rel));
-
-    /* Le lien de page suivante vient du serveur : on ne le suit que s'il vise
-       bien la base Graph attendue. Aujourd'hui un lien étranger produirait une
-       URL malformée restant sur graph.microsoft.com, donc sans fuite du jeton,
-       mais cette sûreté tient à un détail d'analyse d'URL. On la rend explicite. */
-    const lien = r.data?.['@odata.nextLink'];
-    next = (typeof lien === 'string' && lien.startsWith(TP_GRAPH_BASE + '/'))
-      ? lien.slice(TP_GRAPH_BASE.length)
-      : null;
-  }
-
-  TP_GRAPH.gdapCache = relations.filter(r => r.status === 'active');
-  return TP_GRAPH.gdapCache;
-}
-
-/* Relation GDAP active couvrant un tenant donné, ou null. Retient la plus
-   lointaine échéance quand plusieurs relations visent le même client. */
-async function graphGdapForTenant(tenantId, signal) {
-  if (!tenantId) return null;
-  const toutes = await graphLoadGdap(signal);
-  if (!toutes) return null;
-
-  const cible = String(tenantId).toLowerCase();
-  const miennes = toutes.filter(r => String(r.customer?.tenantId || '').toLowerCase() === cible);
-  if (!miennes.length) return { active: false, total: toutes.length };
-
-  const roles = new Set();
-  let fin = null;
-  miennes.forEach(r => {
-    (r.accessDetails?.unifiedRoles || []).forEach(u => roles.add(u.roleDefinitionId));
-    if (r.endDateTime && (!fin || r.endDateTime > fin)) fin = r.endDateTime;
-  });
-
-  return {
-    active:      true,
-    total:       toutes.length,
-    relations:   miennes.length,
-    customerName: miennes[0].customer?.displayName || null,
-    endDateTime: fin,
-    joursRestants: fin ? Math.ceil((Date.parse(fin) - Date.now()) / 86400000) : null,
-    roles: [...roles].map(id => TP_GRAPH_ROLES[id] || id)
-  };
-}
-
 /* ── Palier 1 : jeton pour le tenant d'un client (banc d'essai) ──────────────
 
    Lire le MFA, le Secure Score ou les licences d'un client suppose un jeton émis
@@ -555,6 +475,95 @@ async function graphTokenForTenant(tenantId, scopes) {
 
 /* ── Étape d'analyse ─────────────────────────────────────────────────────── */
 
+/* ── MFA du tenant client ────────────────────────────────────────────────────
+
+   Le rapport d'inscription aux méthodes d'authentification, lu dans le tenant du
+   client. C'est la mesure qui compte : combien d'utilisateurs n'ont aucune
+   méthode d'authentification forte enregistrée, et surtout combien parmi les
+   administrateurs.
+
+   Deux prérequis, tous deux hors du code :
+     1. Un jeton pour le tenant du client, obtenu par graphTenantToken() grâce à
+        la délégation GDAP. Si Entra exige une interaction, rien n'est possible.
+     2. La portée AuditLog.Read.All consentie sur l'inscription d'application.
+
+   Les invités sont comptés à part : ils s'authentifient sur leur tenant
+   d'origine, les inclure fausserait le pourcentage vers le bas.               */
+
+/* Jeton valide pour un tenant client, renouvelé 2 minutes avant l'échéance. */
+async function graphTenantToken(tenantId) {
+  const cache = (TP_GRAPH.tenantTokens || {})[tenantId];
+  if (cache && Date.now() < cache.expiresAt - 120000) return cache.accessToken;
+  const r = await graphTokenForTenant(tenantId, TP_GRAPH_TENANT_SCOPES);
+  return r.ok ? TP_GRAPH.tenantTokens[tenantId].accessToken : null;
+}
+
+/* Lecture Graph sur le tenant d'un client. Même contrat que graphGet : ne lève
+   jamais, retourne { ok, status, data }. */
+async function graphGetTenant(tenantId, path, signal) {
+  const token = await graphTenantToken(tenantId);
+  if (!token) return { ok: false, status: 0, data: null, refus: true };
+  let res;
+  try {
+    res = await fetch(TP_GRAPH_BASE + path, {
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' }, signal
+    });
+  } catch (e) { return { ok: false, status: 0, data: null, aborted: e?.name === 'AbortError' }; }
+  if (res.status === 429 || res.status === 503) {
+    const attente = Math.min(Number(res.headers.get('Retry-After')) || 2, 10) * 1000;
+    await new Promise(r => setTimeout(r, attente));
+    return graphGetTenant(tenantId, path, signal);
+  }
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function checkMfa(tenantId, signal) {
+  if (!tenantId) return null;
+
+  const users = [];
+  let next  = '/reports/authenticationMethods/userRegistrationDetails?$top=500';
+  let pages = 0;
+
+  while (next && pages < 20) {           // 10 000 comptes, bien au-delà d'un client type
+    pages++;
+    const r = await graphGetTenant(tenantId, next, signal);
+    if (!r.ok) {
+      /* On distingue les causes : elles n'appellent pas la même action, et un
+         message unique « erreur » ferait perdre du temps à tout le monde. */
+      if (r.refus)          return { erreur: 'jeton', message: "Impossible d'obtenir un jeton sur ce tenant. La délégation GDAP ne couvre pas ce client, ou Entra exige une interaction." };
+      if (r.status === 403) return { erreur: 'portee', message: "Accès refusé. La portée AuditLog.Read.All n'est pas consentie, ou votre rôle délégué sur ce client ne permet pas de lire les rapports." };
+      if (r.status === 404) return { erreur: 'licence', message: "Rapport indisponible sur ce tenant. Il demande généralement une licence Entra ID P1 ou P2." };
+      return { erreur: 'http', message: 'Réponse inattendue de Graph (HTTP ' + r.status + ').' };
+    }
+    (r.data?.value || []).forEach(u => users.push(u));
+    const lien = r.data?.['@odata.nextLink'];
+    next = (typeof lien === 'string' && lien.startsWith(TP_GRAPH_BASE + '/'))
+      ? lien.slice(TP_GRAPH_BASE.length) : null;
+  }
+
+  const membres = users.filter(u => String(u.userType || '').toLowerCase() !== 'guest');
+  const total   = membres.length;
+  if (!total) return { total: 0, invites: users.length };
+
+  const sansMfa       = membres.filter(u => u.isMfaRegistered === false);
+  const admins        = membres.filter(u => u.isAdmin === true);
+  const adminsSansMfa = admins.filter(u => u.isMfaRegistered === false);
+
+  return {
+    total,
+    sansMfa:        sansMfa.length,
+    avecMfa:        total - sansMfa.length,
+    pourcentAvecMfa: Math.round(((total - sansMfa.length) / total) * 100),
+    admins:         admins.length,
+    adminsSansMfa:  adminsSansMfa.length,
+    /* Noms des admins sans MFA : c'est la liste sur laquelle on agit le jour même.
+       Plafonnée, le panneau n'est pas un export. */
+    adminsNoms:     adminsSansMfa.slice(0, 10).map(u => u.userPrincipalName).filter(Boolean),
+    invites:        users.length - total
+  };
+}
+
 /* Interroge Graph pour un domaine. Retourne null si l'utilisateur n'est pas
    connecté : l'application doit rester entièrement fonctionnelle sans Graph,
    c'est un enrichissement, pas un prérequis. */
@@ -565,9 +574,9 @@ async function checkGraph(domain, tenantIdConnu) {
   stepControllers.graph = ctrl;
   try {
     const tenant = await graphFindTenant(domain, ctrl.signal);
-    const gdap   = await graphGdapForTenant(tenant?.tenantId || tenantIdConnu, ctrl.signal);
-    if (!tenant && !gdap) return null;
-    return { tenant, gdap };
+    const mfa    = await checkMfa(tenant?.tenantId || tenantIdConnu, ctrl.signal);
+    if (!tenant && !mfa) return null;
+    return { tenant, mfa };
   } catch {
     return null;
   } finally {
@@ -586,11 +595,9 @@ function graphCardSub(g) {
 }
 
 function graphCardBadge(g) {
-  if (!g.gdap)         return 'Tenant';
-  if (!g.gdap.active)  return 'Hors GDAP';
-  const j = g.gdap.joursRestants;
-  if (j !== null && j <= 30) return 'GDAP — ' + j + ' j';
-  return 'GDAP actif';
+  const m = g.mfa;
+  if (!m || m.erreur || !m.total) return 'Tenant';
+  return 'MFA ' + m.pourcentAvecMfa + ' %';
 }
 
 function buildGraphPanel(g) {
@@ -605,55 +612,40 @@ function buildGraphPanel(g) {
       if (t.federationBrand)   addRow(b, 'Marque de fédération', t.federationBrand);
     }
 
-    const g2 = g.gdap;
-    if (!g2) return;
+    const m = g.mfa;
+    if (!m) return;
 
     const sub = document.createElement('div');
     sub.className = 'hc-subhead';
-    sub.textContent = 'Administration déléguée (GDAP)';
+    sub.textContent = 'Authentification multifacteur';
     b.appendChild(sub);
 
-    if (!g2.active) {
-      /* Zéro relation au total ≠ « ce client n'est pas géré » : le compte connecté
-         n'est pas un partenaire CSP, ou n'a pas le rôle pour les lire. Distinguer
-         les deux évite de faire croire à une perte de délégation. */
-      if (!g2.total) {
-        addRow(b, 'Relation', "Le compte connecté n'expose aucune relation d'administration déléguée — tenant non partenaire, ou rôle insuffisant pour les lire.");
-        if (TP_GRAPH.account?.username) {
-          addRow(b, 'Compte utilisé', TP_GRAPH.account.username);
-        }
-        /* Le cas le plus fréquent : les rôles Partner Center (AdminAgents) sont
-           portés par un compte d'administration distinct de celui du poste. On
-           propose la sortie là où l'utilisateur constate le problème, plutôt que
-           de le laisser chercher. */
-        const aide = document.createElement('div');
-        aide.className = 'analysis-mode-hint';
-        aide.textContent = "Si vous administrez vos clients dans Partner Center avec un autre compte, "
-          + "c'est celui-là qui porte les droits d'administration déléguée. Les rôles Partner Center "
-          + "sont indépendants des rôles Entra.";
-        b.appendChild(aide);
-
+    if (m.erreur) {
+      addRow(b, 'Lecture impossible', m.message, 'hi-warn');
+      if (m.erreur === 'jeton' && TP_GRAPH.account?.username) {
+        addRow(b, 'Compte utilisé', TP_GRAPH.account.username);
         const btn = document.createElement('button');
         btn.type = 'button'; btn.className = 'admin-btn';
         btn.textContent = 'Se connecter avec un autre compte';
         btn.addEventListener('click', () => { graphDisconnect(); graphBeginLogin(true); });
         b.appendChild(btn);
-      } else {
-        addRow(b, 'Relation', "Aucune relation GDAP active vers ce tenant.");
-        addRow(b, 'Portefeuille', g2.total + ' tenant(s) sous GDAP actif');
       }
       return;
     }
 
-    addRow(b, 'Relation', g2.relations + ' relation(s) active(s)');
-    if (g2.customerName)  addRow(b, 'Client déclaré', g2.customerName);
-    if (g2.endDateTime) {
-      const j = g2.joursRestants;
-      const alerte = j !== null && j <= 30;
-      addRow(b, 'Expiration', formatDate(g2.endDateTime) + (j !== null ? ` (${j} jour(s))` : ''), alerte ? 'hi-warn' : '');
+    if (!m.total) { addRow(b, 'Comptes', 'Aucun compte membre dans ce tenant.'); return; }
+
+    const alerte = m.pourcentAvecMfa < 90;
+    addRow(b, 'Couverture MFA', m.pourcentAvecMfa + ' % des comptes membres', alerte ? 'hi-warn' : 'hi-ms');
+    addRow(b, 'Sans MFA', m.sansMfa + ' compte(s) sur ' + m.total);
+
+    if (m.admins) {
+      addRow(b, 'Administrateurs sans MFA',
+        m.adminsSansMfa + ' sur ' + m.admins,
+        m.adminsSansMfa > 0 ? 'hi-warn' : '');
+      if (m.adminsNoms?.length) addRow(b, 'Comptes concernés', m.adminsNoms.join('\n'));
     }
-    if (g2.roles?.length) addRow(b, 'Rôles délégués', g2.roles.join('\n'));
-    addRow(b, 'Portefeuille', g2.total + ' tenant(s) sous GDAP actif');
+    if (m.invites) addRow(b, 'Invités exclus du calcul', String(m.invites));
   };
 }
 
@@ -698,7 +690,7 @@ function syncGraphUI() {
   cta.hidden   = !TP_GRAPH.clientId;
   cta.title    = TP_GRAPH.lastError
     ? 'Microsoft Graph — ' + TP_GRAPH.lastError
-    : "Se connecter à Microsoft Graph pour enrichir l'analyse (nom du tenant, GDAP)";
+    : "Se connecter à Microsoft Graph pour enrichir l'analyse (nom du tenant, couverture MFA)";
 }
 
 /* Appelé au chargement, avant toute lecture du fragment par le reste de
