@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- CSP identique au reste de l'application : aucun script en ligne, aucune
+     origine externe. Cette page ne fait aucune requête réseau. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+<meta name="robots" content="noindex, nofollow">
+<title>TenantPulse — connexion en cours…</title>
+</head>
+<body>
+<!-- Page technique : elle ne s'affiche qu'une fraction de seconde, le temps de
+     transférer le fragment d'authentification et de revenir sur l'application. -->
+<noscript>JavaScript est nécessaire pour terminer la connexion.</noscript>
+<script src="graph-callback.js" defer></script>
+</body>
+</html>

@@ -40,6 +40,8 @@ const TP_GRAPH_SCOPES = [
 
 const TP_GRAPH_SESSION_KEY = 'tenantpulse_graph_v1';       // sessionStorage : jeton d'actualisation + compte
 const TP_GRAPH_PENDING_KEY = 'tenantpulse_graph_pending_v1'; // sessionStorage : PKCE en cours de redirection
+const TP_GRAPH_HASH_KEY    = 'tenantpulse_graph_hash_v1';    // sessionStorage : fragment relayé par la page de retour
+const TP_GRAPH_CALLBACK    = '/graph-callback.html';         // route anonyme, voir graph-callback.js
 
 /* Identifiants de modèles de rôles Entra les plus courants en GDAP. Un identifiant
    absent de cette table est affiché tel quel : mieux vaut un GUID qu'une étiquette
@@ -139,11 +141,15 @@ async function graphBeginLogin() {
   const verifier  = graphRandom(48);
   const state     = graphRandom(16);
   const challenge = await graphChallenge(verifier);
-  /* Racine du site, pas location.pathname : Entra exige une correspondance exacte
-     avec l'URI de redirection inscrite, et un utilisateur arrivé sur /index.html
-     produirait sinon une URI non inscrite. C'est cette valeur-là — origine + « / » —
-     qu'il faut déclarer dans l'inscription d'application, en plateforme SPA. */
-  const redirect  = location.origin + '/';
+  /* Page de retour dédiée, et non la racine. Le cookie d'authentification de
+     Static Web Apps est SameSite=Strict : il n'accompagne pas la navigation qui
+     revient de login.microsoftonline.com. Un retour sur « / » déclenche donc un
+     401, une redirection vers /.auth/login/aad, et le fragment portant le code
+     d'autorisation se perd dans cette réauthentification silencieuse.
+     graph-callback.html est déclarée en route anonyme : elle reçoit le fragment
+     intact. Voir graph-callback.js. C'est cette URI exacte qu'il faut inscrire
+     dans l'application Entra, en plateforme SPA. */
+  const redirect  = location.origin + TP_GRAPH_CALLBACK;
 
   try {
     sessionStorage.setItem(TP_GRAPH_PENDING_KEY, JSON.stringify({
@@ -184,7 +190,17 @@ async function graphBeginLogin() {
    fragment d'authentification a été consommé — l'appelant sait alors qu'il ne
    doit pas interpréter le fragment autrement. */
 async function graphHandleRedirect() {
-  const hash = location.hash || '';
+  /* Le fragment arrive normalement par graph-callback.html, qui l'a déposé en
+     sessionStorage. On accepte aussi location.hash en repli : utile en
+     développement local, et si un jour la contrainte SameSite disparaît. */
+  let hash = '';
+  let viaStockage = false;
+  try {
+    hash = sessionStorage.getItem(TP_GRAPH_HASH_KEY) || '';
+    if (hash) { sessionStorage.removeItem(TP_GRAPH_HASH_KEY); viaStockage = true; }
+  } catch {}
+  if (!hash) hash = location.hash || '';
+
   if (!hash.includes('code=') && !hash.includes('error=')) return false;
 
   const params = new URLSearchParams(hash.slice(1));
@@ -196,31 +212,45 @@ async function graphHandleRedirect() {
   try { pending = JSON.parse(sessionStorage.getItem(TP_GRAPH_PENDING_KEY) || 'null'); } catch {}
   try { sessionStorage.removeItem(TP_GRAPH_PENDING_KEY); } catch {}
 
-  // Le fragment est retiré dans tous les cas : un rechargement ne doit pas
-  // rejouer un code déjà consommé.
-  try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+  /* Le fragment est retiré de l'URL dans tous les cas : un rechargement ne doit
+     pas rejouer un code déjà consommé. Inutile quand il venait du stockage — il
+     n'a alors jamais atteint la barre d'adresse — mais sans effet de bord. */
+  if (!viaStockage) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+  }
 
   if (!pending) return false;                       // fragment orphelin, on l'ignore
   if (state !== pending.state) {                    // garde anti-CSRF
-    TP_GRAPH.lastError = "Réponse d'authentification inattendue, connexion abandonnée.";
-    syncGraphUI(); return true;
+    graphSignalError("Réponse d'authentification inattendue, connexion abandonnée.");
+    return true;
   }
-  if (err) {
-    TP_GRAPH.lastError = params.get('error_description') || err;
-    syncGraphUI(); return true;
-  }
-  if (!code) return true;
 
-  TP_GRAPH.clientId = TP_GRAPH.clientId || pending.clientId;
-  await graphExchange({ grant_type: 'authorization_code', code, code_verifier: pending.verifier, redirect_uri: pending.redirect });
-
-  // Restauration de ce que l'utilisateur avait saisi avant la redirection.
+  /* Restauration avant tout traitement : ce que l'utilisateur avait saisi ne doit
+     pas dépendre de la réussite de la connexion. */
   const input = document.getElementById('emailInput');
   if (input && pending.query && !input.value) {
     input.value = pending.query;
     input.dispatchEvent(new Event('input'));
   }
+
+  if (err) { graphSignalError(params.get('error_description') || err); return true; }
+  if (!code) return true;
+
+  TP_GRAPH.clientId = TP_GRAPH.clientId || pending.clientId;
+  await graphExchange({ grant_type: 'authorization_code', code, code_verifier: pending.verifier, redirect_uri: pending.redirect });
   return true;
+}
+
+/* Un échec de connexion doit se voir à l'écran. Le titre d'infobulle ne suffit
+   pas : il faut survoler pour le lire, et l'utilisateur qui revient d'une
+   redirection ne sait même pas qu'il y a eu une erreur — il voit une page qui
+   s'est rechargée et un bouton revenu à son état initial. */
+function graphSignalError(msg) {
+  TP_GRAPH.lastError = msg || null;
+  syncGraphUI();
+  if (msg && typeof heroTagFeedback === 'function') {
+    heroTagFeedback('Microsoft Graph : ' + msg, true);
+  }
 }
 
 /* Appel unique au point d'entrée de jetons — code d'autorisation ou
@@ -241,8 +271,8 @@ async function graphExchange(extra) {
       body:    body.toString()
     });
   } catch {
-    TP_GRAPH.lastError = "Le point d'entrée de jetons Microsoft est injoignable.";
-    syncGraphUI(); return false;
+    graphSignalError("Le point d'entrée de jetons Microsoft est injoignable. Vérifiez que l'inscription d'application est bien de type « Application à page unique » : une plateforme « Web » fait refuser la requête depuis un navigateur.");
+    return false;
   }
 
   const data = await res.json().catch(() => null);
@@ -251,8 +281,8 @@ async function graphExchange(extra) {
     // ce n'est pas une erreur à afficher, c'est une session à refermer proprement.
     const silencieux = data?.error === 'invalid_grant' && extra.grant_type === 'refresh_token';
     graphClearSession();
-    TP_GRAPH.lastError = silencieux ? null : (data?.error_description || 'Authentification refusée.');
-    syncGraphUI(); return false;
+    graphSignalError(silencieux ? null : (data?.error_description || 'Authentification refusée.'));
+    return false;
   }
 
   TP_GRAPH.accessToken  = data.access_token;

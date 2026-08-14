@@ -179,10 +179,28 @@ La liste nominative n'est **pas** stockée sur les entités de la table `Roles` 
 `POST /api/roles` écrit en mode `Replace`, l'indicateur disparaîtrait au prochain
 changement de rôle.
 
+> [!IMPORTANT]
+> **L'URI de redirection est `/graph-callback.html`, jamais la racine.** Le cookie
+> `StaticWebAppsAuthCookie` est posé en **SameSite=Strict** : il n'accompagne pas la
+> navigation qui revient de `login.microsoftonline.com`. Un retour sur `/` déclenche donc
+> un 401, la règle `responseOverrides` redirige vers `/.auth/login/aad`, l'utilisateur est
+> réauthentifié en silence — et **le fragment portant le code d'autorisation disparaît dans
+> la chaîne**. Symptôme : la page se recharge, aucune erreur nulle part, le bouton revient.
+>
+> `graph-callback.html` et `graph-callback.js` sont donc déclarés en **route anonyme** dans
+> `staticwebapp.config.json`. Ils sont servis sans contrôle, reçoivent le fragment intact,
+> le déposent en `sessionStorage` (`tenantpulse_graph_hash_v1`) et renvoient sur `/` — cette
+> seconde navigation est same-site, le cookie repart. Les deux fichiers ne contiennent
+> aucune donnée, et le code d'autorisation qu'ils relaient est inutilisable sans le
+> vérificateur PKCE, qui reste sur l'origine authentifiée.
+>
+> Ne pas « simplifier » en remettant la racine comme URI de redirection : ça remarcherait
+> en local (pas de SWA, pas de cookie) et échouerait silencieusement en production.
+
 **Prérequis d'inscription d'application** (tenant partenaire, à faire une fois) :
 plateforme **SPA** (elle seule active le CORS sur le point d'entrée de jetons et impose
-PKCE), URI de redirection **`https://<origine>/`** exactement — `graph.js` force la racine
-pour que l'URI ne dépende pas de la page d'arrivée —, **aucun secret client**, et
+PKCE), URI de redirection **`https://<origine>/graph-callback.html`** exactement
+(voir l'encadré ci-dessus), **aucun secret client**, et
 **octroi implicite décoché** (le flux est en `response_type=code`, l'implicite ne servirait
 qu'à émettre des jetons dans l'URL sans protection PKCE).
 
