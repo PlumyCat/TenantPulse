@@ -495,6 +495,10 @@ async function graphTenantToken(tenantId) {
   const cache = (TP_GRAPH.tenantTokens || {})[tenantId];
   if (cache && Date.now() < cache.expiresAt - 120000) return cache.accessToken;
   const r = await graphTokenForTenant(tenantId, TP_GRAPH_TENANT_SCOPES);
+  /* Le motif exact du refus est conservé : « portée non consentie » et
+     « délégation absente » produisent le même échec côté jeton, et les
+     confondre envoie l'utilisateur chercher au mauvais endroit. */
+  TP_GRAPH.lastTenantTokenError = r.ok ? null : (r.description || r.diagnostic || r.raison || null);
   return r.ok ? TP_GRAPH.tenantTokens[tenantId].accessToken : null;
 }
 
@@ -531,7 +535,14 @@ async function checkMfa(tenantId, signal) {
     if (!r.ok) {
       /* On distingue les causes : elles n'appellent pas la même action, et un
          message unique « erreur » ferait perdre du temps à tout le monde. */
-      if (r.refus)          return { erreur: 'jeton', message: "Impossible d'obtenir un jeton sur ce tenant. La délégation GDAP ne couvre pas ce client, ou Entra exige une interaction." };
+      if (r.refus) return {
+        erreur: 'jeton',
+        message: "Aucun jeton obtenu sur ce tenant. Trois causes possibles, dans cet ordre de probabilité : "
+          + "la portée AuditLog.Read.All n'est pas consentie sur l'inscription d'application ; "
+          + "le compte connecté n'est pas celui qui porte la délégation ; "
+          + "Entra exige une interaction pour ce tenant.",
+        detail: TP_GRAPH.lastTenantTokenError || null
+      };
       if (r.status === 403) return { erreur: 'portee', message: "Accès refusé. La portée AuditLog.Read.All n'est pas consentie, ou votre rôle délégué sur ce client ne permet pas de lire les rapports." };
       if (r.status === 404) return { erreur: 'licence', message: "Rapport indisponible sur ce tenant. Il demande généralement une licence Entra ID P1 ou P2." };
       return { erreur: 'http', message: 'Réponse inattendue de Graph (HTTP ' + r.status + ').' };
@@ -622,6 +633,9 @@ function buildGraphPanel(g) {
 
     if (m.erreur) {
       addRow(b, 'Lecture impossible', m.message, 'hi-warn');
+      /* Le message d'Entra tel quel : c'est lui qui nomme la cause sans ambiguïté,
+         là où mon message ne peut qu'énumérer des hypothèses. */
+      if (m.detail) addRow(b, 'Réponse de Microsoft', m.detail);
       if (m.erreur === 'jeton' && TP_GRAPH.account?.username) {
         addRow(b, 'Compte utilisé', TP_GRAPH.account.username);
         const btn = document.createElement('button');
