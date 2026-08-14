@@ -376,21 +376,36 @@ async function graphLoadGdap(signal) {
   if (TP_GRAPH.gdapCache) return TP_GRAPH.gdapCache;
   if (!TP_GRAPH.connected) return null;
 
-  const relations = [];
+  const SANS_FILTRE = '/tenantRelationships/delegatedAdminRelationships?$top=100';
+  let relations = [];
   // $filter sur status n'est pas garanti sur toutes les versions du point d'entrée :
   // en cas de refus, on recharge sans filtre et on trie ici.
-  let next = "/tenantRelationships/delegatedAdminRelationships?$top=100&$filter=status eq 'active'";
+  let next = SANS_FILTRE + "&$filter=status eq 'active'";
   let filtre = true;
+  let pages = 0;
 
-  while (next) {
+  // Plafond de pagination : une boucle non bornée dépend entièrement de ce que
+  // renvoie le serveur. 50 pages de 100 relations couvrent largement le
+  // portefeuille d'un partenaire, et bornent le pire cas.
+  while (next && pages < 50) {
+    pages++;
     const r = await graphGet(next, signal);
     if (!r.ok) {
-      if (filtre) { next = '/tenantRelationships/delegatedAdminRelationships?$top=100'; filtre = false; continue; }
+      // Repli sans filtre : on repart de la première page, donc on repart aussi
+      // d'une liste vide — sinon les pages déjà lues seraient comptées deux fois.
+      if (filtre) { relations = []; next = SANS_FILTRE; filtre = false; continue; }
       return null;
     }
     (r.data?.value || []).forEach(rel => relations.push(rel));
+
+    /* Le lien de page suivante vient du serveur : on ne le suit que s'il vise
+       bien la base Graph attendue. Aujourd'hui un lien étranger produirait une
+       URL malformée restant sur graph.microsoft.com, donc sans fuite du jeton,
+       mais cette sûreté tient à un détail d'analyse d'URL. On la rend explicite. */
     const lien = r.data?.['@odata.nextLink'];
-    next = lien ? lien.replace(TP_GRAPH_BASE, '') : null;
+    next = (typeof lien === 'string' && lien.startsWith(TP_GRAPH_BASE + '/'))
+      ? lien.slice(TP_GRAPH_BASE.length)
+      : null;
   }
 
   TP_GRAPH.gdapCache = relations.filter(r => r.status === 'active');
