@@ -150,20 +150,29 @@ totale du fichier.
 - **Portées déléguées** (palier 0, aucun accès aux tenants clients requis) :
   `CrossTenantInformation.ReadBasic.All`, `DelegatedAdminRelationship.Read.All`,
   plus `openid profile offline_access`. Les deux premières exigent un consentement admin.
-- **Points d'entrée utilisés** : `findTenantInformationByDomainName` (nom du tenant +
-  domaine `.onmicrosoft.com`, pour n'importe quel domaine, sans aucun accès au tenant visé)
-  et `reports/authenticationMethods/userRegistrationDetails` **dans le tenant du client**,
-  d'où se déduit la couverture MFA.
-- **Deux paliers, deux jetons.** Le premier point d'entrée se lit avec le jeton du tenant
-  partenaire. Le second exige un jeton **émis pour le tenant du client**, obtenu par
-  `graphTenantToken()` : le jeton d'actualisation du partenaire est rejoué sur l'autorité
-  du client, ce qu'Entra accorde grâce à la délégation GDAP. Les jetons obtenus sont mis en
-  cache par tenant (`TP_GRAPH.tenantTokens`).
-- **L'affichage des relations GDAP a été retiré** (commit à retrouver dans l'historique si
-  besoin) : il renseignait sur le lien partenaire, pas sur la santé du tenant, qui est
-  l'objet de l'outil. La portée `DelegatedAdminRelationship.Read.All` reste **consentie
-  côté Entra** mais n'est plus demandée dans le jeton ; la réintroduire ne coûterait qu'une
-  ligne, sans nouvelle sollicitation d'un administrateur.
+- **Points d'entrée utilisés** : `findTenantInformationByDomainName` (v1.0) pour le nom du
+  tenant et son domaine par défaut, sur n'importe quel domaine et sans aucun accès au tenant
+  visé ; et `tenantRelationships/managedTenants/credentialUserRegistrationsSummaries`
+  (**beta**, Microsoft 365 Lighthouse) pour la couverture MFA.
+
+> [!IMPORTANT]
+> **Pourquoi Lighthouse et pas une lecture directe du tenant client.** Lire
+> `reports/authenticationMethods/userRegistrationDetails` chez un client suppose un jeton
+> émis pour son tenant. Ce jeton est refusé tant que l'application n'a pas été consentie
+> **dans l'annuaire de ce client** (`AADSTS65001`) : la délégation GDAP donne des rôles aux
+> utilisateurs, jamais des droits aux applications. Le pré-consentement implicite existait
+> sous l'ancien DAP, Microsoft l'a retiré avec GDAP. À l'échelle d'un parc de milliers de
+> tenants, un consentement par client est disqualifiant.
+>
+> Lighthouse agrège la posture des tenants gérés et l'expose **depuis le tenant partenaire** :
+> une seule portée (`ManagedTenants.Read.All`) couvre tout le parc. C'est la seule voie
+> connue qui évite le consentement par client.
+>
+> Contreparties assumées : l'API n'existe qu'en **beta**, le tenant doit être éligible et
+> intégré à Lighthouse (sinon il est simplement absent de la réponse), et les données sont
+> agrégées périodiquement, jamais temps réel. La date d'arrêté est affichée pour cette
+> raison. Les noms de propriétés ayant varié entre révisions, `lireResume()` accepte
+> plusieurs graphies et `graphDumpMfa()` sert à relever la forme réelle.
 
 > [!IMPORTANT]
 > **`GRAPH_CLIENT_ID` n'est jamais versionné.** L'identifiant est servi par `GET /api/me`

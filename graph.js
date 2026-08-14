@@ -34,21 +34,14 @@ const TP_GRAPH_BASE      = 'https://graph.microsoft.com/v1.0';
    consentement administrateur — un technicien ne peut pas se l'accorder seul. */
 const TP_GRAPH_SCOPES = [
   'https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All',
+  'https://graph.microsoft.com/ManagedTenants.Read.All',
   'offline_access', 'openid', 'profile'
 ];
 
-/* Portées demandées sur le tenant d'un CLIENT, via la délégation GDAP.
-   AuditLog.Read.All couvre le rapport d'inscription aux méthodes
-   d'authentification, d'où se déduit la couverture MFA.
-
-   DelegatedAdminRelationship.Read.All a été retirée de la liste ci-dessus :
-   l'affichage des relations GDAP ne servait pas le besoin. Le consentement reste
-   accordé côté Entra, donc la réintroduire un jour ne coûtera qu'une ligne ici,
-   sans nouvelle sollicitation d'un administrateur. */
-const TP_GRAPH_TENANT_SCOPES = [
-  'https://graph.microsoft.com/AuditLog.Read.All',
-  'offline_access', 'openid', 'profile'
-];
+/* Microsoft 365 Lighthouse n'existe qu'en beta sur Graph. C'est assumé et
+   documenté : aucune autre voie ne donne la posture d'un client sans consentir
+   l'application dans son annuaire. Voir l'encadré du CLAUDE.md. */
+const TP_GRAPH_BETA = 'https://graph.microsoft.com/beta';
 
 const TP_GRAPH_SESSION_KEY = 'tenantpulse_graph_v1';       // sessionStorage : jeton d'actualisation + compte
 const TP_GRAPH_PENDING_KEY = 'tenantpulse_graph_pending_v1'; // sessionStorage : PKCE en cours de redirection
@@ -348,13 +341,15 @@ function graphApplyAccess(autorise, clientId) {
 /* Lecture Graph. Ne lève jamais : retourne { ok, status, data }, l'analyse doit
    se poursuivre quoi qu'il arrive. Un 401 déclenche un renouvellement et un seul
    nouvel essai ; un 429 respecte Retry-After une fois. */
-async function graphGet(path, signal, _retried = false) {
+async function graphGet(path, signal, opts = {}) {
+  const base     = opts.base || TP_GRAPH_BASE;
+  const _retried = opts._retried === true;
   const token = await graphToken();
   if (!token) return { ok: false, status: 0, data: null };
 
   let res;
   try {
-    res = await fetch(TP_GRAPH_BASE + path, {
+    res = await fetch(base + path, {
       headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' },
       signal
     });
@@ -364,12 +359,12 @@ async function graphGet(path, signal, _retried = false) {
 
   if (res.status === 401 && !_retried) {
     TP_GRAPH.expiresAt = 0;                       // force le renouvellement
-    return graphGet(path, signal, true);
+    return graphGet(path, signal, { base, _retried: true });
   }
   if ((res.status === 429 || res.status === 503) && !_retried) {
     const attente = Math.min(Number(res.headers.get('Retry-After')) || 2, 10) * 1000;
     await new Promise(r => setTimeout(r, attente));
-    return graphGet(path, signal, true);
+    return graphGet(path, signal, { base, _retried: true });
   }
 
   const data = await res.json().catch(() => null);
@@ -399,181 +394,100 @@ async function graphFindTenant(domain, signal) {
   };
 }
 
-/* ── Palier 1 : jeton pour le tenant d'un client (banc d'essai) ──────────────
+/* ── Couverture MFA, via Microsoft 365 Lighthouse ────────────────────────────
 
-   Lire le MFA, le Secure Score ou les licences d'un client suppose un jeton émis
-   pour SON tenant, obtenu grâce à la relation GDAP. La question ouverte, et elle
-   décide de la forme du palier 1 : Entra accorde-t-il ce jeton **sans
-   interaction**, en rejouant le jeton d'actualisation du tenant partenaire sur
-   l'autorité du tenant client ?
+   Lighthouse agrège la posture des tenants gérés et l'expose **depuis le tenant
+   partenaire**. C'est ce qui règle le problème de fond : lire directement le
+   tenant d'un client exigerait d'y consentir l'application, tenant par tenant
+   (AADSTS65001), soit des milliers de consentements. Ici, une seule portée
+   consentie chez le partenaire couvre tout le parc.
 
-   Si oui, un client analysé coûte un appel réseau et rien d'autre. Si non, il
-   faut une redirection et un consentement par client, ce qui est inutilisable
-   dans un outil de diagnostic — et le palier 1 devra alors changer de forme.
+   Trois limites à connaître :
+     - l'API n'existe qu'en `beta`, Microsoft peut la faire évoluer sans préavis ;
+     - le tenant doit être éligible et intégré à Lighthouse, sinon il est absent ;
+     - les données sont agrégées périodiquement, ce n'est pas du temps réel.
 
-   Fonction de diagnostic, volontairement non branchée au pipeline.
+   Les noms de propriétés varient selon les révisions de la beta, d'où la lecture
+   tolérante de `lireResume()` : plusieurs graphies sont acceptées, et
+   `graphDumpMfa()` sert à relever la forme réelle si aucune ne correspond.      */
 
-   > Attention : Entra fait tourner les jetons d'actualisation. Un essai peut
-   > invalider la session en cours. C'est sans gravité — il suffit de se
-   > reconnecter — mais il ne faut pas s'en étonner.                            */
+const TP_GRAPH_MFA_PATH = '/tenantRelationships/managedTenants/credentialUserRegistrationsSummaries';
 
-async function graphTokenForTenant(tenantId, scopes) {
-  if (!TP_GRAPH.connected || !TP_GRAPH.refreshToken || !TP_GRAPH.clientId) {
-    return { ok: false, raison: 'Aucune session Graph active.' };
-  }
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(tenantId || ''))) {
-    return { ok: false, raison: 'tenantId attendu sous forme de GUID.' };
-  }
-
-  /* Un jeton déjà obtenu pour ce tenant sert de point de départ : c'est la base
-     d'un cache par tenant si le palier 1 se confirme. */
-  TP_GRAPH.tenantTokens = TP_GRAPH.tenantTokens || {};
-  const connu = TP_GRAPH.tenantTokens[tenantId];
-  const rt    = (connu && connu.refreshToken) || TP_GRAPH.refreshToken;
-
-  const body = new URLSearchParams({
-    client_id:     TP_GRAPH.clientId,
-    grant_type:    'refresh_token',
-    refresh_token: rt,
-    scope:         (Array.isArray(scopes) && scopes.length ? scopes : TP_GRAPH_SCOPES).join(' ')
-  });
-
-  let res, data;
-  try {
-    res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    body.toString()
-    });
-    data = await res.json().catch(() => null);
-  } catch {
-    return { ok: false, raison: "Requête refusée avant réponse (CORS ou réseau)." };
-  }
-
-  if (!res.ok || !data?.access_token) {
-    return {
-      ok: false, status: res.status,
-      erreur: data?.error || null,
-      description: data?.error_description || null,
-      /* Lecture des codes les plus probables, pour que le résultat se passe
-         d'interprétation. */
-      diagnostic:
-        data?.error === 'invalid_grant'          ? "Consentement ou accès manquant sur le tenant client — une interaction serait nécessaire."
-        : data?.error === 'interaction_required' ? "Entra exige une interaction : pas de jeton silencieux pour ce tenant."
-        : data?.error === 'unauthorized_client'  ? "L'application n'est pas autorisée sur ce tenant."
-        : null
-    };
-  }
-
-  TP_GRAPH.tenantTokens[tenantId] = {
-    accessToken:  data.access_token,
-    expiresAt:    Date.now() + (Number(data.expires_in) || 3600) * 1000,
-    refreshToken: data.refresh_token || rt
+/* Extraction tolérante : on cherche un total de comptes et un nombre de comptes
+   couverts, quels que soient les noms retenus par la révision courante. */
+function lireResume(row) {
+  const prem = (...noms) => {
+    for (const n of noms) {
+      const v = row[n];
+      if (typeof v === 'number') return v;
+    }
+    return null;
   };
-  return { ok: true, tenant: tenantId, expiresIn: data.expires_in, portees: data.scope };
+  const total = prem('totalUserCount', 'userCount', 'totalUsers');
+  const couverts = prem('mfaRegisteredUserCount', 'mfaRegistered',
+                        'mfaAndSsprCapableUserCount', 'mfaCapableUserCount', 'registeredUserCount');
+  return { total, couverts };
 }
 
-/* ── Étape d'analyse ─────────────────────────────────────────────────────── */
-
-/* ── MFA du tenant client ────────────────────────────────────────────────────
-
-   Le rapport d'inscription aux méthodes d'authentification, lu dans le tenant du
-   client. C'est la mesure qui compte : combien d'utilisateurs n'ont aucune
-   méthode d'authentification forte enregistrée, et surtout combien parmi les
-   administrateurs.
-
-   Deux prérequis, tous deux hors du code :
-     1. Un jeton pour le tenant du client, obtenu par graphTenantToken() grâce à
-        la délégation GDAP. Si Entra exige une interaction, rien n'est possible.
-     2. La portée AuditLog.Read.All consentie sur l'inscription d'application.
-
-   Les invités sont comptés à part : ils s'authentifient sur leur tenant
-   d'origine, les inclure fausserait le pourcentage vers le bas.               */
-
-/* Jeton valide pour un tenant client, renouvelé 2 minutes avant l'échéance. */
-async function graphTenantToken(tenantId) {
-  const cache = (TP_GRAPH.tenantTokens || {})[tenantId];
-  if (cache && Date.now() < cache.expiresAt - 120000) return cache.accessToken;
-  const r = await graphTokenForTenant(tenantId, TP_GRAPH_TENANT_SCOPES);
-  /* Le motif exact du refus est conservé : « portée non consentie » et
-     « délégation absente » produisent le même échec côté jeton, et les
-     confondre envoie l'utilisateur chercher au mauvais endroit. */
-  TP_GRAPH.lastTenantTokenError = r.ok ? null : (r.description || r.diagnostic || r.raison || null);
-  return r.ok ? TP_GRAPH.tenantTokens[tenantId].accessToken : null;
-}
-
-/* Lecture Graph sur le tenant d'un client. Même contrat que graphGet : ne lève
-   jamais, retourne { ok, status, data }. */
-async function graphGetTenant(tenantId, path, signal) {
-  const token = await graphTenantToken(tenantId);
-  if (!token) return { ok: false, status: 0, data: null, refus: true };
-  let res;
-  try {
-    res = await fetch(TP_GRAPH_BASE + path, {
-      headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' }, signal
-    });
-  } catch (e) { return { ok: false, status: 0, data: null, aborted: e?.name === 'AbortError' }; }
-  if (res.status === 429 || res.status === 503) {
-    const attente = Math.min(Number(res.headers.get('Retry-After')) || 2, 10) * 1000;
-    await new Promise(r => setTimeout(r, attente));
-    return graphGetTenant(tenantId, path, signal);
-  }
-  const data = await res.json().catch(() => null);
-  return { ok: res.ok, status: res.status, data };
-}
+/* Dernière réponse brute conservée pour diagnostic. Si le panneau annonce un
+   format inattendu, `graphDumpMfa()` en console donne la forme exacte à mapper. */
+function graphDumpMfa() { return TP_GRAPH.dernierResumeMfa || null; }
 
 async function checkMfa(tenantId, signal) {
   if (!tenantId) return null;
 
-  const users = [];
-  let next  = '/reports/authenticationMethods/userRegistrationDetails?$top=500';
-  let pages = 0;
+  /* Filtrage côté serveur d'abord : avec un parc de plusieurs milliers de
+     tenants, rapatrier tout le jeu pour n'en garder qu'une ligne serait absurde.
+     Repli sur un chargement complet mis en cache si le filtre est refusé. */
+  let r = await graphGet(
+    `${TP_GRAPH_MFA_PATH}?$filter=tenantId eq '${encodeURIComponent(tenantId)}'`,
+    signal, { base: TP_GRAPH_BETA }
+  );
 
-  while (next && pages < 20) {           // 10 000 comptes, bien au-delà d'un client type
-    pages++;
-    const r = await graphGetTenant(tenantId, next, signal);
-    if (!r.ok) {
-      /* On distingue les causes : elles n'appellent pas la même action, et un
-         message unique « erreur » ferait perdre du temps à tout le monde. */
-      if (r.refus) return {
-        erreur: 'jeton',
-        message: "Aucun jeton obtenu sur ce tenant. Trois causes possibles, dans cet ordre de probabilité : "
-          + "la portée AuditLog.Read.All n'est pas consentie sur l'inscription d'application ; "
-          + "le compte connecté n'est pas celui qui porte la délégation ; "
-          + "Entra exige une interaction pour ce tenant.",
-        detail: TP_GRAPH.lastTenantTokenError || null
-      };
-      if (r.status === 403) return { erreur: 'portee', message: "Accès refusé. La portée AuditLog.Read.All n'est pas consentie, ou votre rôle délégué sur ce client ne permet pas de lire les rapports." };
-      if (r.status === 404) return { erreur: 'licence', message: "Rapport indisponible sur ce tenant. Il demande généralement une licence Entra ID P1 ou P2." };
-      return { erreur: 'http', message: 'Réponse inattendue de Graph (HTTP ' + r.status + ').' };
+  if (!r.ok && r.status === 400) {
+    if (!TP_GRAPH.mfaCache) {
+      const tout = await graphGet(`${TP_GRAPH_MFA_PATH}?$top=999`, signal, { base: TP_GRAPH_BETA });
+      if (!tout.ok) r = tout; else TP_GRAPH.mfaCache = tout.data?.value || [];
     }
-    (r.data?.value || []).forEach(u => users.push(u));
-    const lien = r.data?.['@odata.nextLink'];
-    next = (typeof lien === 'string' && lien.startsWith(TP_GRAPH_BASE + '/'))
-      ? lien.slice(TP_GRAPH_BASE.length) : null;
+    if (TP_GRAPH.mfaCache) {
+      const cible = String(tenantId).toLowerCase();
+      r = { ok: true, status: 200, data: { value: TP_GRAPH.mfaCache.filter(x => String(x.tenantId || '').toLowerCase() === cible) } };
+    }
   }
 
-  const membres = users.filter(u => String(u.userType || '').toLowerCase() !== 'guest');
-  const total   = membres.length;
-  if (!total) return { total: 0, invites: users.length };
+  if (!r.ok) {
+    if (r.status === 403) return { erreur: 'portee',  message: "Accès refusé. La portée ManagedTenants.Read.All n'est pas consentie sur l'inscription d'application, ou le compte connecté n'a pas accès à Lighthouse." };
+    if (r.status === 404) return { erreur: 'absent',  message: "Point d'entrée Lighthouse introuvable. L'API est en beta, sa forme a pu changer." };
+    if (!r.status)        return { erreur: 'reseau',  message: "Microsoft Graph est injoignable." };
+    return { erreur: 'http', message: 'Réponse inattendue de Graph (HTTP ' + r.status + ').' };
+  }
 
-  const sansMfa       = membres.filter(u => u.isMfaRegistered === false);
-  const admins        = membres.filter(u => u.isAdmin === true);
-  const adminsSansMfa = admins.filter(u => u.isMfaRegistered === false);
+  const row = (r.data?.value || [])[0];
+  if (!row) return { erreur: 'nonGere', message: "Ce tenant n'apparaît pas dans Lighthouse. Il n'est pas intégré, ou il ne remplit pas les conditions d'éligibilité (relation GDAP conforme et licences requises côté client)." };
+
+  TP_GRAPH.dernierResumeMfa = row;
+  const { total, couverts } = lireResume(row);
+
+  if (total === null || couverts === null) {
+    return {
+      erreur: 'format',
+      message: "Lighthouse a répondu mais dans un format que je ne sais pas lire. L'API est en beta. Relevez la forme exacte avec graphDumpMfa() en console.",
+      champs: Object.keys(row).join(', ')
+    };
+  }
+  if (!total) return { total: 0 };
 
   return {
     total,
-    sansMfa:        sansMfa.length,
-    avecMfa:        total - sansMfa.length,
-    pourcentAvecMfa: Math.round(((total - sansMfa.length) / total) * 100),
-    admins:         admins.length,
-    adminsSansMfa:  adminsSansMfa.length,
-    /* Noms des admins sans MFA : c'est la liste sur laquelle on agit le jour même.
-       Plafonnée, le panneau n'est pas un export. */
-    adminsNoms:     adminsSansMfa.slice(0, 10).map(u => u.userPrincipalName).filter(Boolean),
-    invites:        users.length - total
+    couverts,
+    sansMfa:         total - couverts,
+    pourcentAvecMfa: Math.round((couverts / total) * 100),
+    majLe:           row.lastRefreshedDateTime || row.lastUpdatedDateTime || null,
+    tenantNom:       row.tenantDisplayName || null
   };
 }
+
+
 
 /* Interroge Graph pour un domaine. Retourne null si l'utilisateur n'est pas
    connecté : l'application doit rester entièrement fonctionnelle sans Graph,
@@ -633,10 +547,12 @@ function buildGraphPanel(g) {
 
     if (m.erreur) {
       addRow(b, 'Lecture impossible', m.message, 'hi-warn');
-      /* Le message d'Entra tel quel : c'est lui qui nomme la cause sans ambiguïté,
-         là où mon message ne peut qu'énumérer des hypothèses. */
-      if (m.detail) addRow(b, 'Réponse de Microsoft', m.detail);
-      if (m.erreur === 'jeton' && TP_GRAPH.account?.username) {
+      /* Les champs réellement renvoyés, quand la forme de la beta a changé :
+         c'est ce qui permet de corriger le mappage sans deviner. */
+      if (m.champs) addRow(b, 'Champs reçus', m.champs);
+      /* Le compte connecté conditionne l'accès à Lighthouse : proposer la
+         bascule ici évite de chercher ailleurs quand l'accès est refusé. */
+      if ((m.erreur === 'portee' || m.erreur === 'nonGere') && TP_GRAPH.account?.username) {
         addRow(b, 'Compte utilisé', TP_GRAPH.account.username);
         const btn = document.createElement('button');
         btn.type = 'button'; btn.className = 'admin-btn';
@@ -647,19 +563,15 @@ function buildGraphPanel(g) {
       return;
     }
 
-    if (!m.total) { addRow(b, 'Comptes', 'Aucun compte membre dans ce tenant.'); return; }
+    if (!m.total) { addRow(b, 'Comptes', 'Aucun compte dans ce tenant.'); return; }
 
     const alerte = m.pourcentAvecMfa < 90;
-    addRow(b, 'Couverture MFA', m.pourcentAvecMfa + ' % des comptes membres', alerte ? 'hi-warn' : 'hi-ms');
+    addRow(b, 'Couverture MFA', m.pourcentAvecMfa + ' % des comptes', alerte ? 'hi-warn' : 'hi-ms');
     addRow(b, 'Sans MFA', m.sansMfa + ' compte(s) sur ' + m.total);
-
-    if (m.admins) {
-      addRow(b, 'Administrateurs sans MFA',
-        m.adminsSansMfa + ' sur ' + m.admins,
-        m.adminsSansMfa > 0 ? 'hi-warn' : '');
-      if (m.adminsNoms?.length) addRow(b, 'Comptes concernés', m.adminsNoms.join('\n'));
-    }
-    if (m.invites) addRow(b, 'Invités exclus du calcul', String(m.invites));
+    /* La fraîcheur est affichée parce qu'elle n'est pas garantie : Lighthouse
+       agrège à son rythme, et une donnée d'hier ne se lit pas comme une mesure
+       instantanée. */
+    if (m.majLe) addRow(b, 'Données arrêtées au', formatDate(m.majLe));
   };
 }
 
