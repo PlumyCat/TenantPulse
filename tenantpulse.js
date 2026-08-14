@@ -4591,7 +4591,34 @@ function renderHero(ms, domain, confidence) {
     s.appendChild(msLogoEl()); s.appendChild(document.createTextNode(' ' + text));
     d.appendChild(s); return d;
   };
-  const mkDomain = () => { const d = document.createElement('div'); d.className = 'hero-domain'; d.textContent = domain || 'Domaine non résolu'; return d; };
+  /* Informations issues de Microsoft Graph, quand une session est ouverte.
+     Lues depuis currentState plutôt que passées en paramètre : renderHero est
+     appelée depuis quatre endroits, et le même motif est déjà utilisé pour
+     currentState.health?.spTenant plus bas. */
+  const gt = currentState.graph?.tenant || null;
+
+  const mkDomain = () => {
+    const d = document.createElement('div'); d.className = 'hero-domain';
+    d.textContent = domain || 'Domaine non résolu';
+    /* Domaine par défaut du tenant : affiché uniquement s'il diffère du domaine
+       analysé. Un client dont le domaine principal EST celui qu'on analyse ne
+       gagne rien à le voir deux fois. */
+    const def = gt?.defaultDomainName;
+    if (def && def.toLowerCase() !== String(domain || '').toLowerCase()) {
+      const s = document.createElement('span'); s.className = 'hero-domain-default';
+      s.textContent = ' · défaut : ' + def;
+      d.appendChild(s);
+    }
+    return d;
+  };
+
+  /* Nom du tenant : le seul identifiant lisible par un humain. */
+  const mkTenantName = () => {
+    if (!gt?.displayName) return null;
+    const d = document.createElement('div'); d.className = 'hero-tenant-name';
+    d.textContent = gt.displayName;
+    return d;
+  };
 
   if (!ms) {
     hero.style.background = 'linear-gradient(135deg,#374151 0%,#4b5563 100%)';
@@ -4615,6 +4642,8 @@ function renderHero(ms, domain, confidence) {
     const confClass = confidence >= 80 ? 'high' : confidence >= 50 ? 'medium' : 'low';
     const confLabel = confidence >= 80 ? 'Confiance élevée' : confidence >= 50 ? 'Confiance moyenne' : 'Confiance faible';
     hero.appendChild(mkLabel('Microsoft Tenant ID'));
+    const nom = mkTenantName();
+    if (nom) hero.appendChild(nom);
     if (ms.tenantId) {
       const guid = document.createElement('div'); guid.className = 'hero-guid';
       const sp = document.createElement('span'); sp.id = hid; sp.textContent = ms.tenantId;
@@ -4952,7 +4981,7 @@ function healthSubLbl(health) {
 // d'un ticket (tenant, M365/Santé), et l'hébergeur/registrar en dernier. Re-append = déplacement
 // en fin de conteneur, donc l'ordre final suit ce tableau, quel que soit l'ordre d'insertion.
 function reorderResults(center) {
-  ['.tenant-hero', '#card-ms', '#card-graph', '#card-google', '#card-health', '#card-dns', '.pills-block', '#card-host', '#btnTriggerFull']
+  ['.tenant-hero', '#card-ms', '#card-google', '#card-health', '#card-dns', '.pills-block', '#card-host', '#btnTriggerFull']
     .forEach(sel => { const el = center.querySelector(sel); if (el) center.appendChild(el); });
 }
 
@@ -5057,7 +5086,6 @@ async function checkFast() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
-    if (currentState.graph) center.appendChild(makeGraphCard(currentState.graph));
     if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
     if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
@@ -5214,7 +5242,6 @@ async function checkFull() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
-    if (currentState.graph) center.appendChild(makeGraphCard(currentState.graph));
     if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     if (currentState.host) {
       const logo = hostLogo(currentState.host.hostName);
