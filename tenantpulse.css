@@ -978,7 +978,7 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 .hero-copy-btn.copied{background:rgba(22,163,74,.3);border-color:rgba(134,239,172,.6);color:#86efac}
 .hero-domain{font-size:var(--text-sm);font-weight:500;color:rgba(255,255,255,.66);letter-spacing:.02em}
 /* Nom du tenant, renvoyé par Microsoft Graph. Placé au-dessus du GUID parce que
-   c'est le seul identifiant lisible par un humain : « TISSEO SERVICES » situe le
+   c'est le seul identifiant lisible par un humain : un nom de société situe le
    client immédiatement, là où le GUID demande un aller-retour mental. Absent
    sans connexion Graph, le héro reste alors identique à ce qu'il était. */
 .hero-tenant-name{font-size:1.35rem;font-weight:700;color:#fff;letter-spacing:.01em;margin-bottom:6px;text-shadow:0 1px 6px rgba(0,0,0,.28);word-break:break-word}
