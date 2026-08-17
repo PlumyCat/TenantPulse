@@ -4656,19 +4656,32 @@ function renderHero(ms, domain, confidence) {
     return d;
   };
 
-  /* Secure Score en pastille, à côté de l'indice de confiance. Le détail est
-     dans la carte Posture ; ici on ne met que le chiffre, parce que c'est le
-     seul indicateur de sécurité qui se lit sans contexte. */
-  const mkScorePill = () => {
-    const s = currentState.graph?.posture?.secureScore;
-    if (!s) return null;
-    const p = document.createElement('span');
-    p.className = 'hero-score-pill ' + (s.pourcent >= 70 ? 'good' : s.pourcent >= 45 ? 'mid' : 'bad');
-    p.textContent = 'Secure Score ' + s.pourcent + '%';
-    const d = posturDate(s.arreteLe);
-    p.title = 'Microsoft Secure Score : ' + s.courant + ' sur ' + s.max
-            + (d ? ', arrêté au ' + d : '') + '. Source : Microsoft 365 Lighthouse.';
-    return p;
+  /* Secure Score en jauge, calee dans l'angle haut droit du hero. En pastille
+     inline sur la ligne du GUID elle se perdait au bout d'une ligne deja
+     chargee ; isolee et dessinee, elle se lit d'un coup d'oeil. Le detail
+     chiffre vit dans la carte Posture, ici on ne met que le pourcentage. */
+  const mkScoreBloc = () => {
+    const sc = currentState.graph?.posture?.secureScore;
+    if (!sc) return null;
+    const NS = 'http://www.w3.org/2000/svg';
+    const r = 19, circ = 2 * Math.PI * r;
+    const bloc = document.createElement('div');
+    bloc.className = 'hero-score ' + (sc.pourcent >= 70 ? 'good' : sc.pourcent >= 45 ? 'mid' : 'bad');
+    const anneau = document.createElement('div'); anneau.className = 'hero-score-ring';
+    const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '0 0 46 46');
+    const mk = (cls) => { const c = document.createElementNS(NS, 'circle'); c.setAttribute('class', cls);
+      c.setAttribute('cx', '23'); c.setAttribute('cy', '23'); c.setAttribute('r', String(r)); return c; };
+    const trk = mk('trk'), fll = mk('fll');
+    fll.setAttribute('stroke-dasharray', String(circ));
+    fll.setAttribute('stroke-dashoffset', String(circ - (sc.pourcent / 100) * circ));
+    svg.appendChild(trk); svg.appendChild(fll);
+    const val = document.createElement('div'); val.className = 'hero-score-val'; val.textContent = sc.pourcent + '%';
+    anneau.appendChild(svg); anneau.appendChild(val);
+    const lbl = document.createElement('div'); lbl.className = 'hero-score-lbl'; lbl.textContent = 'Secure Score';
+    bloc.appendChild(anneau); bloc.appendChild(lbl);
+    const d = posturDate(sc.arreteLe);
+    bloc.title = 'Microsoft Secure Score : ' + sc.courant + ' sur ' + sc.max + (d ? ', arrete au ' + d : '');
+    return bloc;
   };
 
   if (!ms) {
@@ -4691,6 +4704,8 @@ function renderHero(ms, domain, confidence) {
   } else {
     const hid = 'tid_' + Math.random().toString(36).slice(2);
     hero.appendChild(mkLabel('Microsoft Tenant ID'));
+    const scoreBloc = mkScoreBloc();
+    if (scoreBloc) { hero.classList.add('has-score'); hero.appendChild(scoreBloc); }
     const nom = mkTenantName();
     if (nom) hero.appendChild(nom);
     if (ms.tenantId) {
@@ -4715,8 +4730,6 @@ function renderHero(ms, domain, confidence) {
         renderHistory();
       });
       guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(adminBtn);
-      const pill = mkScorePill();
-      if (pill) guid.appendChild(pill);
       hero.appendChild(guid);
     } else {
       const none = document.createElement('div'); none.className = 'hero-none'; none.textContent = 'GUID non résolu — domaine Microsoft détecté';
@@ -5003,6 +5016,49 @@ function buildHostPanel(host, domain) {
     lnk.appendChild(lnkIcon); lnk.appendChild(lnkStrong); b.appendChild(lnk);
   };
 }
+/* Axes de la sante du domaine, resumes en jauges. Le panneau enchainait
+   jusqu'a quinze encarts de texte : lisible pour qui connait deja SPF et DMARC,
+   opaque pour les autres, et surtout impossible a parcourir d'un coup d'oeil.
+   Cette grille donne l'etat des sept axes en une ligne, le detail restant
+   dessous pour qui en a besoin. */
+const SANTE_AXES = [
+  { cle: 'MX',      re: /^MX/i },
+  { cle: 'SPF',     re: /^SPF/i },
+  { cle: 'DMARC',   re: /^DMARC/i },
+  { cle: 'DKIM',    re: /^DKIM/i },
+  { cle: 'DNSSEC',  re: /^DNSSEC/i },
+  { cle: 'MTA-STS', re: /^MTA-STS/i },
+  { cle: 'BIMI',    re: /^BIMI/i }
+];
+const SANTE_ETAT  = { ok: 'OK', warn: 'Partiel', error: 'Absent', info: 'Inactif' };
+const SANTE_JAUGE = { ok: 100, warn: 55, info: 25, error: 8 };
+
+function buildAxesSante(health) {
+  const grille = document.createElement('div'); grille.className = 'sante-axes';
+  SANTE_AXES.forEach(ax => {
+    const c = (health.checks || []).find(x => ax.re.test(x.title));
+    if (!c) return;
+    /* La valeur courte se lit dans la parenthese du titre quand il y en a une :
+       « SPF strict (-all) » donne « -all », qui vaut mieux qu'un « OK » generique.
+       Au-dela de quatorze caracteres elle ne tient pas dans la tuile, on retombe
+       alors sur le mot d'etat. */
+    const par = c.title.match(/\(([^)]+)\)/);
+    let court = par ? par[1].replace(/bonus\s*\+\d+/i, '').trim() : '';
+    if (!court || court.length > 14) court = SANTE_ETAT[c.t] || c.t;
+
+    const tuile = document.createElement('div'); tuile.className = 'sante-axe ' + c.t;
+    tuile.title = c.title;
+    const nom = document.createElement('div'); nom.className = 'sante-axe-nom'; nom.textContent = ax.cle;
+    const jauge = document.createElement('div'); jauge.className = 'sante-axe-jauge';
+    const remp = document.createElement('span'); remp.style.width = (SANTE_JAUGE[c.t] || 8) + '%';
+    jauge.appendChild(remp);
+    const val = document.createElement('div'); val.className = 'sante-axe-val'; val.textContent = court;
+    tuile.appendChild(nom); tuile.appendChild(jauge); tuile.appendChild(val);
+    grille.appendChild(tuile);
+  });
+  return grille.children.length ? grille : null;
+}
+
 function buildHealthPanel(health, domain) {
   const renderChecks = (list) => {
     const hcl = document.createElement('div'); hcl.className = 'hc-list';
@@ -5011,7 +5067,13 @@ function buildHealthPanel(health, domain) {
       const ico = document.createElement('div'); ico.className = 'hc-icon'; const icoImg = document.createElement('img'); icoImg.src = c.icon; icoImg.className = 'icon-adaptive'; icoImg.alt = ''; ico.appendChild(icoImg);
       const body = document.createElement('div'); body.className = 'hc-body';
       const ttl = document.createElement('div'); ttl.className = 'hc-title'; ttl.textContent = c.title;
-      const dsc = document.createElement('div'); dsc.className = 'hc-desc';  dsc.textContent = c.desc;
+      /* Les descriptions embarquent l'enregistrement brut, parfois plusieurs
+         centaines de caracteres. Elles sont coupees a l'affichage et servies en
+         entier par l'infobulle : le panneau doit se parcourir, pas se lire. */
+      const dsc = document.createElement('div'); dsc.className = 'hc-desc';
+      const brut = String(c.desc || '');
+      dsc.textContent = brut.length > 96 ? brut.slice(0, 96).trimEnd() + '\u2026' : brut;
+      if (brut.length > 96) { dsc.title = brut; it.classList.add('hc-tronque'); }
       body.appendChild(ttl); body.appendChild(dsc); it.appendChild(ico); it.appendChild(body);
       hcl.appendChild(it);
     });
@@ -5019,6 +5081,8 @@ function buildHealthPanel(health, domain) {
   };
   return b => {
     b.appendChild(buildScoreRing(health.score, health.bonus));
+    const axes = buildAxesSante(health);
+    if (axes) b.appendChild(axes);
     // Prêt pour M365 en premier : ce sont les checks les plus utiles pour résoudre un ticket.
     if (health.m365?.length) {
       const sub = document.createElement('div'); sub.className = 'hc-subhead hc-subhead-top'; sub.textContent = 'M365';
@@ -5148,8 +5212,6 @@ function addSectionNote(b, texte) {
 
 function buildPosturePanel(p, mfa) {
   return b => {
-    /* Le rapport en premier : c'est l'action, le reste est de la consultation. */
-    b.appendChild(buildBoutonRapport(p, mfa));
     /* Seule route Lighthouse certaine, et la plus utile : la fiche client porte
        les onglets Presentation, Elements d'action, Plan de deploiement et
        Utilisateurs, donc tout le detail est a un clic de la. */
@@ -5158,7 +5220,7 @@ function buildPosturePanel(p, mfa) {
     if (p.secureScore) {
       const s = p.secureScore;
       addSectionTitle(b, 'Niveau de sécurité du tenant');
-      addSectionNote(b, "Secure Score Microsoft : note attribuée à la configuration de sécurité du tenant. Plus le pourcentage est haut, mieux le tenant est durci. La moyenne des PME tourne autour de 45 %.");
+      addSectionNote(b, "Note Microsoft sur la configuration du tenant. Plus haut, mieux durci. Moyenne PME : 45 %.");
       addRow(b, 'Score', s.courant + ' sur ' + s.max + '  (' + s.pourcent + ' %)',
              s.pourcent >= 70 ? 'hi-ms' : s.pourcent >= 45 ? '' : 'hi-warn');
       addRow(b, 'Chiffres arrêtés au', posturDate(s.arreteLe));
@@ -5169,7 +5231,7 @@ function buildPosturePanel(p, mfa) {
        indépendamment du reste. */
     if (mfa && !mfa.erreur && mfa.total) {
       addSectionTitle(b, 'Authentification multifacteur');
-      addSectionNote(b, "Comptes ayant enregistré au moins une méthode d'authentification forte. Un compte sans MFA est protégé par son seul mot de passe.");
+      addSectionNote(b, "Comptes ayant enregistré une méthode forte. Sans MFA, le mot de passe protège seul.");
       addRow(b, 'Comptes protégés', mfa.couverts + ' sur ' + mfa.total + '  (' + mfa.pourcentAvecMfa + ' %)',
              mfa.pourcentAvecMfa >= 90 ? 'hi-ms' : 'hi-warn');
       if (mfa.sansMfa) addRow(b, 'Comptes sans MFA', String(mfa.sansMfa), 'hi-warn');
@@ -5180,7 +5242,7 @@ function buildPosturePanel(p, mfa) {
     if (p.appareils) {
       const a = p.appareils;
       addSectionTitle(b, 'Conformité des appareils');
-      addSectionNote(b, "Appareils gérés par Intune. Un appareil non conforme ne respecte pas une règle de la politique de conformité (chiffrement, version d'OS, antivirus, code d'accès).");
+      addSectionNote(b, "Appareils Intune ne respectant pas la politique : chiffrement, version d'OS, antivirus, code d'accès.");
       addRow(b, 'Appareils non conformes', String(a.nonConformes), a.nonConformes ? 'hi-warn' : 'hi-ms');
       addRow(b, 'Appareils conformes', String(a.conformes));
       addRow(b, 'Appareils gérés au total', String(a.total) + (a.tronque ? "  (décompte limité aux 999 premiers)" : ''));
@@ -5190,7 +5252,7 @@ function buildPosturePanel(p, mfa) {
 
     if (p.alertes) {
       addSectionTitle(b, 'Alertes ouvertes');
-      addSectionNote(b, "Alertes remontées par Lighthouse et non encore traitées, réparties par gravité.");
+      addSectionNote(b, "Non encore traitées.");
       addRow(b, 'Total', String(p.alertes.total), p.alertes.parGravite.high ? 'hi-warn' : '');
       Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
         if (n) addRow(b, 'Gravité ' + (GRAVITE_LBL[g] || g).toLowerCase(), String(n), g === 'high' ? 'hi-warn' : '');
@@ -5201,7 +5263,7 @@ function buildPosturePanel(p, mfa) {
     if (p.exposition) {
       const e = p.exposition;
       addSectionTitle(b, 'Vulnérabilités logicielles');
-      addSectionNote(b, "Failles connues détectées par Defender sur les appareils du client, le plus souvent des logiciels non mis à jour. Le score d'exposition va de 0 à 100 et, contrairement au niveau de sécurité, plus il est bas mieux c'est.");
+      addSectionNote(b, "Détectées par Defender, surtout des logiciels non à jour. Score d'exposition : plus bas, mieux c'est.");
       if (e.critiques != null) addRow(b, 'Failles critiques', String(e.critiques), e.critiques ? 'hi-warn' : 'hi-ms');
       if (e.elevees != null)   addRow(b, 'Failles élevées', String(e.elevees));
       if (e.total != null)     addRow(b, 'Failles au total', String(e.total));
@@ -5218,7 +5280,7 @@ function buildPosturePanel(p, mfa) {
     if (p.baseline) {
       const bl = p.baseline;
       addSectionTitle(b, 'Tâches de sécurisation Lighthouse');
-      addSectionNote(b, "Liste de tâches de durcissement que Lighthouse suit pour ce tenant : MFA, accès conditionnel, conformité des appareils, partage OneDrive. Une tâche en régression était conforme et ne l'est plus, c'est le signal le plus utile de la liste. Modèle appliqué : " + bl.nom + ".");
+      addSectionNote(b, "Durcissement suivi par Lighthouse. Une tâche en régression était conforme et ne l'est plus.");
       if (bl.total) addRow(b, 'Tâches conformes', bl.conformes + ' sur ' + bl.total, bl.termine ? 'hi-ms' : 'hi-warn');
       if (bl.incompletes) addRow(b, 'Tâches jamais mises en place', String(bl.incompletes), 'hi-warn');
       if (bl.regressees)  addRow(b, 'Tâches en régression', String(bl.regressees), 'hi-warn');
@@ -5230,7 +5292,7 @@ function buildPosturePanel(p, mfa) {
     if (p.adoption) {
       const a = p.adoption;
       addSectionTitle(b, 'Usage des services Microsoft 365');
-      addSectionNote(b, "Indicateurs d'utilisation, pas de sécurité. Ils mesurent à quel point les services achetés sont réellement employés, ce qui sert surtout aux points commerciaux.");
+      addSectionNote(b, "Utilisation des services, pas sécurité.");
       [['Communication (Teams, Outlook)', a.communication],
        ['Collaboration sur documents',    a.collaboration],
        ['Travail hors des heures de bureau', a.flexibilite],
@@ -5246,7 +5308,7 @@ function buildPosturePanel(p, mfa) {
       const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
       if (lieu || i.segment || i.industrie) {
         addSectionTitle(b, 'Fiche du client');
-        addSectionNote(b, "Informations déclaratives portées par le tenant, telles que Lighthouse les expose.");
+        addSectionNote(b, "Informations déclaratives du tenant.");
         addRow(b, 'Localisation', lieu);
         addRow(b, 'Segment commercial', i.segment);
         addRow(b, "Secteur d'activité", i.industrie || i.vertical);
@@ -5262,13 +5324,15 @@ function buildPosturePanel(p, mfa) {
     const aExpliquer = [...new Set(refuse)].filter(k => table[k]);
     if (aExpliquer.length) {
       addSectionTitle(b, 'Données non disponibles');
-      addSectionNote(b, "Ces chiffres existent chez Microsoft mais l'application n'a pas encore le droit de les lire. Ce n'est pas un problème de délégation GDAP, qui est suffisante : il manque une autorisation sur l'inscription d'application, à accorder par un administrateur.");
+      addSectionNote(b, "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent.");
       aExpliquer.forEach(k => addRow(b, table[k].quoi, 'Nécessite ' + table[k].portee));
     }
 
+    /* Le rapport ferme le panneau : on lit, puis on agit. */
+    b.appendChild(buildBoutonRapport(p, mfa));
+
     const note = document.createElement('div'); note.className = 'panel-section-note'; note.style.paddingTop = '10px';
-    note.textContent = "Source : Microsoft 365 Lighthouse. Le tenant doit y être intégré pour apparaître. "
-      + "Les chiffres sont recalculés une fois par jour par Microsoft, ce n'est pas de l'instantané, d'où les dates d'arrêté.";
+    note.textContent = "Lighthouse recalcule ces chiffres une fois par jour.";
     b.appendChild(note);
   };
 }
@@ -5369,7 +5433,7 @@ function rapportSanteTenant(p, mfa) {
 
 function buildBoutonRapport(p, mfa) {
   const wrap = document.createElement('div');
-  wrap.className = 'panel-report-bar';
+  wrap.className = 'panel-report-bar bas';
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn-report';
@@ -5384,10 +5448,7 @@ function buildBoutonRapport(p, mfa) {
       setTimeout(() => { btn.textContent = 'Copier le rapport de santé'; }, 2500);
     });
   });
-  const hint = document.createElement('span');
-  hint.className = 'panel-report-hint';
-  hint.textContent = 'Texte brut, prêt à coller dans un ticket ou un mail.';
-  wrap.appendChild(btn); wrap.appendChild(hint);
+  wrap.appendChild(btn);
   return wrap;
 }
 
