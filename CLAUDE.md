@@ -148,12 +148,12 @@ totale du fichier.
   maintient l'application hors du statut de sous-traitant RGPD, exactement comme pour le DNS.
 - **Autorité** : `login.microsoftonline.com/organizations` — jamais le GUID du tenant.
 - **Portées déléguées** (palier 0, aucun accès aux tenants clients requis) :
-  `CrossTenantInformation.ReadBasic.All`, `DelegatedAdminRelationship.Read.All`,
-  plus `openid profile offline_access`. Les deux premières exigent un consentement admin.
+  `CrossTenantInformation.ReadBasic.All`, `ManagedTenants.Read.All`, plus
+  `openid profile offline_access`. Les deux premières exigent un consentement admin.
 - **Points d'entrée utilisés** : `findTenantInformationByDomainName` (v1.0) pour le nom du
   tenant et son domaine par défaut, sur n'importe quel domaine et sans aucun accès au tenant
-  visé ; et `tenantRelationships/managedTenants/credentialUserRegistrationsSummaries`
-  (**beta**, Microsoft 365 Lighthouse) pour la couverture MFA.
+  visé ; et plusieurs entités `tenantRelationships/managedTenants/*` (**beta**, Microsoft 365
+  Lighthouse) pour la posture, rassemblées par `checkPosture()` dans `graph.js`.
 
 > [!IMPORTANT]
 > **Pourquoi Lighthouse et pas une lecture directe du tenant client.** Lire
@@ -173,6 +173,38 @@ totale du fichier.
 > agrégées périodiquement, jamais temps réel. La date d'arrêté est affichée pour cette
 > raison. Les noms de propriétés ayant varié entre révisions, `lireResume()` accepte
 > plusieurs graphies et `graphDumpMfa()` sert à relever la forme réelle.
+
+> [!IMPORTANT]
+> **`ManagedTenants.Read.All` ouvre le service Lighthouse, pas les données qu'il agrège.**
+> Chaque entité exposant de la donnée client réclame **en plus** la portée Graph qui gouverne
+> cette donnée. Un refus se présente en `403 « Delegate scope doesn't meet requirement »`,
+> message trompeur : les rôles GDAP, eux, sont suffisants, et le rapport d'accès de
+> Lighthouse le confirme.
+>
+> Correspondance relevée le 2026-08-17 dans les bundles du portail Lighthouse, vérifiée
+> entité par entité :
+>
+> | Entité | Portée supplémentaire |
+> |---|---|
+> | `credentialUserRegistrationsSummaries` (MFA) | `Reports.Read.All` |
+> | `managedDeviceCompliances`, `windowsDeviceMalwareStates` | `DeviceManagementManagedDevices.Read.All` |
+> | `conditionalAccessPolicyCoverages` | `Policy.Read.All` |
+> | `managedTenantSecureScores`, `tenantExposureSummaries`, `managementTemplateCollectionTenantSummaries`, `tenantsDetailedInformation`, `managedTenantAdoptionReports`, `managedTenantAlerts`, `tenants`, `myRoles`, `auditEvents` | aucune |
+>
+> Contrôle négatif vérifié : les entités de la dernière ligne sont exactement celles qui
+> répondent 200 avec les portées actuelles. **Ne pas demander `ManagedTenants.ReadWrite.All`** :
+> fausse piste explorée puis écartée, elle n'apporte rien et ouvre l'écriture sur les actions
+> de gestion, c'est à dire le déploiement de configuration dans les tenants clients.
+>
+> D'où le parti pris de `checkPosture()` : **chaque jeu de données est indépendant et
+> facultatif**. Un 403 retire une ligne de l'affichage et rien d'autre, et la donnée
+> apparaîtra d'elle-même le jour où la portée est consentie, sans modification de code.
+>
+> Deux outils de diagnostic, à préférer au tâtonnement :
+> `reportRoot/managedTenantAccessReports?$filter=sourceId in (...)` donne, pour chaque
+> entité, le niveau d'accès et la liste des rôles GDAP acceptés ; et un export HAR du portail
+> Lighthouse révèle les URL réelles et les portées citées dans ses bundles. En console,
+> `graphDumpPosture()` liste les refus de la dernière analyse.
 
 > [!IMPORTANT]
 > **`GRAPH_CLIENT_ID` n'est jamais versionné.** L'identifiant est servi par `GET /api/me`

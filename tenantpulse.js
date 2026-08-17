@@ -4620,6 +4620,21 @@ function renderHero(ms, domain, confidence) {
     return d;
   };
 
+  /* Secure Score en pastille, à côté de l'indice de confiance. Le détail est
+     dans la carte Posture ; ici on ne met que le chiffre, parce que c'est le
+     seul indicateur de sécurité qui se lit sans contexte. */
+  const mkScorePill = () => {
+    const s = currentState.graph?.posture?.secureScore;
+    if (!s) return null;
+    const p = document.createElement('span');
+    p.className = 'hero-score-pill ' + (s.pourcent >= 70 ? 'good' : s.pourcent >= 45 ? 'mid' : 'bad');
+    p.textContent = 'Secure Score ' + s.pourcent + '%';
+    const d = posturDate(s.arreteLe);
+    p.title = 'Microsoft Secure Score : ' + s.courant + ' sur ' + s.max
+            + (d ? ' — arrêté au ' + d : '') + '. Source : Microsoft 365 Lighthouse.';
+    return p;
+  };
+
   if (!ms) {
     hero.style.background = 'linear-gradient(135deg,#374151 0%,#4b5563 100%)';
     hero.appendChild(mkLabel('Microsoft 365'));
@@ -4671,6 +4686,8 @@ function renderHero(ms, domain, confidence) {
         renderHistory();
       });
       guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(adminBtn); guid.appendChild(badge);
+      const pill = mkScorePill();
+      if (pill) guid.appendChild(pill);
       hero.appendChild(guid);
     } else {
       const none = document.createElement('div'); none.className = 'hero-none'; none.textContent = 'GUID non résolu — domaine Microsoft détecté';
@@ -4793,6 +4810,30 @@ function exportReport() {
   }
   lines.push(HR);
   lines.push('');
+
+  // ── Posture Lighthouse ──────────────────────
+  // Bloc entier absent si aucune session Graph n'etait ouverte, ou si Lighthouse
+  // n'a rien servi : un rapport colle dans un ticket ne doit pas porter de
+  // rubriques vides qui feraient croire a des valeurs nulles.
+  const gp = r.graph?.posture, gm = r.graph?.mfa;
+  if (gp || (gm && !gm.erreur && gm.total)) {
+    lines.push('POSTURE (Microsoft 365 Lighthouse):');
+    lines.push('');
+    if (r.graph?.tenant?.displayName) lines.push('Tenant : ' + r.graph.tenant.displayName);
+    if (gp?.secureScore) lines.push('Secure Score : ' + gp.secureScore.courant + '/' + gp.secureScore.max + '  (' + gp.secureScore.pourcent + '%)');
+    if (gm && !gm.erreur && gm.total) lines.push('MFA : ' + gm.couverts + '/' + gm.total + ' comptes couverts (' + gm.pourcentAvecMfa + '%), ' + gm.sansMfa + ' sans MFA');
+    if (gp?.alertes) lines.push('Alertes actives : ' + gp.alertes.total + (gp.alertes.parGravite.high ? '  dont ' + gp.alertes.parGravite.high + ' critique(s)' : ''));
+    if (gp?.exposition) {
+      const e = gp.exposition;
+      if (e.appareils != null) lines.push('Appareils : ' + e.appareils + (e.exposes != null ? '  dont ' + e.exposes + ' expose(s)' : ''));
+      if (e.critiques != null) lines.push('Vulnerabilites critiques : ' + e.critiques + (e.elevees != null ? '  /  elevees : ' + e.elevees : ''));
+    }
+    if (gp?.baseline?.total) lines.push('Base de reference : ' + gp.baseline.conformes + '/' + gp.baseline.total + ' etapes conformes');
+    lines.push('');
+    lines.push('Donnees agregees periodiquement par Lighthouse, ce n\'est pas du temps reel.');
+    lines.push(HR);
+    lines.push('');
+  }
 
   // ── Security Checks ─────────────────────────
   lines.push('HYGIENE E-MAIL & DNS (M365):');
@@ -4968,6 +5009,152 @@ function buildHealthPanel(health, domain) {
 function msRows(ms) {
   return [ms.namespaceType && ['Namespace Type', ms.namespaceType], ms.federationType && ['Fédération', ms.federationType], ms.cloudInstance && ['Cloud Instance', ms.cloudInstance], ms.issuer && ['Issuer', ms.issuer], ms.tokenEndpoint && ['Token Endpoint', ms.tokenEndpoint], ms.authorizationEndpoint && ['Authorization Endpoint', ms.authorizationEndpoint], ms.userInfoEndpoint && ['UserInfo Endpoint', ms.userInfoEndpoint]].filter(Boolean);
 }
+
+/* ── Posture Lighthouse ──────────────────────────────────────────────────────
+   Alimentée par checkPosture() dans graph.js. Chaque jeu de données est
+   facultatif : les portées Graph accordées déterminent ce qui répond, donc la
+   carte se construit à partir de ce qui est présent, jamais d'une liste figée.
+   Aucun jeu disponible → aucune carte, plutôt qu'une carte vide.             */
+
+const GRAVITE_LBL = { high: 'Critique', medium: 'Moyenne', low: 'Basse', informational: 'Informative' };
+
+/* Date d'arrêté. Lighthouse agrège périodiquement : afficher un chiffre sans sa
+   date laisserait croire à du temps réel, ce qu'il n'est jamais. */
+function posturDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d) ? null : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function postureSub(p) {
+  const bouts = [];
+  if (p.secureScore) bouts.push('Secure Score ' + p.secureScore.pourcent + '%');
+  if (p.alertes)     bouts.push(p.alertes.total + ' alerte' + (p.alertes.total > 1 ? 's' : ''));
+  if (p.exposition?.critiques != null) bouts.push(p.exposition.critiques + ' vuln. critiques');
+  if (p.baseline?.total)  bouts.push('base ' + p.baseline.conformes + '/' + p.baseline.total);
+  return bouts.length ? bouts.join(' · ') : 'Données agrégées par Microsoft 365 Lighthouse';
+}
+
+/* Badge : le chiffre le plus parlant disponible, pas un décompte de champs.
+   Le Secure Score d'abord, sinon les alertes critiques, sinon l'ampleur. */
+function postureBadge(p) {
+  if (p.secureScore) return p.secureScore.pourcent + '%';
+  const crit = p.alertes?.parGravite?.high;
+  if (crit) return crit + ' critique' + (crit > 1 ? 's' : '');
+  if (p.exposition?.critiques != null) return p.exposition.critiques + ' vuln.';
+  if (p.baseline?.total) return p.baseline.conformes + '/' + p.baseline.total;
+  return 'Lighthouse';
+}
+
+function buildPosturePanel(p, mfa) {
+  return b => {
+    if (p.secureScore) {
+      addSectionTitle(b, 'Secure Score Microsoft');
+      const s = p.secureScore;
+      addRow(b, 'Score', s.courant + ' / ' + s.max + '  (' + s.pourcent + ' %)',
+             s.pourcent >= 70 ? 'hi-ms' : s.pourcent >= 45 ? '' : 'hi-warn');
+      addRow(b, 'Arrêté le', posturDate(s.arreteLe));
+    }
+
+    /* La couverture MFA reste servie par checkMfa() : elle vient du même
+       Lighthouse mais dépend de la portée Reports.Read.All, accordée ou non
+       indépendamment du reste. */
+    if (mfa && !mfa.erreur && mfa.total) {
+      addSectionTitle(b, 'Authentification multifacteur');
+      addRow(b, 'Comptes couverts', mfa.couverts + ' / ' + mfa.total + '  (' + mfa.pourcentAvecMfa + ' %)',
+             mfa.pourcentAvecMfa >= 90 ? 'hi-ms' : 'hi-warn');
+      if (mfa.sansMfa) addRow(b, 'Comptes sans MFA', String(mfa.sansMfa), 'hi-warn');
+      addRow(b, 'Arrêté le', posturDate(mfa.majLe));
+    }
+
+    if (p.alertes) {
+      addSectionTitle(b, 'Alertes Lighthouse actives');
+      addRow(b, 'Total', String(p.alertes.total), p.alertes.parGravite.high ? 'hi-warn' : '');
+      Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
+        if (n) addRow(b, GRAVITE_LBL[g] || g, String(n), g === 'high' ? 'hi-warn' : '');
+      });
+    }
+
+    if (p.exposition) {
+      const e = p.exposition;
+      addSectionTitle(b, 'Exposition aux vulnérabilités (Defender)');
+      if (e.appareils != null) addRow(b, 'Appareils', String(e.appareils) + (e.exposes != null ? '  dont ' + e.exposes + ' exposé(s)' : ''), e.exposes ? 'hi-warn' : '');
+      if (e.critiques != null) addRow(b, 'Vulnérabilités critiques', String(e.critiques), e.critiques ? 'hi-warn' : '');
+      if (e.elevees != null)   addRow(b, 'Vulnérabilités élevées', String(e.elevees));
+      if (e.total != null)     addRow(b, 'Total vulnérabilités', String(e.total));
+      if (e.recommandations != null) addRow(b, 'Recommandations', String(e.recommandations));
+      if (e.score != null) {
+        const tend = e.derive == null ? '' : '  (' + (e.derive > 0 ? '+' : '') + e.derive + ' sur 30 j)';
+        addRow(b, "Score d'exposition", e.score + tend);
+      }
+    }
+
+    if (p.baseline) {
+      const bl = p.baseline;
+      addSectionTitle(b, 'Base de référence — ' + bl.nom);
+      if (bl.total) addRow(b, 'Étapes conformes', bl.conformes + ' / ' + bl.total, bl.termine ? 'hi-ms' : 'hi-warn');
+      if (bl.incompletes) addRow(b, 'Étapes incomplètes', String(bl.incompletes), 'hi-warn');
+      if (bl.regressees)  addRow(b, 'Étapes en régression', String(bl.regressees), 'hi-warn');
+      if (bl.usagersIncomplets != null) addRow(b, 'Utilisateurs avec tâches en attente', String(bl.usagersIncomplets));
+      if (bl.sansLicence) addRow(b, 'Utilisateurs sans licence', String(bl.sansLicence));
+    }
+
+    if (p.adoption) {
+      const a = p.adoption;
+      addSectionTitle(b, 'Adoption Microsoft 365');
+      [['Communication', a.communication], ['Collaboration', a.collaboration], ['Flexibilité', a.flexibilite],
+       ['Santé des applications', a.santeApps], ['Connectivité réseau', a.reseau], ['Travail en équipe', a.teamwork]]
+        .forEach(([lbl, v]) => { if (v != null) addRow(b, lbl, v + ' %'); });
+      addRow(b, 'Arrêté le', posturDate(a.arreteLe));
+    }
+
+    if (p.identite) {
+      const i = p.identite;
+      const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(' · ');
+      if (lieu || i.segment || i.industrie) {
+        addSectionTitle(b, 'Identité du tenant');
+        addRow(b, 'Localisation', lieu);
+        addRow(b, 'Segment', i.segment);
+        addRow(b, 'Secteur', i.industrie || i.vertical);
+      }
+    }
+
+    /* Ce que les portées actuelles ne couvrent pas. Sans cette mention, une
+       donnée absente passerait pour une donnée à zéro. */
+    const manquants = Object.entries(p.refus || {}).filter(([, v]) => v === 403).map(([k]) => k);
+    if (manquants.length || (mfa && mfa.erreur)) {
+      addSectionTitle(b, 'Non disponible');
+      const d = document.createElement('div'); d.className = 'hc-desc'; d.style.padding = '0 2px 6px';
+      d.textContent = "Certains jeux de données sont refusés par Microsoft Graph : l'inscription d'application n'a pas encore la portée qui gouverne cette donnée. "
+        + "Les rôles GDAP, eux, sont suffisants. Détail en console avec graphDumpPosture().";
+      b.appendChild(d);
+    }
+
+    const note = document.createElement('div'); note.className = 'hc-desc'; note.style.padding = '8px 2px 0';
+    note.textContent = "Source : Microsoft 365 Lighthouse (API beta). Le tenant doit y être intégré. "
+      + "Les chiffres sont agrégés périodiquement, ce n'est pas du temps réel.";
+    b.appendChild(note);
+  };
+}
+
+/* Retourne la carte, ou null s'il n'y a rien à montrer. Appelée depuis
+   l'analyse rapide et l'analyse complète. */
+function makePostureCard() {
+  const p   = currentState.graph?.posture;
+  const mfa = currentState.graph?.mfa;
+  if (!p) return null;
+  return makeCard({
+    id: 'posture',
+    iconEl: makeImgIcon('assets/Microsoft.png', 'Lighthouse', 20),
+    iconBg: 'ms-clr',
+    title: 'Posture du tenant',
+    sub: postureSub(p),
+    badge: postureBadge(p),
+    badgeCls: 'ms-b',
+    selCls: 'selected',
+    onClick: () => openPanel('posture', 'Posture du tenant — Microsoft 365 Lighthouse', buildPosturePanel(p, mfa))
+  });
+}
 function healthScoreLbl(health) {
   return `${health.score}%${health.bonus > 0 ? ' +' + health.bonus : ''}`;
 }
@@ -4981,7 +5168,7 @@ function healthSubLbl(health) {
 // d'un ticket (tenant, M365/Santé), et l'hébergeur/registrar en dernier. Re-append = déplacement
 // en fin de conteneur, donc l'ordre final suit ce tableau, quel que soit l'ordre d'insertion.
 function reorderResults(center) {
-  ['.tenant-hero', '#card-ms', '#card-google', '#card-health', '#card-dns', '.pills-block', '#card-host', '#btnTriggerFull']
+  ['.tenant-hero', '#card-posture', '#card-ms', '#card-google', '#card-health', '#card-dns', '.pills-block', '#card-host', '#btnTriggerFull']
     .forEach(sel => { const el = center.querySelector(sel); if (el) center.appendChild(el); });
 }
 
@@ -4992,7 +5179,7 @@ async function checkFastById(tenantId) {
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
   errBox.style.display = 'none'; center.replaceChildren(); closePanel();
   exportBtn.classList.remove('visible'); lastReport = null;
-  currentState = { domain: null, ms: null, dns: null, goog: null, health: null, others: null, host: null, fullDone: false };
+  currentState = { domain: null, ms: null, dns: null, goog: null, health: null, others: null, host: null, graph: null, fullDone: false };
   lockButtons(); setFastLoading(true);
   showSteps(['ms']);
   stepRetryFns.ms = () => checkFastById(tenantId);
@@ -5010,9 +5197,23 @@ async function checkFastById(tenantId) {
     document.getElementById('progList').style.display = 'none';
     if (!domain) showError("Tenant ID validé, mais domaine inconnu : ce tenant n'a jamais été recherché par domaine (historique local ou annuaire partagé).");
     currentState.ms = ms; currentState.domain = domain || null;
+    /* Posture Lighthouse : elle ne dépend que du tenantId, elle vaut donc aussi
+       pour une recherche directe par GUID. Le nom du tenant, lui, exige un
+       domaine — `findTenantInformationByDomainName` ne prend pas de GUID — il
+       reste donc absent quand le domaine n'a pas pu être résolu. */
+    if (graphConnecte() && typeof checkPosture === 'function') {
+      const [posture, mfa, tenant] = await Promise.all([
+        checkPosture(ms.tenantId, null),
+        checkMfa(ms.tenantId, null),
+        domain ? graphFindTenant(domain, null) : Promise.resolve(null)
+      ]);
+      currentState.graph = { tenant, mfa, posture };
+    }
     const confidence = computeConfidence(ms);
     if (domain) addToHistory(domain, ms.tenantId);
     center.appendChild(renderHero(ms, domain, confidence));
+    const posteCardById = makePostureCard();
+    if (posteCardById) center.appendChild(posteCardById);
     lastReport = { domain: domain || null, analysedAt: new Date().toISOString(), input: tenantId, microsoft: ms, google: null, dns: null, health: null, otherServices: null, host: null, graph: currentState.graph || null, tenantConfidence: confidence, fullDone: false };
     exportBtn.classList.add('visible');
   } catch (err) {
@@ -5086,6 +5287,8 @@ async function checkFast() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
+    const posteCard = makePostureCard();
+    if (posteCard) center.appendChild(posteCard);
     if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
     if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
@@ -5242,6 +5445,8 @@ async function checkFull() {
       const rows = msRows(currentState.ms);
       center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
     }
+    const posteCardFull = makePostureCard();
+    if (posteCardFull) center.appendChild(posteCardFull);
     if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
     if (currentState.host) {
       const logo = hostLogo(currentState.host.hostName);

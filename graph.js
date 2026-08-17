@@ -489,6 +489,183 @@ async function checkMfa(tenantId, signal) {
 
 
 
+/* ── Posture du tenant, via Microsoft 365 Lighthouse ─────────────────────────
+
+   `ManagedTenants.Read.All` ouvre le **service** Lighthouse, pas les **données**
+   qu'il agrège. Chaque jeu qui expose de la donnée client réclame en plus la
+   portée Graph propre à cette donnée, et un refus se présente sous la forme
+   d'un 403 « Delegate scope doesn't meet requirement » — trompeur, car les
+   rôles GDAP, eux, sont bien suffisants.
+
+   Correspondance relevée dans les bundles du portail Lighthouse (2026-08-17) :
+
+     credentialUserRegistrationsSummaries  →  Reports.Read.All
+     managedDeviceCompliances              →  DeviceManagementManagedDevices.Read.All
+     windowsDeviceMalwareStates            →  DeviceManagementManagedDevices.Read.All
+     conditionalAccessPolicyCoverages      →  Policy.Read.All
+
+   Les jeux repris ci-dessous sont ceux pour lesquels **aucune portée
+   supplémentaire n'est citée**, et le contrôle négatif tient : ce sont
+   exactement ceux qui répondent 200 avec les portées actuelles.
+
+   D'où le parti pris de cette section : **chaque jeu est indépendant et
+   facultatif**. Un refus n'est pas une erreur, il retire une ligne de
+   l'affichage et rien d'autre. Le jour où une portée est accordée, la donnée
+   apparaît sans qu'une ligne de code change. `graphDumpPosture()` en console
+   donne le détail des refus quand quelque chose manque à l'écran.
+
+   Rappel valable pour tout le bloc : l'API est en beta, le tenant doit être
+   intégré à Lighthouse, et les chiffres sont agrégés périodiquement. La date
+   d'arrêté est affichée pour cette raison.                                    */
+
+const TP_GRAPH_MT = '/tenantRelationships/managedTenants';
+const TP_GRAPH_SEVERITES = ['high', 'medium', 'low', 'informational'];
+
+/* Le tenantId part dans un littéral OData : on n'y laisse passer qu'un GUID. */
+const TP_GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/* Un jeu de données facultatif. Toute anomalie (refus, absence, format
+   inattendu, réseau) se solde par `null` : l'appelant n'a rien à vérifier. */
+async function litJeu(nom, chemin, signal, refus) {
+  const r = await graphGet(chemin, signal, { base: TP_GRAPH_BETA });
+  if (!r.ok) {
+    refus[nom] = r.status || 'réseau';
+    return null;
+  }
+  return r.data;
+}
+
+/* Première ligne d'une collection OData, en vérifiant qu'elle concerne bien le
+   tenant demandé. Le portail interroge certains jeux avec `filter=` sans `$` ;
+   si une révision de la beta cessait de l'honorer, la réponse porterait la
+   première ligne venue du parc. Ce contrôle évite d'attribuer à un client les
+   chiffres d'un autre — silencieusement, et sur une page de diagnostic. */
+function ligneDuTenant(data, tenantId) {
+  const row = (data?.value || [])[0];
+  if (!row) return null;
+  if (row.tenantId && String(row.tenantId).toLowerCase() !== String(tenantId).toLowerCase()) return null;
+  return row;
+}
+
+async function checkPosture(tenantId, signal) {
+  if (!tenantId || !TP_GUID_RE.test(tenantId)) return null;
+
+  const id    = tenantId;
+  const refus = {};
+  const J     = (nom, chemin) => litJeu(nom, chemin, signal, refus);
+
+  /* Les jeux sont indépendants : en série, une analyse coûterait la somme des
+     latences pour un résultat identique. */
+  const [score, expo, base, ident, adopt, ...alertes] = await Promise.all([
+    J('secureScore', `${TP_GRAPH_MT}/managedTenantSecureScores?$filter=tenantId eq '${id}'&$orderby=createdDateTime desc&$top=1`),
+    J('exposition',  `${TP_GRAPH_MT}/tenantExposureSummaries?$filter=tenantId eq '${id}'`),
+    J('baseline',    `${TP_GRAPH_MT}/managementTemplateCollectionTenantSummaries?$apply=filter((tenantId in ('${id}')))`),
+    J('identite',    `${TP_GRAPH_MT}/tenantsDetailedInformation?filter=tenantId eq '${id}'`),
+    J('adoption',    `${TP_GRAPH_MT}/managedTenantAdoptionReports?$filter=tenantId eq '${id}'&$orderBy=createdDateTime desc&$top=1`),
+    ...TP_GRAPH_SEVERITES.map(s =>
+      J('alertes_' + s, `${TP_GRAPH_MT}/managedTenantAlerts?$count=true&$select=id&$top=1&$filter=tenantId in ('${id}') and severity in ('${s}')`))
+  ]);
+
+  const out = { refus };
+
+  const rScore = ligneDuTenant(score, id);
+  if (rScore && typeof rScore.currentScore === 'number' && rScore.maxScore > 0) {
+    out.secureScore = {
+      courant:   rScore.currentScore,
+      max:       rScore.maxScore,
+      pourcent:  Math.round((rScore.currentScore / rScore.maxScore) * 100),
+      arreteLe:  rScore.createdDateTime || null
+    };
+  }
+
+  const rExpo = ligneDuTenant(expo, id);
+  if (rExpo) {
+    const passe = Array.isArray(rExpo.pastRiskExposureScores) ? rExpo.pastRiskExposureScores.filter(v => typeof v === 'number' && v > 0) : [];
+    out.exposition = {
+      appareils:     rExpo.totalDeviceCount ?? null,
+      exposes:       rExpo.exposedDeviceCount ?? null,
+      critiques:     rExpo.criticalVulnerabilityCount ?? null,
+      elevees:       rExpo.highVulnerabilityCount ?? null,
+      total:         rExpo.totalVulnerabilityCount ?? null,
+      recommandations: rExpo.recommendationCount ?? null,
+      score:         typeof rExpo.riskExposureScore === 'number' ? Math.round(rExpo.riskExposureScore * 10) / 10 : null,
+      /* `riskExposureDrift` vaut l'écart avec la plus ancienne valeur de la
+         série, laquelle est parfois à zéro faute d'historique — la dérive
+         affichée serait alors égale au score lui-même. On la recalcule sur les
+         seules valeurs réelles, et on ne l'affiche pas s'il n'y en a qu'une. */
+      derive:        passe.length > 1 ? Math.round((passe[0] - passe[passe.length - 1]) * 10) / 10 : null
+    };
+  }
+
+  const rBase = ligneDuTenant(base, id);
+  if (rBase) {
+    const conformes = rBase.completeStepsCount ?? 0;
+    const restantes = (rBase.incompleteStepsCount ?? 0) + (rBase.regressedStepsCount ?? 0);
+    out.baseline = {
+      nom:          rBase.managementTemplateCollectionDisplayName || 'Base de référence',
+      conformes,
+      incompletes:  rBase.incompleteStepsCount ?? null,
+      regressees:   rBase.regressedStepsCount ?? null,
+      total:        conformes + restantes || null,
+      usagersIncomplets: rBase.incompleteUsersCount ?? null,
+      usagersComplets:   rBase.completeUsersCount ?? null,
+      sansLicence:  rBase.unlicensedUsersCount ?? null,
+      termine:      rBase.isComplete === true
+    };
+  }
+
+  const rIdent = ligneDuTenant(ident, id);
+  if (rIdent) {
+    out.identite = {
+      pays:      rIdent.countryName || null,
+      ville:     rIdent.city || null,
+      region:    rIdent.region || null,
+      segment:   rIdent.segmentName || null,
+      /* Lighthouse renvoie littéralement « Unknown » et « N/A » quand le client
+         n'a pas renseigné son secteur : afficher ces valeurs telles quelles
+         ferait passer une absence de saisie pour une information. */
+      industrie: (rIdent.industryName && !/^(n\/a|unknown)$/i.test(rIdent.industryName)) ? rIdent.industryName : null,
+      vertical:  (rIdent.verticalName && !/^(n\/a|unknown)$/i.test(rIdent.verticalName)) ? rIdent.verticalName : null
+    };
+  }
+
+  const rAdopt = ligneDuTenant(adopt, id);
+  if (rAdopt) {
+    const pc = v => typeof v === 'number' ? Math.round(v) : null;
+    out.adoption = {
+      arreteLe:      rAdopt.createdDateTime || null,
+      communication: pc(rAdopt.communicationScoreInPercentage),
+      collaboration: pc(rAdopt.contentCollaborationScoreInPercentage),
+      flexibilite:   pc(rAdopt.flexibilityScoreInPercentage),
+      santeApps:     pc(rAdopt.m365AppHealthScoreInPercentage),
+      reseau:        pc(rAdopt.networkConnectScoreInPercentage),
+      teamwork:      pc(rAdopt.teamworkScoreInPercentage)
+    };
+  }
+
+  /* Les alertes ne sont comptées que côté serveur (`$count=true`, `$top=1`) :
+     rapatrier les alertes elles-mêmes n'apporterait rien ici et Lighthouse en
+     porte des milliers. */
+  const parGravite = {};
+  let totalAlertes = 0, alerteLue = false;
+  TP_GRAPH_SEVERITES.forEach((s, i) => {
+    const n = alertes[i]?.['@odata.count'];
+    if (typeof n !== 'number') return;
+    alerteLue = true;
+    parGravite[s] = n;
+    totalAlertes += n;
+  });
+  if (alerteLue) out.alertes = { total: totalAlertes, parGravite };
+
+  TP_GRAPH.dernierePosture = out;
+  /* Aucun jeu n'a répondu : rien à afficher, et surtout pas une carte vide. */
+  const utiles = ['secureScore', 'exposition', 'baseline', 'identite', 'adoption', 'alertes'];
+  return utiles.some(k => out[k]) ? out : null;
+}
+
+/* Détail des refus et dernière charge utile, pour diagnostic en console. */
+function graphDumpPosture() { return TP_GRAPH.dernierePosture || null; }
+
 /* Interroge Graph pour un domaine. Retourne null si l'utilisateur n'est pas
    connecté : l'application doit rester entièrement fonctionnelle sans Graph,
    c'est un enrichissement, pas un prérequis. */
@@ -498,10 +675,15 @@ async function checkGraph(domain, tenantIdConnu) {
   const ctrl = new AbortController();
   stepControllers.graph = ctrl;
   try {
-    const tenant = await graphFindTenant(domain, ctrl.signal);
-    const mfa    = await checkMfa(tenant?.tenantId || tenantIdConnu, ctrl.signal);
-    if (!tenant && !mfa) return null;
-    return { tenant, mfa };
+    const tenant  = await graphFindTenant(domain, ctrl.signal);
+    const cible   = tenant?.tenantId || tenantIdConnu;
+    /* MFA et posture visent le même tenant et ne dépendent pas l'un de l'autre. */
+    const [mfa, posture] = await Promise.all([
+      checkMfa(cible, ctrl.signal),
+      checkPosture(cible, ctrl.signal)
+    ]);
+    if (!tenant && !mfa && !posture) return null;
+    return { tenant, mfa, posture };
   } catch {
     return null;
   } finally {
@@ -533,7 +715,7 @@ function syncGraphUI() {
   cta.hidden   = !TP_GRAPH.clientId;
   cta.title    = TP_GRAPH.lastError
     ? 'Microsoft Graph — ' + TP_GRAPH.lastError
-    : "Se connecter à Microsoft Graph pour enrichir l'analyse (nom du tenant, couverture MFA)";
+    : "Se connecter à Microsoft Graph pour enrichir l'analyse (nom du tenant, Secure Score, alertes et posture Lighthouse)";
 }
 
 /* Appelé au chargement, avant toute lecture du fragment par le reste de
