@@ -1009,6 +1009,31 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
    affiche des chiffres justes que personne ne sait interpréter. */
 .panel-section-note{font-size:var(--text-xs);line-height:1.5;color:var(--soft);margin:-2px 2px 8px;max-width:64ch}
 
+/* Metrique compacte du panneau Posture. Les encarts .d-row occupaient la
+   hauteur d'un bloc borde pour afficher deux caracteres, plus un bouton Copier
+   inutile sur un chiffre. Ici : intitule et valeur sur une ligne, barre de
+   proportion dessous, aucune bordure. Trois fois plus de metriques a l'ecran
+   pour la meme hauteur. */
+.metric{margin:0 0 10px}
+.metric-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.metric-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.metric-val{font-size:13.5px;font-weight:700;color:var(--text);white-space:nowrap;flex-shrink:0}
+.metric-sec{font-size:10.5px;font-weight:500;color:var(--muted)}
+.metric-bar{height:4px;border-radius:999px;background:rgba(128,128,128,.2);margin-top:5px;overflow:hidden}
+.metric-bar span{display:block;height:100%;border-radius:999px;background:var(--blue);transition:width .7s var(--ease-out)}
+.metric.ok  .metric-bar span{background:#16a34a}
+.metric.warn .metric-bar span{background:#d97706}
+.metric.bad .metric-bar span{background:#dc2626}
+.metric.ok  .metric-val{color:#15803d}
+.metric.warn .metric-val{color:#b45309}
+.metric.bad .metric-val{color:#dc2626}
+[data-theme="dark"] .metric.ok  .metric-val{color:#86efac}
+[data-theme="dark"] .metric.warn .metric-val{color:#fcd34d}
+[data-theme="dark"] .metric.bad .metric-val{color:#fca5a5}
+/* Ligne textuelle : pas de barre, valeur moins appuyee que pour un chiffre. */
+.metric.texte{margin-bottom:7px}
+.metric.texte .metric-val{font-size:12px;font-weight:600;white-space:normal;text-align:right}
+
 /* Barre d'action en tête du panneau Posture. */
 .panel-report-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 /* Variante de bas de panneau : on lit, puis on agit. */

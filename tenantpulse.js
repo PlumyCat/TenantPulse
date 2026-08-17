@@ -5198,6 +5198,54 @@ function addLienLighthouse(b, libelle, chemin) {
   b.appendChild(a);
 }
 
+/* Metrique compacte : intitule, valeur, et une barre dont le remplissage donne
+   la proportion. Remplace addRow() dans le panneau Posture, ou chaque encart
+   occupait la hauteur d'un bloc pour afficher deux ou trois caracteres, avec un
+   bouton Copier dont personne n'a besoin sur un chiffre : le rapport de sante
+   en bas de panneau couvre deja le besoin de recopie.
+
+   `pourcent` a null retire la barre : certains chiffres n'ont pas de
+   denominateur naturel (un nombre de correctifs recommandes, par exemple) et
+   une barre arbitraire y mentirait sur l'echelle. */
+function addMetrique(b, label, principal, secondaire, pourcent, ton) {
+  const m = document.createElement('div');
+  m.className = 'metric' + (ton ? ' ' + ton : '');
+  const head = document.createElement('div'); head.className = 'metric-head';
+  const l = document.createElement('div'); l.className = 'metric-lbl'; l.textContent = label;
+  const v = document.createElement('div'); v.className = 'metric-val'; v.textContent = principal;
+  if (secondaire) {
+    const sec = document.createElement('span'); sec.className = 'metric-sec'; sec.textContent = ' ' + secondaire;
+    v.appendChild(sec);
+  }
+  head.appendChild(l); head.appendChild(v); m.appendChild(head);
+  if (typeof pourcent === 'number' && isFinite(pourcent)) {
+    const bar = document.createElement('div'); bar.className = 'metric-bar';
+    const f = document.createElement('span');
+    /* Plancher a 2 % : une valeur non nulle mais minuscule doit rester visible,
+       sinon l'oeil la confond avec un zero. */
+    f.style.width = Math.max(pourcent > 0 ? 2 : 0, Math.min(100, Math.round(pourcent))) + '%';
+    bar.appendChild(f); m.appendChild(bar);
+  }
+  b.appendChild(m);
+}
+
+/* Ligne d'information textuelle, sans barre ni bouton. */
+function addInfoCompacte(b, label, valeur) {
+  if (!valeur) return;
+  const m = document.createElement('div'); m.className = 'metric texte';
+  const head = document.createElement('div'); head.className = 'metric-head';
+  const l = document.createElement('div'); l.className = 'metric-lbl'; l.textContent = label;
+  const v = document.createElement('div'); v.className = 'metric-val'; v.textContent = valeur;
+  head.appendChild(l); head.appendChild(v); m.appendChild(head);
+  b.appendChild(m);
+}
+
+/* Proportion sure : evite les divisions par zero et les valeurs hors bornes. */
+function part(n, total) {
+  if (typeof n !== 'number' || typeof total !== 'number' || total <= 0) return null;
+  return Math.max(0, Math.min(100, (n / total) * 100));
+}
+
 /* Phrase d'explication sous un titre de section. Les intitulés de Lighthouse
    sont du jargon Microsoft traduit à la machine : « base de référence »,
    « score d'exposition », « flexibilité » ne disent rien à qui n'a pas la
@@ -5212,50 +5260,48 @@ function addSectionNote(b, texte) {
 
 function buildPosturePanel(p, mfa) {
   return b => {
-    /* Seule route Lighthouse certaine, et la plus utile : la fiche client porte
-       les onglets Presentation, Elements d'action, Plan de deploiement et
-       Utilisateurs, donc tout le detail est a un clic de la. */
     addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
 
     if (p.secureScore) {
       const s = p.secureScore;
       addSectionTitle(b, 'Niveau de sécurité du tenant');
-      addSectionNote(b, "Note Microsoft sur la configuration du tenant. Plus haut, mieux durci. Moyenne PME : 45 %.");
-      addRow(b, 'Score', s.courant + ' sur ' + s.max + '  (' + s.pourcent + ' %)',
-             s.pourcent >= 70 ? 'hi-ms' : s.pourcent >= 45 ? '' : 'hi-warn');
-      addRow(b, 'Chiffres arrêtés au', posturDate(s.arreteLe));
+      addSectionNote(b, "Note Microsoft sur la configuration du tenant. Plus haut, mieux durci. Moyenne PME : 45 %."
+        + (posturDate(s.arreteLe) ? ' Arrêté au ' + posturDate(s.arreteLe) + '.' : ''));
+      addMetrique(b, 'Secure Score', s.pourcent + ' %',
+                  Math.round(s.courant) + ' / ' + Math.round(s.max), s.pourcent,
+                  s.pourcent >= 70 ? 'ok' : s.pourcent >= 45 ? 'warn' : 'bad');
     }
 
-    /* La couverture MFA reste servie par checkMfa() : elle vient du même
-       Lighthouse mais dépend de la portée Reports.Read.All, accordée ou non
-       indépendamment du reste. */
     if (mfa && !mfa.erreur && mfa.total) {
       addSectionTitle(b, 'Authentification multifacteur');
-      addSectionNote(b, "Comptes ayant enregistré une méthode forte. Sans MFA, le mot de passe protège seul.");
-      addRow(b, 'Comptes protégés', mfa.couverts + ' sur ' + mfa.total + '  (' + mfa.pourcentAvecMfa + ' %)',
-             mfa.pourcentAvecMfa >= 90 ? 'hi-ms' : 'hi-warn');
-      if (mfa.sansMfa) addRow(b, 'Comptes sans MFA', String(mfa.sansMfa), 'hi-warn');
-      addRow(b, 'Chiffres arrêtés au', posturDate(mfa.majLe));
-      addLienLighthouse(b, 'Détail des méthodes d\'authentification dans Lighthouse', 'MultiFactorAuthentication.ReactView');
+      addSectionNote(b, "Comptes ayant enregistré une méthode forte."
+        + (posturDate(mfa.majLe) ? ' Arrêté au ' + posturDate(mfa.majLe) + '.' : ''));
+      addMetrique(b, 'Comptes protégés', mfa.pourcentAvecMfa + ' %',
+                  mfa.couverts + ' / ' + mfa.total, mfa.pourcentAvecMfa,
+                  mfa.pourcentAvecMfa >= 90 ? 'ok' : 'warn');
+      if (mfa.sansMfa) addMetrique(b, 'Sans MFA', String(mfa.sansMfa), 'comptes', part(mfa.sansMfa, mfa.total), 'bad');
     }
 
     if (p.appareils) {
       const a = p.appareils;
       addSectionTitle(b, 'Conformité des appareils');
-      addSectionNote(b, "Appareils Intune ne respectant pas la politique : chiffrement, version d'OS, antivirus, code d'accès.");
-      addRow(b, 'Appareils non conformes', String(a.nonConformes), a.nonConformes ? 'hi-warn' : 'hi-ms');
-      addRow(b, 'Appareils conformes', String(a.conformes));
-      addRow(b, 'Appareils gérés au total', String(a.total) + (a.tronque ? "  (décompte limité aux 999 premiers)" : ''));
-      if (a.indetermines) addRow(b, 'Statut indéterminé', String(a.indetermines));
-      addLienLighthouse(b, 'Appareils du client dans Lighthouse', null);
+      addSectionNote(b, "Appareils Intune hors politique : chiffrement, OS, antivirus, code d'accès.");
+      addMetrique(b, 'Non conformes', String(a.nonConformes), 'sur ' + a.total,
+                  part(a.nonConformes, a.total), a.nonConformes ? 'bad' : 'ok');
+      addMetrique(b, 'Conformes', String(a.conformes), 'sur ' + a.total, part(a.conformes, a.total), 'ok');
+      if (a.indetermines) addMetrique(b, 'Statut indéterminé', String(a.indetermines), null, part(a.indetermines, a.total), null);
     }
 
     if (p.alertes) {
       addSectionTitle(b, 'Alertes ouvertes');
-      addSectionNote(b, "Non encore traitées.");
-      addRow(b, 'Total', String(p.alertes.total), p.alertes.parGravite.high ? 'hi-warn' : '');
+      addSectionNote(b, 'Non encore traitées.');
+      addMetrique(b, 'Total', String(p.alertes.total), null, null, p.alertes.parGravite.high ? 'bad' : null);
+      /* Les barres se lisent en proportion du total, pas en absolu : c'est la
+         repartition par gravite qui interesse, pas le volume brut. */
       Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
-        if (n) addRow(b, 'Gravité ' + (GRAVITE_LBL[g] || g).toLowerCase(), String(n), g === 'high' ? 'hi-warn' : '');
+        if (!n) return;
+        addMetrique(b, GRAVITE_LBL[g] || g, String(n), null, part(n, p.alertes.total),
+                    g === 'high' ? 'bad' : g === 'medium' ? 'warn' : null);
       });
       addLienLighthouse(b, 'Liste des alertes dans Lighthouse', 'ManagedTenantAlerts.ReactView');
     }
@@ -5264,54 +5310,57 @@ function buildPosturePanel(p, mfa) {
       const e = p.exposition;
       addSectionTitle(b, 'Vulnérabilités logicielles');
       addSectionNote(b, "Détectées par Defender, surtout des logiciels non à jour. Score d'exposition : plus bas, mieux c'est.");
-      if (e.critiques != null) addRow(b, 'Failles critiques', String(e.critiques), e.critiques ? 'hi-warn' : 'hi-ms');
-      if (e.elevees != null)   addRow(b, 'Failles élevées', String(e.elevees));
-      if (e.total != null)     addRow(b, 'Failles au total', String(e.total));
-      if (e.appareils != null) addRow(b, 'Appareils analysés', String(e.appareils) + (e.exposes != null ? ',  dont ' + e.exposes + ' exposé(s)' : ''), e.exposes ? 'hi-warn' : '');
-      if (e.recommandations != null) addRow(b, 'Correctifs recommandés', String(e.recommandations));
+      if (e.critiques != null) addMetrique(b, 'Failles critiques', String(e.critiques),
+                                           e.total ? 'sur ' + e.total : null, part(e.critiques, e.total), 'bad');
+      if (e.elevees != null)   addMetrique(b, 'Failles élevées', String(e.elevees),
+                                           e.total ? 'sur ' + e.total : null, part(e.elevees, e.total), 'warn');
+      if (e.appareils != null) addMetrique(b, 'Appareils exposés', String(e.exposes ?? 0), 'sur ' + e.appareils,
+                                           part(e.exposes, e.appareils), e.exposes ? 'bad' : 'ok');
+      if (e.recommandations != null) addMetrique(b, 'Correctifs recommandés', String(e.recommandations), null, null, null);
       if (e.score != null) {
-        const tend = e.derive == null ? ''
-          : (e.derive > 0 ? ',  en hausse de ' + e.derive + ' sur 30 jours' : ',  en baisse de ' + Math.abs(e.derive) + ' sur 30 jours');
-        addRow(b, "Score d'exposition", e.score + ' sur 100' + tend);
+        const tend = e.derive == null ? null
+          : (e.derive > 0 ? 'en hausse de ' + e.derive + ' sur 30 j' : 'en baisse de ' + Math.abs(e.derive) + ' sur 30 j');
+        addMetrique(b, "Score d'exposition", e.score + ' / 100', tend, e.score,
+                    e.score <= 30 ? 'ok' : e.score <= 60 ? 'warn' : 'bad');
       }
       addLienLighthouse(b, 'Vue Defender dans Lighthouse', 'MDE.ReactView');
     }
 
     if (p.baseline) {
       const bl = p.baseline;
+      const usagers = (bl.usagersIncomplets || 0) + (bl.usagersComplets || 0);
       addSectionTitle(b, 'Tâches de sécurisation Lighthouse');
       addSectionNote(b, "Durcissement suivi par Lighthouse. Une tâche en régression était conforme et ne l'est plus.");
-      if (bl.total) addRow(b, 'Tâches conformes', bl.conformes + ' sur ' + bl.total, bl.termine ? 'hi-ms' : 'hi-warn');
-      if (bl.incompletes) addRow(b, 'Tâches jamais mises en place', String(bl.incompletes), 'hi-warn');
-      if (bl.regressees)  addRow(b, 'Tâches en régression', String(bl.regressees), 'hi-warn');
-      if (bl.usagersIncomplets != null) addRow(b, 'Utilisateurs concernés par une tâche en attente', String(bl.usagersIncomplets));
-      if (bl.sansLicence) addRow(b, 'Utilisateurs sans licence', String(bl.sansLicence));
+      if (bl.total) addMetrique(b, 'Conformes', bl.conformes + ' / ' + bl.total, null,
+                                part(bl.conformes, bl.total), bl.termine ? 'ok' : 'warn');
+      if (bl.incompletes) addMetrique(b, 'Jamais mises en place', String(bl.incompletes), null, part(bl.incompletes, bl.total), 'warn');
+      if (bl.regressees)  addMetrique(b, 'En régression', String(bl.regressees), null, part(bl.regressees, bl.total), 'bad');
+      if (bl.usagersIncomplets != null) addMetrique(b, 'Utilisateurs avec tâche en attente', String(bl.usagersIncomplets),
+                                                    usagers ? 'sur ' + usagers : null, part(bl.usagersIncomplets, usagers), 'warn');
+      if (bl.sansLicence) addMetrique(b, 'Utilisateurs sans licence', String(bl.sansLicence),
+                                      usagers ? 'sur ' + usagers : null, part(bl.sansLicence, usagers), null);
       addLienLighthouse(b, 'Plan de déploiement dans Lighthouse', null);
     }
 
     if (p.adoption) {
       const a = p.adoption;
       addSectionTitle(b, 'Usage des services Microsoft 365');
-      addSectionNote(b, "Utilisation des services, pas sécurité.");
-      [['Communication (Teams, Outlook)', a.communication],
-       ['Collaboration sur documents',    a.collaboration],
-       ['Travail hors des heures de bureau', a.flexibilite],
-       ['Santé des applications Office',  a.santeApps],
-       ['Qualité de la connexion réseau', a.reseau],
-       ['Travail en équipe',              a.teamwork]]
-        .forEach(([lbl, v]) => { if (v != null) addRow(b, lbl, v + ' %'); });
-      addRow(b, 'Chiffres arrêtés au', posturDate(a.arreteLe));
+      addSectionNote(b, 'Utilisation des services, pas sécurité.'
+        + (posturDate(a.arreteLe) ? ' Arrêté au ' + posturDate(a.arreteLe) + '.' : ''));
+      [['Communication', a.communication], ['Collaboration', a.collaboration],
+       ['Hors heures de bureau', a.flexibilite], ['Santé des applications', a.santeApps],
+       ['Réseau', a.reseau], ['Travail en équipe', a.teamwork]]
+        .forEach(([lbl, v]) => { if (v != null) addMetrique(b, lbl, v + ' %', null, v, v >= 70 ? 'ok' : v >= 45 ? 'warn' : 'bad'); });
     }
 
     if (p.identite) {
       const i = p.identite;
       const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
-      if (lieu || i.segment || i.industrie) {
+      if (lieu || i.segment || i.industrie || i.vertical) {
         addSectionTitle(b, 'Fiche du client');
-        addSectionNote(b, "Informations déclaratives du tenant.");
-        addRow(b, 'Localisation', lieu);
-        addRow(b, 'Segment commercial', i.segment);
-        addRow(b, "Secteur d'activité", i.industrie || i.vertical);
+        addInfoCompacte(b, 'Localisation', lieu);
+        addInfoCompacte(b, 'Segment', i.segment);
+        addInfoCompacte(b, 'Secteur', i.industrie || i.vertical);
       }
     }
 
@@ -5325,7 +5374,7 @@ function buildPosturePanel(p, mfa) {
     if (aExpliquer.length) {
       addSectionTitle(b, 'Données non disponibles');
       addSectionNote(b, "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent.");
-      aExpliquer.forEach(k => addRow(b, table[k].quoi, 'Nécessite ' + table[k].portee));
+      aExpliquer.forEach(k => addInfoCompacte(b, table[k].quoi, table[k].portee));
     }
 
     /* Le rapport ferme le panneau : on lit, puis on agit. */
