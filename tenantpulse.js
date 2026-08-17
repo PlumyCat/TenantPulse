@@ -5080,6 +5080,60 @@ function postureBadge(p) {
   return 'Lighthouse';
 }
 
+/* ── Liens vers Microsoft 365 Lighthouse ─────────────────────────────────────
+   Le portail est une application Azure Portal : ses routes ont la forme
+   #view/<extension>/<Vue>.ReactView/<cle>/<valeur>/... et l'extension de
+   Lighthouse est `Microsoft_Intune_MTM`, relevee dans sa configuration.
+
+   Une seule route a ete observee telle quelle, donc une seule est certaine :
+   la fiche client (CustomerInsights.ReactView), qui porte les onglets
+   Presentation, Elements d'action, Plan de deploiement et Utilisateurs. C'est
+   elle qu'on utilise partout ou un doute existe.
+
+   Les noms des vues thematiques viennent du code du portail, qui associe
+   explicitement une vue a chaque jeu de donnees. Leurs parametres, eux, n'ont
+   pas pu etre observes : ces liens ouvrent donc la vue sans la prefiltrer sur
+   le client. Un echec est doux, on retombe sur l'accueil Lighthouse, jamais
+   sur une erreur.                                                             */
+const LIGHTHOUSE_HOTE = 'lighthouse.microsoft.com';
+const LIGHTHOUSE_VUE  = 'https://lighthouse.microsoft.com/#view/Microsoft_Intune_MTM/';
+
+/* L'hote est litteral juste au-dessus, mais la verification coute une ligne et
+   survivra a une modification distraite du gabarit. Volontairement independant
+   de safeRedirectHref et d'ALLOWED_REDIRECT_HOSTS : cette liste pilote les
+   boutons de redirection du hero, elle est dupliquee dans l'extension, et
+   l'etendre pour un lien de panneau imposerait une synchronisation sans
+   rapport avec le besoin. */
+function lighthouseHref(chemin) {
+  let u; try { u = new URL(LIGHTHOUSE_VUE + chemin); } catch { return null; }
+  if (u.protocol !== 'https:' || u.hostname !== LIGHTHOUSE_HOTE) return null;
+  return u.href;
+}
+
+/* Fiche du client dans Lighthouse. Le GUID suffit ; le nom et le domaine ne
+   servent qu'a l'affichage du fil d'Ariane, d'ou leur caractere facultatif. */
+function lighthouseFicheClient() {
+  const id = currentState.ms?.tenantId;
+  if (!id) return null;
+  const nom = currentState.graph?.tenant?.displayName || '';
+  const dom = currentState.graph?.tenant?.defaultDomainName || currentState.domain || '';
+  let c = 'CustomerInsights.ReactView';
+  if (nom) c += '/customerName/' + encodeURIComponent(nom);
+  if (dom) c += '/tenantPrincipalName/' + encodeURIComponent(dom);
+  c += '/customerId/' + encodeURIComponent(id);
+  return lighthouseHref(c);
+}
+
+function addLienLighthouse(b, libelle, chemin) {
+  const href = chemin === null ? lighthouseFicheClient() : lighthouseHref(chemin);
+  if (!href) return;
+  const a = document.createElement('a');
+  a.className = 'ext-link panel-lh-link';
+  a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+  a.textContent = '→ ' + libelle;
+  b.appendChild(a);
+}
+
 /* Phrase d'explication sous un titre de section. Les intitulés de Lighthouse
    sont du jargon Microsoft traduit à la machine : « base de référence »,
    « score d'exposition », « flexibilité » ne disent rien à qui n'a pas la
@@ -5096,6 +5150,10 @@ function buildPosturePanel(p, mfa) {
   return b => {
     /* Le rapport en premier : c'est l'action, le reste est de la consultation. */
     b.appendChild(buildBoutonRapport(p, mfa));
+    /* Seule route Lighthouse certaine, et la plus utile : la fiche client porte
+       les onglets Presentation, Elements d'action, Plan de deploiement et
+       Utilisateurs, donc tout le detail est a un clic de la. */
+    addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
 
     if (p.secureScore) {
       const s = p.secureScore;
@@ -5116,6 +5174,7 @@ function buildPosturePanel(p, mfa) {
              mfa.pourcentAvecMfa >= 90 ? 'hi-ms' : 'hi-warn');
       if (mfa.sansMfa) addRow(b, 'Comptes sans MFA', String(mfa.sansMfa), 'hi-warn');
       addRow(b, 'Chiffres arrêtés au', posturDate(mfa.majLe));
+      addLienLighthouse(b, 'Détail des méthodes d\'authentification dans Lighthouse', 'MultiFactorAuthentication.ReactView');
     }
 
     if (p.appareils) {
@@ -5126,6 +5185,7 @@ function buildPosturePanel(p, mfa) {
       addRow(b, 'Appareils conformes', String(a.conformes));
       addRow(b, 'Appareils gérés au total', String(a.total) + (a.tronque ? "  (décompte limité aux 999 premiers)" : ''));
       if (a.indetermines) addRow(b, 'Statut indéterminé', String(a.indetermines));
+      addLienLighthouse(b, 'Appareils du client dans Lighthouse', null);
     }
 
     if (p.alertes) {
@@ -5135,6 +5195,7 @@ function buildPosturePanel(p, mfa) {
       Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
         if (n) addRow(b, 'Gravité ' + (GRAVITE_LBL[g] || g).toLowerCase(), String(n), g === 'high' ? 'hi-warn' : '');
       });
+      addLienLighthouse(b, 'Liste des alertes dans Lighthouse', 'ManagedTenantAlerts.ReactView');
     }
 
     if (p.exposition) {
@@ -5151,6 +5212,7 @@ function buildPosturePanel(p, mfa) {
           : (e.derive > 0 ? ',  en hausse de ' + e.derive + ' sur 30 jours' : ',  en baisse de ' + Math.abs(e.derive) + ' sur 30 jours');
         addRow(b, "Score d'exposition", e.score + ' sur 100' + tend);
       }
+      addLienLighthouse(b, 'Vue Defender dans Lighthouse', 'MDE.ReactView');
     }
 
     if (p.baseline) {
@@ -5162,6 +5224,7 @@ function buildPosturePanel(p, mfa) {
       if (bl.regressees)  addRow(b, 'Tâches en régression', String(bl.regressees), 'hi-warn');
       if (bl.usagersIncomplets != null) addRow(b, 'Utilisateurs concernés par une tâche en attente', String(bl.usagersIncomplets));
       if (bl.sansLicence) addRow(b, 'Utilisateurs sans licence', String(bl.sansLicence));
+      addLienLighthouse(b, 'Plan de déploiement dans Lighthouse', null);
     }
 
     if (p.adoption) {
@@ -5289,6 +5352,9 @@ function rapportSanteTenant(p, mfa) {
     L.push('Absence de chiffre ne veut pas dire zero.');
     L.push('');
   }
+
+  const lien = lighthouseFicheClient();
+  if (lien) { L.push('Fiche du client dans Lighthouse :'); L.push(lien); L.push(''); }
 
   L.push(sep);
   L.push('Source : Microsoft 365 Lighthouse. Chiffres recalcules une fois par jour par Microsoft.');

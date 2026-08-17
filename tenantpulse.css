@@ -847,6 +847,38 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
   background:linear-gradient(180deg, rgba(255,255,255,.05) 0%, rgba(0,0,0,.04) 52%, rgba(0,0,0,.16) 100%);
   border-radius:inherit;
 }
+/* Mode jour. Le contenu du hero reste en texte blanc : le basculer en texte
+   sombre imposerait de reprendre une quarantaine de regles enfants (boutons,
+   pastilles, tags, raccourcis, tuiles) pour un gain nul. On allege donc la
+   surface elle-meme, qui passe de l'anthracite a un indigo ardoise, avec une
+   ombre plus douce et coloree : le bloc cesse d'etre un trou noir au milieu
+   d'une page claire, sans rien perdre en lisibilite. */
+[data-theme="light"] .tenant-hero,
+html:not([data-theme="dark"]) .tenant-hero{
+  background:#332F49;
+  background-image:
+    radial-gradient(ellipse 95% 95% at 10% 0%, rgba(103,92,214,.26), transparent 62%),
+    radial-gradient(ellipse 105% 115% at 100% 62%, rgba(120,128,168,.22), transparent 64%),
+    radial-gradient(ellipse 130% 62% at 50% -12%, rgba(255,255,255,.07), transparent 72%),
+    linear-gradient(180deg,#403C58 0%, #302D45 100%);
+  box-shadow:0 10px 26px rgba(45,42,78,.22), inset 0 1px 0 rgba(255,255,255,.14);
+  border-color:rgba(255,255,255,.14);
+}
+[data-theme="light"] .tenant-hero::before,
+html:not([data-theme="dark"]) .tenant-hero::before{
+  background:linear-gradient(180deg, rgba(255,255,255,.05) 0%, rgba(0,0,0,.02) 52%, rgba(0,0,0,.12) 100%);
+}
+/* La surface etant plus claire qu'en mode nuit, les textes secondaires en blanc
+   translucide y perdaient du contraste. Leurs opacites sont relevees ici, et
+   nulle part ailleurs, pour compenser exactement cet ecart. */
+[data-theme="light"] .hero-label,
+html:not([data-theme="dark"]) .hero-label{color:rgba(255,255,255,.82)}
+[data-theme="light"] .hero-domain,
+html:not([data-theme="dark"]) .hero-domain{color:rgba(255,255,255,.82)}
+[data-theme="light"] .hero-domain-default,
+html:not([data-theme="dark"]) .hero-domain-default{color:rgba(255,255,255,.72)}
+[data-theme="light"] .hero-none,
+html:not([data-theme="dark"]) .hero-none{color:rgba(255,255,255,.82)}
 .tenant-hero::after{content:'';position:absolute;right:24px;top:20px;width:64px;height:64px;opacity:.1;pointer-events:none;background:url('assets/MicrosoftN.png') center/contain no-repeat;filter:brightness(0) invert(1)}
 .tenant-hero > *{position:relative;z-index:1}
 .hero-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.65);margin-bottom:8px;display:flex;align-items:center;gap:6px}
@@ -868,7 +900,7 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
   box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 2px 6px rgba(0,0,0,.25)
 }
 .hero-copy-btn.copied{background:rgba(22,163,74,.3);border-color:rgba(134,239,172,.6);color:#86efac}
-.hero-domain{font-size:var(--text-sm);font-weight:500;color:rgba(255,255,255,.55);letter-spacing:.02em}
+.hero-domain{font-size:var(--text-sm);font-weight:500;color:rgba(255,255,255,.66);letter-spacing:.02em}
 /* Nom du tenant, renvoyé par Microsoft Graph. Placé au-dessus du GUID parce que
    c'est le seul identifiant lisible par un humain : « TISSEO SERVICES » situe le
    client immédiatement, là où le GUID demande un aller-retour mental. Absent
@@ -876,7 +908,7 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .hero-tenant-name{font-size:1.35rem;font-weight:700;color:#fff;letter-spacing:.01em;margin-bottom:6px;text-shadow:0 1px 6px rgba(0,0,0,.28);word-break:break-word}
 /* Domaine par défaut du tenant, affiché seulement s'il diffère du domaine
    analysé : le répéter à l'identique n'apprendrait rien. */
-.hero-domain-default{color:rgba(255,255,255,.4)}
+.hero-domain-default{color:rgba(255,255,255,.52)}
 .hero-none{font-size:var(--text-base);font-weight:500;color:rgba(255,255,255,.6);font-style:italic;margin-bottom:6px}
 .hero-admin-toggle{
   position:relative;display:inline-flex;align-items:center;justify-content:center;
@@ -1064,6 +1096,8 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .hc-desc{font-size:var(--text-xs);font-weight:400;color:var(--soft);line-height:1.5;word-break:break-all}
 .ext-link{display:flex;align-items:center;gap:7px;padding:9px 11px;background:var(--row);border:1.5px solid #c7d2fe;border-radius:var(--r-md);font-size:var(--text-xs);font-weight:500;color:var(--blue);text-decoration:none;transition:background .15s}
 .ext-link:hover{background:#eef2ff}
+/* Plusieurs liens Lighthouse peuvent se suivre dans le panneau Posture. */
+.panel-lh-link{margin-top:7px}
 [data-theme="dark"] .ext-link{border-color:#3a3580;color:#a5b4fc}
 [data-theme="dark"] .ext-link:hover{background:#2a2860}
 .panel-section-title{font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-top:4px;margin-bottom:-2px}
