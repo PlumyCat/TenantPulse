@@ -751,8 +751,8 @@ function syncGraphUI() {
   if (TP_GRAPH.connected) {
     label.textContent = 'Graph connecté';
     badge.title = TP_GRAPH.account?.username
-      ? 'Microsoft Graph — ' + TP_GRAPH.account.username + ' (cliquer pour se déconnecter)'
-      : 'Microsoft Graph connecté (cliquer pour se déconnecter)';
+      ? 'Microsoft Graph : ' + TP_GRAPH.account.username + ' (cliquer pour changer de compte ou se déconnecter)'
+      : 'Microsoft Graph connecté (cliquer pour changer de compte ou se déconnecter)';
     badge.hidden = false; cta.hidden = true;
     return;
   }
@@ -760,7 +760,7 @@ function syncGraphUI() {
   badge.hidden = true;
   cta.hidden   = !TP_GRAPH.clientId;
   cta.title    = TP_GRAPH.lastError
-    ? 'Microsoft Graph — ' + TP_GRAPH.lastError
+    ? 'Microsoft Graph : ' + TP_GRAPH.lastError
     : "Se connecter à Microsoft Graph pour enrichir l'analyse (nom du tenant, Secure Score, alertes et posture Lighthouse)";
 }
 

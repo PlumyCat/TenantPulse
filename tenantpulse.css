@@ -559,6 +559,11 @@ html:not([data-theme="dark"]) .btn-trigger-full:hover img,
 .hero-shortcut-menu{min-width:200px;max-width:250px;max-height:60vh;overflow-y:auto;background:linear-gradient(180deg, rgba(46,44,42,.5) 0%, rgba(34,32,30,.5) 100%);-webkit-backdrop-filter:blur(40px) saturate(200%);backdrop-filter:blur(40px) saturate(200%);border:1px solid transparent;border-radius:var(--r-lg);box-shadow:0 0 0 1px rgba(255,255,255,.14),0 1px 0 rgba(255,255,255,.12) inset,0 12px 40px rgba(0,0,0,.4);padding:7px;display:flex;flex-direction:column;gap:2px;transform-origin:top left;animation:menuIn .2s cubic-bezier(.16,1,.3,1)}
 [data-theme="light"] .hero-shortcut-menu,html:not([data-theme="dark"]) .hero-shortcut-menu{background:linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(248,248,250,.55) 100%);box-shadow:0 0 0 1px rgba(0,0,0,.08),0 1px 0 rgba(255,255,255,.7) inset,0 12px 40px rgba(0,0,0,.15)}
 .hero-shortcut-menu-title{font-size:var(--text-xs);font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:4px 8px 6px}
+/* Compte Graph actuellement connecte, en tete du menu. Coupe si trop long, mais
+   jamais tronque au milieu : savoir lequel des deux comptes est actif est
+   exactement l'information que l'utilisateur vient chercher ici. */
+.graph-menu-account{font-size:var(--text-xs);color:var(--text);font-weight:600;padding:0 8px 8px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.12);word-break:break-all;line-height:1.4}
+[data-theme="light"] .graph-menu-account,html:not([data-theme="dark"]) .graph-menu-account{border-bottom-color:rgba(0,0,0,.1)}
 .hero-shortcut-opt{text-align:left;text-decoration:none;background:transparent;border:none;border-radius:var(--r-sm);padding:8px 10px;font-family:var(--font);font-size:var(--text-sm);color:var(--text);cursor:pointer;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hero-shortcut-opt:hover{background:rgba(255,255,255,.08)}
 [data-theme="light"] .hero-shortcut-opt:hover,html:not([data-theme="dark"]) .hero-shortcut-opt:hover{background:rgba(0,0,0,.04)}
@@ -809,37 +814,37 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .empty-state-title{font-size:var(--text-lg);font-weight:500;color:var(--text)}
 .empty-state-sub{font-size:var(--text-sm);font-weight:400;color:var(--soft)}
 /* ───── Hero "Aurora" — couleurs du logo de l'organisation (jaune/orange/bleu/violet) ───── */
+/* Hero. Glassmorphisme conserve (voile, liseret interieur, bordure claire), mais
+   palette ramenee a une seule teinte : l'indigo de la marque (--blue #4B3FBE) et
+   un contre-halo froid tres desature. L'ancienne version empilait sept degrades
+   jaune, orange, rouge et bleu ; c'etait la zone la plus criarde de l'ecran, pour
+   un bloc dont le role est de faire lire un GUID et un nom de client. */
 .tenant-hero{
-  background:#1F1C26;
+  background:#1B1A22;
   background-image:
-    /* Jaune (bas-gauche) */
-    radial-gradient(ellipse 110% 110% at 5% 100%, rgba(255,180,55,.7), transparent 60%),
-    radial-gradient(ellipse 80% 80% at 0% 85%, rgba(248,179,61,.55), transparent 65%),
-    /* Orange/rouge (haut centre-gauche) */
-    radial-gradient(ellipse 95% 85% at 35% 0%, rgba(230,75,45,.72), transparent 60%),
-    radial-gradient(ellipse 70% 70% at 50% 5%, rgba(255,90,50,.52), transparent 65%),
-    /* Bleu/indigo (droite) */
-    radial-gradient(ellipse 110% 120% at 100% 50%, rgba(95,100,200,.7), transparent 60%),
-    radial-gradient(ellipse 80% 80% at 100% 80%, rgba(80,90,180,.55), transparent 65%),
-    /* Bleu plus clair (centre-droit pour profondeur) */
-    radial-gradient(ellipse 60% 60% at 70% 35%, rgba(80,150,255,.35), transparent 70%),
-    linear-gradient(180deg, #2A2530 0%, #1F1C26 100%);
+    /* Halo indigo, haut-gauche : donne la profondeur sans saturer */
+    radial-gradient(ellipse 95% 95% at 10% 0%, rgba(75,63,190,.34), transparent 62%),
+    /* Contre-halo froid, droite : evite le degrade a sens unique */
+    radial-gradient(ellipse 105% 115% at 100% 62%, rgba(86,94,128,.26), transparent 64%),
+    /* Voile clair au sommet : c'est lui qui donne l'effet verre */
+    radial-gradient(ellipse 130% 62% at 50% -12%, rgba(255,255,255,.07), transparent 72%),
+    linear-gradient(180deg,#262430 0%, #1A1922 100%);
   border-radius:var(--r-xl);
   padding:24px 28px 20px;
   position:relative;
   overflow:hidden;
-  box-shadow:0 12px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
+  box-shadow:0 12px 32px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.09);
   cursor:default;
   flex-shrink:0;
-  border:1px solid rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.09);
 }
-/* Voile vitreux — assombrissement subtil pour densité */
+/* Voile vitreux : assombrissement progressif vers le bas, pour la densite */
 .tenant-hero::before{
   content:'';
   position:absolute;
   inset:0;
   pointer-events:none;
-  background:linear-gradient(180deg, rgba(255,255,255,.04) 0%, rgba(0,0,0,.05) 50%, rgba(0,0,0,.15) 100%);
+  background:linear-gradient(180deg, rgba(255,255,255,.05) 0%, rgba(0,0,0,.04) 52%, rgba(0,0,0,.16) 100%);
   border-radius:inherit;
 }
 .tenant-hero::after{content:'';position:absolute;right:24px;top:20px;width:64px;height:64px;opacity:.1;pointer-events:none;background:url('assets/MicrosoftN.png') center/contain no-repeat;filter:brightness(0) invert(1)}
@@ -891,10 +896,6 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
   opacity:0;transform:scale(.4);transition:opacity .15s,transform .15s
 }
 .hero-admin-toggle.is-admin::after{opacity:1;transform:scale(1)}
-.confidence-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:var(--r-pill);padding:3px 10px;font-size:var(--text-xs);font-weight:500;color:rgba(255,255,255,.9);margin-left:8px}
-.confidence-badge.high{background:rgba(34,197,94,.2);border-color:rgba(34,197,94,.4)}
-.confidence-badge.medium{background:rgba(251,191,36,.2);border-color:rgba(251,191,36,.4)}
-.confidence-badge.low{background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.4)}
 /* Phrase d'explication sous un titre de section du panneau. Les intitulés
    Lighthouse sont du jargon traduit à la machine : sans cette ligne, l'écran
    affiche des chiffres justes que personne ne sait interpréter. */
@@ -908,14 +909,11 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .panel-report-hint{font-size:var(--text-xs);color:var(--soft)}
 
 /* Secure Score, à côté de l'indice de confiance. Même gabarit que
-   .confidence-badge : c'est le second chiffre de synthèse du hero, il doit se
-   lire comme le premier et non comme un élément d'une autre famille. */
+   le hero. Gabarit volontairement discret : c'est un indicateur, pas un titre. */
 .hero-score-pill{display:inline-flex;align-items:center;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:var(--r-pill);padding:3px 10px;font-size:var(--text-xs);font-weight:500;color:rgba(255,255,255,.9);margin-left:8px;white-space:nowrap;cursor:default}
 .hero-score-pill.good{background:rgba(34,197,94,.2);border-color:rgba(34,197,94,.4)}
 .hero-score-pill.mid{background:rgba(251,191,36,.2);border-color:rgba(251,191,36,.4)}
 .hero-score-pill.bad{background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.4)}
-.conf-info-btn{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.5);background:transparent;color:rgba(255,255,255,.75);font-size:9px;font-weight:700;font-family:var(--font);cursor:pointer;flex-shrink:0;line-height:1;padding:0;transition:background .15s,border-color .15s;user-select:none;margin-left:2px}
-.conf-info-btn:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.9)}
 /* ── (i) remplacés par l'asset assets/information.png : neutralise l'ancien cercle CSS, dimensionne l'image ── */
 .sb-help-i,.profile-item-info,.conf-info-btn,.hero-partner-btn-ribbon-info,.hero-partner-btn-info{border:none;background:transparent;box-shadow:none;font-size:0;padding:0}
 .sb-help-i:hover,.profile-item-info:hover,.profile-item-info:focus,.conf-info-btn:hover,.hero-partner-btn-ribbon-info:hover,.hero-partner-btn-info:hover{background:transparent;border-color:transparent;box-shadow:none}
@@ -927,13 +925,6 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 /* Tooltip confiance — fond aurora sombre intentionnel dans les deux thèmes
    (le bouton "i" est dans .tenant-hero dont le fond est toujours sombre).
    Les textes restent blancs dans les deux thèmes car le fond est fixe. */
-.conf-tooltip{position:fixed;z-index:900;background:#1a1a2e;border:1.5px solid rgba(255,255,255,.18);border-radius:var(--r-lg);padding:12px 14px;width:240px;box-shadow:0 8px 28px rgba(0,0,0,.45);display:none;pointer-events:none}
-.conf-tooltip.visible{display:block;animation:dropIn .15s ease}
-.conf-tooltip-title{font-size:var(--text-xs);font-weight:700;color:#fff;margin-bottom:8px;letter-spacing:.03em}
-.conf-tooltip-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:var(--text-xs);font-weight:500}
-.conf-tooltip-row:last-child{border-bottom:none}
-.conf-tooltip-label{color:rgba(255,255,255,.6)}
-.conf-tooltip-val{font-weight:700;color:#fff;font-size:var(--text-xs)}
 .dup-alert{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:10px 12px;border-radius:var(--r-md)}
 .dup-alert.warn{background:rgba(251,191,36,.16);border:1.5px solid rgba(251,191,36,.45)}
 .dup-alert.ok{background:rgba(34,197,94,.12);border:1.5px solid rgba(34,197,94,.3)}
@@ -1211,7 +1202,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
   .hero-guid{font-size:.95rem;word-break:break-all;gap:8px}
   .hero-copy-btn{padding:3px 11px}
   .hero-domain{font-size:11px}
-  .confidence-badge,.hero-score-pill{font-size:10px;padding:2px 8px}
+  .hero-score-pill{font-size:10px;padding:2px 8px}
 
   /* Apps grid plus serrée */
   .hero-actions{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;margin-top:14px;padding-top:14px}

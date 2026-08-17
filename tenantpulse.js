@@ -157,6 +157,89 @@ function closeShortcutMenu() {
   _openShortcutMenu = null;
   animateMenuClose(menu);
 }
+/* Positionne un menu déjà construit sous son ancre, en le repliant vers le haut
+   s'il déborde. Partagé par les menus de raccourcis et le menu de compte Graph :
+   le calcul est identique, seul le contenu change. */
+function placerMenu(menu, anchorEl, largeur) {
+  const rect = anchorEl.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '3000';
+  let left = rect.left;
+  if (left + largeur > window.innerWidth - 12) left = window.innerWidth - largeur - 12;
+  if (left < 12) left = 12;
+  menu.style.left = left + 'px';
+  menu.style.top = (rect.bottom + 6) + 'px';
+  document.body.appendChild(menu);
+
+  const mh = menu.getBoundingClientRect().height;
+  if (rect.bottom + 6 + mh > window.innerHeight - 12) {
+    let top = rect.top - 6 - mh;
+    if (top < 12) top = 12;
+    menu.style.top = top + 'px';
+  }
+
+  _openShortcutMenu = menu;
+  setTimeout(() => document.addEventListener('click', closeShortcutMenu), 0);
+  window.addEventListener('scroll', closeShortcutMenu, true);
+}
+
+/* Menu de compte Microsoft Graph. Deux états, une seule ancre.
+   Le choix explicite du compte n'est pas un confort : en contexte partenaire,
+   les rôles GDAP vivent souvent sur un compte d'administration distinct de
+   celui du poste de travail. Sans cette entrée, l'utilisateur reste enfermé sur
+   le compte de l'application et voit une liste de clients vide sans comprendre
+   pourquoi. graphBeginLogin(true) force le sélecteur de comptes d'Entra. */
+function openGraphMenu(anchorEl) {
+  const dejaOuvert = _openShortcutMenu && _openShortcutMenu._key === 'graph';
+  closeShortcutMenu();
+  if (dejaOuvert) return;                       // re-clic sur l'ancre : simple fermeture
+  if (typeof graphBeginLogin !== 'function') return;
+
+  const connecte = window.TP_GRAPH?.connected === true;
+  const compte   = window.TP_GRAPH?.account?.username || null;
+
+  const menu = document.createElement('div');
+  menu.className = 'hero-shortcut-menu';
+  menu._key = 'graph';
+  menu.setAttribute('role', 'menu');
+  menu.addEventListener('click', e => e.stopPropagation());
+
+  const title = document.createElement('div');
+  title.className = 'hero-shortcut-menu-title';
+  title.textContent = connecte ? 'Microsoft Graph' : 'Connexion Microsoft Graph';
+  menu.appendChild(title);
+
+  /* Le compte connecté est affiché tel quel, sans troncature au milieu : savoir
+     lequel des deux comptes est actif est précisément l'information cherchée. */
+  if (connecte && compte) {
+    const qui = document.createElement('div');
+    qui.className = 'graph-menu-account';
+    qui.textContent = compte;
+    qui.title = compte;
+    menu.appendChild(qui);
+  }
+
+  const opt = (label, onClick, primary) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hero-shortcut-opt' + (primary ? ' primary' : '');
+    b.textContent = label;
+    b.setAttribute('role', 'menuitem');
+    b.addEventListener('click', () => { closeShortcutMenu(); onClick(); });
+    menu.appendChild(b);
+  };
+
+  if (connecte) {
+    opt('Changer de compte', () => graphBeginLogin(true), true);
+    opt('Se déconnecter', () => { if (typeof graphDisconnect === 'function') graphDisconnect(); });
+  } else {
+    opt('Se connecter', () => graphBeginLogin(false), true);
+    opt('Utiliser un autre compte', () => graphBeginLogin(true));
+  }
+
+  placerMenu(menu, anchorEl, 240);
+}
+
 function openShortcutMenu(btn, anchorEl, ctx) {
   const wasKey = _openShortcutMenu && _openShortcutMenu._key;
   closeShortcutMenu();
@@ -212,28 +295,7 @@ function openShortcutMenu(btn, anchorEl, ctx) {
   });
 
   // Positionnement fixe + ajout au body pour passer au-dessus du contexte d'empilement.
-  const rect = anchorEl.getBoundingClientRect();
-  const menuWidth = 240;
-  menu.style.position = 'fixed';
-  menu.style.zIndex = '3000';
-  let left = rect.left;
-  if (left + menuWidth > window.innerWidth - 12) left = window.innerWidth - menuWidth - 12;
-  if (left < 12) left = 12;
-  menu.style.left = left + 'px';
-  menu.style.top = (rect.bottom + 6) + 'px';
-  document.body.appendChild(menu);
-
-  // Repli vers le haut si le menu déborde en bas de l'écran.
-  const mh = menu.getBoundingClientRect().height;
-  if (rect.bottom + 6 + mh > window.innerHeight - 12) {
-    let top = rect.top - 6 - mh;
-    if (top < 12) top = 12;
-    menu.style.top = top + 'px';
-  }
-
-  _openShortcutMenu = menu;
-  setTimeout(() => document.addEventListener('click', closeShortcutMenu), 0);
-  window.addEventListener('scroll', closeShortcutMenu, true);
+  placerMenu(menu, anchorEl, 240);
 }
 
 /* Pastille « i » → asset assets/information.png (source noire).
@@ -757,10 +819,14 @@ function bindEvents() {
   });
 
   // Connexion / déconnexion Microsoft Graph (graph.js, chargé séparément).
+  // Les deux contrôles ouvrent le même menu : en contexte partenaire, l'identité
+  // qui porte les droits GDAP n'est pas toujours celle du poste, et le choix du
+  // compte doit rester accessible dans les deux états.
   const graphCta = document.getElementById('graphConnect');
   const graphDot = document.getElementById('graphStatus');
-  if (graphCta) graphCta.addEventListener('click', () => { if (typeof graphBeginLogin === 'function') graphBeginLogin(); });
-  if (graphDot) graphDot.addEventListener('click', () => { if (typeof graphDisconnect === 'function') graphDisconnect(); });
+  const ouvre = e => { e.stopPropagation(); openGraphMenu(e.currentTarget); };
+  if (graphCta) graphCta.addEventListener('click', ouvre);
+  if (graphDot) graphDot.addEventListener('click', ouvre);
 
   document.getElementById('mainDropBtn').addEventListener('click', toggleDropdown);
   document.getElementById('btnDisableDelete').addEventListener('click', confirmDisableAndDelete);
@@ -3852,39 +3918,9 @@ async function validateTenantGuid(guid) {
   } catch { return false; }
 }
 
-// ── Confidence tooltip ──
-function showConfTooltip(e, confidence, ms) {
-  const tip = document.getElementById('confTooltip');
-  const rows = [
-    { label: 'Tenant ID trouvé',      val: ms?.tenantId    ? '+45 pts ✓' : '0 pts —', earned: !!ms?.tenantId },
-    { label: 'GUID validé Microsoft', val: ms?.tenantValid  ? '+30 pts ✓' : '0 pts —', earned: !!ms?.tenantValid },
-    { label: 'Issuer présent',         val: ms?.issuer       ? '+15 pts ✓' : '0 pts —', earned: !!ms?.issuer },
-    { label: 'Token endpoint',         val: ms?.tokenEndpoint? '+10 pts ✓' : '0 pts —', earned: !!ms?.tokenEndpoint },
-  ];
-  tip.replaceChildren(); // FIX 2b : remplacé tip.innerHTML = ''
-  const title = document.createElement('div'); title.className = 'conf-tooltip-title'; title.textContent = 'Indice de confiance — ' + confidence + '%';
-  tip.appendChild(title);
-  rows.forEach(r => {
-    const row = document.createElement('div'); row.className = 'conf-tooltip-row';
-    const lbl = document.createElement('span'); lbl.className = 'conf-tooltip-label'; lbl.textContent = r.label;
-    const val = document.createElement('span'); val.className = 'conf-tooltip-val'; val.textContent = r.val;
-    val.style.color = r.earned ? '#86efac' : 'rgba(255,255,255,.35)';
-    row.appendChild(lbl); row.appendChild(val); tip.appendChild(row);
-  });
-  const note = document.createElement('div');
-  note.style.cssText = 'margin-top:8px;padding-top:7px;border-top:1px solid rgba(255,255,255,.1);font-size:var(--text-xs);color:rgba(255,255,255,.38);line-height:1.5;font-style:italic';
-  note.textContent = 'Namespace type non vérifiable depuis TenantPulse (bloqué par CORS navigateur).';
-  tip.appendChild(note);
-  const x = Math.min(e.clientX + 10, window.innerWidth - 260);
-  const y = Math.min(e.clientY + 10, window.innerHeight - 200);
-  tip.style.left = x + 'px'; tip.style.top = y + 'px';
-  tip.classList.add('visible');
-}
-function hideConfTooltip() {
-  const tip = document.getElementById('confTooltip');
-  if (tip) tip.classList.remove('visible');
-}
-document.addEventListener('mouseup', hideConfTooltip);
+/* L'indice de confiance a ete retire du hero : il occupait la place la plus
+   visible de la page pour une information que personne n'exploitait. Le calcul
+   (computeConfidence) est conserve, il alimente encore le rapport exporte. */
 
 // ── Storage inspector ──
 function fmtStorageSize(bytes) {
@@ -4654,8 +4690,6 @@ function renderHero(ms, domain, confidence) {
     hero.appendChild(alert);
   } else {
     const hid = 'tid_' + Math.random().toString(36).slice(2);
-    const confClass = confidence >= 80 ? 'high' : confidence >= 50 ? 'medium' : 'low';
-    const confLabel = confidence >= 80 ? 'Confiance élevée' : confidence >= 50 ? 'Confiance moyenne' : 'Confiance faible';
     hero.appendChild(mkLabel('Microsoft Tenant ID'));
     const nom = mkTenantName();
     if (nom) hero.appendChild(nom);
@@ -4664,11 +4698,6 @@ function renderHero(ms, domain, confidence) {
       const sp = document.createElement('span'); sp.id = hid; sp.textContent = ms.tenantId;
       const copyBtn = document.createElement('button'); copyBtn.className = 'hero-copy-btn'; copyBtn.textContent = 'Copier';
       copyBtn.addEventListener('click', () => copyVal(hid, copyBtn));
-      const badge = document.createElement('span'); badge.className = 'confidence-badge ' + confClass;
-      badge.textContent = confidence + '% — ' + confLabel;
-      const infoBtn = document.createElement('button'); infoBtn.className = 'conf-info-btn'; infoBtn.appendChild(makeInfoIcon('white')); infoBtn.setAttribute('aria-label', 'Détail de l\'indice de confiance');
-      infoBtn.addEventListener('mousedown', (e) => { e.preventDefault(); showConfTooltip(e, confidence, ms); });
-      badge.appendChild(infoBtn);
       const adminBtn = document.createElement('button'); adminBtn.type = 'button';
       const setAdminBtnState = (active) => {
         adminBtn.classList.toggle('is-admin', active);
@@ -4685,7 +4714,7 @@ function renderHero(ms, domain, confidence) {
         setAdminBtnState(next);
         renderHistory();
       });
-      guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(adminBtn); guid.appendChild(badge);
+      guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(adminBtn);
       const pill = mkScorePill();
       if (pill) guid.appendChild(pill);
       hero.appendChild(guid);
