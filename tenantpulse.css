@@ -897,13 +897,64 @@ html:not([data-theme="dark"]) .hero-label{color:rgba(255,255,255,.82)}
 [data-theme="light"] .hero-none,
 html:not([data-theme="dark"]) .hero-none{color:rgba(255,255,255,.82)}
 [data-theme="light"] .hero-partner-btn-sub,
-html:not([data-theme="dark"]) .hero-partner-btn-sub{color:rgba(255,255,255,.9)}
+html:not([data-theme="dark"]) .hero-partner-btn-sub{color:rgba(255,255,255,.96)}
 [data-theme="light"] .hero-btn-chevron,
 html:not([data-theme="dark"]) .hero-btn-chevron{color:rgba(255,255,255,.78)}
 [data-theme="light"] .hero-domain,
 html:not([data-theme="dark"]) .hero-domain{color:rgba(255,255,255,.86)}
 [data-theme="light"] .hero-domain-default,
 html:not([data-theme="dark"]) .hero-domain-default{color:rgba(255,255,255,.68)}
+
+/* Tuiles de raccourcis sur le bleu de marque. Leur verre d'origine, cale sur
+   l'anthracite du mode nuit, disparaissait presque sur ce fond plus clair.
+
+   Le voile blanc monte donc de .10 a .18, mais pas seul : une base sombre tres
+   discrete est posee dessous. Sans elle, blanchir la tuile fait monter sa
+   luminance et le libelle blanc tombe sous le seuil de lisibilite (mesure a
+   3,97:1 avec un voile a .20 sans base). Avec la base, la tuile parait plus
+   claire et le texte reste a 4,7:1. Le liseret et le reflet interieur portent
+   le reste de l'effet, eux n'ont aucun cout en contraste puisque aucun texte
+   ne repose dessus. */
+[data-theme="light"] .hero-partner-btn,
+html:not([data-theme="dark"]) .hero-partner-btn{
+  background:linear-gradient(180deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.07) 100%), rgba(40,32,120,.2);
+  box-shadow:0 0 0 1px rgba(255,255,255,.3), 0 1px 0 rgba(255,255,255,.28) inset, 0 4px 14px rgba(40,32,120,.22)
+}
+[data-theme="light"] .hero-partner-btn:hover,
+html:not([data-theme="dark"]) .hero-partner-btn:hover{
+  background:linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.1) 100%), rgba(40,32,120,.24);
+  box-shadow:0 0 0 1px rgba(255,255,255,.55), 0 1px 0 rgba(255,255,255,.35) inset, 0 6px 18px rgba(40,32,120,.3)
+}
+/* Le chevron et le bouton d'ajout de tag suivent la meme logique, en plus
+   discret : ils ne portent pas de libelle, seulement un glyphe. */
+[data-theme="light"] .hero-btn-chevron,
+html:not([data-theme="dark"]) .hero-btn-chevron{
+  background:rgba(255,255,255,.17);border-color:rgba(255,255,255,.24)
+}
+[data-theme="light"] .hero-btn-chevron:hover,
+html:not([data-theme="dark"]) .hero-btn-chevron:hover{
+  background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.42)
+}
+[data-theme="light"] .hero-tag-add,
+html:not([data-theme="dark"]) .hero-tag-add{
+  background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3)
+}
+[data-theme="light"] .hero-tag-add:hover,
+html:not([data-theme="dark"]) .hero-tag-add:hover{
+  background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.45)
+}
+/* Le bouton Copier et le marqueur de compte admin, sur la meme ligne que le
+   GUID, sont du meme materiau : les laisser en arriere serait incoherent. */
+[data-theme="light"] .hero-copy-btn,
+html:not([data-theme="dark"]) .hero-copy-btn{
+  background:linear-gradient(180deg, rgba(255,255,255,.26) 0%, rgba(255,255,255,.1) 100%);
+  border-color:rgba(255,255,255,.32)
+}
+[data-theme="light"] .hero-admin-toggle,
+html:not([data-theme="dark"]) .hero-admin-toggle{
+  background:linear-gradient(180deg, rgba(255,255,255,.26) 0%, rgba(255,255,255,.1) 100%);
+  border-color:rgba(255,255,255,.32)
+}
 .tenant-hero::after{content:'';position:absolute;right:24px;top:20px;width:64px;height:64px;opacity:.1;pointer-events:none;background:url('assets/MicrosoftN.png') center/contain no-repeat;filter:brightness(0) invert(1)}
 .tenant-hero > *{position:relative;z-index:1}
 .hero-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.65);margin-bottom:8px;display:flex;align-items:center;gap:6px}
