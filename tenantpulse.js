@@ -5318,7 +5318,10 @@ function buildPosturePanel(p, mfa) {
                                            part(e.exposes, e.appareils), e.exposes ? 'bad' : 'ok');
       if (e.recommandations != null) addMetrique(b, 'Correctifs recommandés', String(e.recommandations), null, null, null);
       if (e.score != null) {
-        const tend = e.derive == null ? null
+        /* Une derive nulle ne se dit pas « en baisse de 0 » : arrondie au
+           dixieme, elle vaut zero des que le score n'a pas bouge sur le mois,
+           ce qui est le cas courant. On tait alors la tendance. */
+        const tend = (e.derive == null || Math.abs(e.derive) < 0.1) ? null
           : (e.derive > 0 ? 'en hausse de ' + e.derive + ' sur 30 j' : 'en baisse de ' + Math.abs(e.derive) + ' sur 30 j');
         addMetrique(b, "Score d'exposition", e.score + ' / 100', tend, e.score,
                     e.score <= 30 ? 'ok' : e.score <= 60 ? 'warn' : 'bad');
