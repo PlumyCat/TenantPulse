@@ -5399,7 +5399,11 @@ function makePostureCard() {
   if (!p) return null;
   return makeCard({
     id: 'posture',
-    iconEl: makeImgIcon('assets/Microsoft.png', 'Lighthouse', 20),
+    /* Lighthouse n'a pas de logo propre dans les assets, et son portail est une
+       application Azure Portal (extension Microsoft_Intune_MTM) : le logo Azure
+       est donc la representation juste. Celui d'Intune induirait en erreur, la
+       posture ne se limitant pas a la gestion des appareils. */
+    iconEl: makeImgIcon('assets/MicrosoftAzure.png', 'Microsoft 365 Lighthouse', 20),
     iconBg: 'ms-clr',
     title: 'Posture du tenant',
     sub: postureSub(p),
