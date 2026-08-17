@@ -862,18 +862,18 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
    teinte indigo au lieu du noir, qui salit une page claire.                   */
 [data-theme="light"] .tenant-hero,
 html:not([data-theme="dark"]) .tenant-hero{
-  background:#F2F1FA;
+  background:#E4E2F2;
   background-image:
-    radial-gradient(ellipse 95% 95% at 10% 0%, rgba(103,92,214,.20), transparent 62%),
-    radial-gradient(ellipse 105% 115% at 100% 62%, rgba(120,128,168,.14), transparent 64%),
-    radial-gradient(ellipse 130% 62% at 50% -12%, rgba(255,255,255,.85), transparent 72%),
-    linear-gradient(180deg,#FBFAFE 0%, #EAE8F6 100%);
-  box-shadow:0 10px 28px rgba(45,42,78,.13), inset 0 1px 0 rgba(255,255,255,.9);
-  border-color:rgba(75,63,190,.16);
+    radial-gradient(ellipse 95% 95% at 10% 0%, rgba(103,92,214,.24), transparent 62%),
+    radial-gradient(ellipse 105% 115% at 100% 62%, rgba(120,128,168,.16), transparent 64%),
+    radial-gradient(ellipse 130% 62% at 50% -12%, rgba(255,255,255,.55), transparent 72%),
+    linear-gradient(180deg,#EDEBF8 0%, #DBD8EE 100%);
+  box-shadow:0 10px 28px rgba(45,42,78,.16), inset 0 1px 0 rgba(255,255,255,.75);
+  border-color:rgba(75,63,190,.2);
 }
 [data-theme="light"] .tenant-hero::before,
 html:not([data-theme="dark"]) .tenant-hero::before{
-  background:linear-gradient(180deg, rgba(255,255,255,.5) 0%, rgba(255,255,255,0) 48%, rgba(75,63,190,.05) 100%);
+  background:linear-gradient(180deg, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 48%, rgba(75,63,190,.07) 100%);
 }
 /* Filigrane Microsoft : force en blanc pour le fond sombre, il disparaitrait
    sur fond clair. On repasse en noir, a opacite plus faible car un motif
@@ -889,11 +889,11 @@ html:not([data-theme="dark"]) .hero-tenant-name{color:#1B1830;text-shadow:none}
 [data-theme="light"] .hero-guid,
 html:not([data-theme="dark"]) .hero-guid{color:#1B1830;text-shadow:none}
 [data-theme="light"] .hero-domain,
-html:not([data-theme="dark"]) .hero-domain{color:#565073}
+html:not([data-theme="dark"]) .hero-domain{color:#4B4568}
 [data-theme="light"] .hero-domain-default,
-html:not([data-theme="dark"]) .hero-domain-default{color:#6E6889}
+html:not([data-theme="dark"]) .hero-domain-default{color:#635D7D}
 [data-theme="light"] .hero-none,
-html:not([data-theme="dark"]) .hero-none{color:#565073}
+html:not([data-theme="dark"]) .hero-none{color:#4B4568}
 
 /* Boutons vitres : meme materiau, contraste inverse */
 [data-theme="light"] .hero-copy-btn,
@@ -927,11 +927,11 @@ html:not([data-theme="dark"]) .hero-admin-toggle.is-admin{background:rgba(22,163
 [data-theme="light"] .hero-score-pill,
 html:not([data-theme="dark"]) .hero-score-pill{background:rgba(75,63,190,.1);border-color:rgba(75,63,190,.3);color:#3B3197}
 [data-theme="light"] .hero-score-pill.good,
-html:not([data-theme="dark"]) .hero-score-pill.good{background:rgba(22,163,74,.13);border-color:rgba(22,163,74,.4);color:#0F5C2C}
+html:not([data-theme="dark"]) .hero-score-pill.good{background:rgba(22,163,74,.13);border-color:rgba(22,163,74,.4);color:#0C4A24}
 [data-theme="light"] .hero-score-pill.mid,
-html:not([data-theme="dark"]) .hero-score-pill.mid{background:rgba(217,119,6,.14);border-color:rgba(217,119,6,.4);color:#7A3D06}
+html:not([data-theme="dark"]) .hero-score-pill.mid{background:rgba(217,119,6,.14);border-color:rgba(217,119,6,.4);color:#6B3505}
 [data-theme="light"] .hero-score-pill.bad,
-html:not([data-theme="dark"]) .hero-score-pill.bad{background:rgba(220,38,38,.11);border-color:rgba(220,38,38,.38);color:#9A1414}
+html:not([data-theme="dark"]) .hero-score-pill.bad{background:rgba(220,38,38,.11);border-color:rgba(220,38,38,.38);color:#8A1212}
 
 /* Tuiles de raccourcis */
 [data-theme="light"] .hero-actions,
@@ -983,7 +983,7 @@ html:not([data-theme="dark"]) .dup-alert.ok .dup-title{color:#166534}
 [data-theme="light"] .dup-alert.info .dup-title,
 html:not([data-theme="dark"]) .dup-alert.info .dup-title{color:#075985}
 [data-theme="light"] .dup-desc,
-html:not([data-theme="dark"]) .dup-desc{color:#565073}
+html:not([data-theme="dark"]) .dup-desc{color:#4B4568}
 .tenant-hero::after{content:'';position:absolute;right:24px;top:20px;width:64px;height:64px;opacity:.1;pointer-events:none;background:url('assets/MicrosoftN.png') center/contain no-repeat;filter:brightness(0) invert(1)}
 .tenant-hero > *{position:relative;z-index:1}
 .hero-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.65);margin-bottom:8px;display:flex;align-items:center;gap:6px}
