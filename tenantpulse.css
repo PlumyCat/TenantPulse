@@ -895,6 +895,18 @@ body.analysis-auto .btn-hints .btn-hint:last-child{display:none}
 .confidence-badge.high{background:rgba(34,197,94,.2);border-color:rgba(34,197,94,.4)}
 .confidence-badge.medium{background:rgba(251,191,36,.2);border-color:rgba(251,191,36,.4)}
 .confidence-badge.low{background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.4)}
+/* Phrase d'explication sous un titre de section du panneau. Les intitulés
+   Lighthouse sont du jargon traduit à la machine : sans cette ligne, l'écran
+   affiche des chiffres justes que personne ne sait interpréter. */
+.panel-section-note{font-size:var(--text-xs);line-height:1.5;color:var(--soft);margin:-2px 2px 8px;max-width:64ch}
+
+/* Barre d'action en tête du panneau Posture. */
+.panel-report-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.btn-report{display:inline-flex;align-items:center;gap:6px;background:var(--blue);border:1.5px solid var(--blue);border-radius:var(--r-sm);color:#fff;font-family:var(--font);font-size:var(--text-sm);font-weight:600;padding:7px 14px;cursor:pointer;transition:filter .15s,background .15s,border-color .15s}
+.btn-report:hover{filter:brightness(1.08)}
+.btn-report.copied{background:#16a34a;border-color:#16a34a}
+.panel-report-hint{font-size:var(--text-xs);color:var(--soft)}
+
 /* Secure Score, à côté de l'indice de confiance. Même gabarit que
    .confidence-badge : c'est le second chiffre de synthèse du hero, il doit se
    lire comme le premier et non comme un élément d'une autre famille. */

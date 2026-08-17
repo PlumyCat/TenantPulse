@@ -4631,7 +4631,7 @@ function renderHero(ms, domain, confidence) {
     p.textContent = 'Secure Score ' + s.pourcent + '%';
     const d = posturDate(s.arreteLe);
     p.title = 'Microsoft Secure Score : ' + s.courant + ' sur ' + s.max
-            + (d ? ' — arrêté au ' + d : '') + '. Source : Microsoft 365 Lighthouse.';
+            + (d ? ', arrêté au ' + d : '') + '. Source : Microsoft 365 Lighthouse.';
     return p;
   };
 
@@ -5028,32 +5028,53 @@ function posturDate(iso) {
 
 function postureSub(p) {
   const bouts = [];
-  if (p.secureScore) bouts.push('Secure Score ' + p.secureScore.pourcent + '%');
+  if (p.secureScore) bouts.push('Sécurité ' + p.secureScore.pourcent + '%');
+  if (p.appareils)   bouts.push(p.appareils.nonConformes + ' appareil(s) non conforme(s)');
   if (p.alertes)     bouts.push(p.alertes.total + ' alerte' + (p.alertes.total > 1 ? 's' : ''));
-  if (p.exposition?.critiques != null) bouts.push(p.exposition.critiques + ' vuln. critiques');
-  if (p.baseline?.total)  bouts.push('base ' + p.baseline.conformes + '/' + p.baseline.total);
-  return bouts.length ? bouts.join(' · ') : 'Données agrégées par Microsoft 365 Lighthouse';
+  if (p.exposition?.critiques != null) bouts.push(p.exposition.critiques + ' failles critiques');
+  if (p.baseline?.total)  bouts.push(p.baseline.conformes + '/' + p.baseline.total + ' tâches conformes');
+  /* Trois éléments au plus : la ligne est tronquée par CSS au-delà, et une
+     troncature perd l'information sans prévenir. L'ordre ci-dessus place donc
+     le plus parlant en premier, le détail complet vivant dans le panneau. */
+  return bouts.length ? bouts.slice(0, 3).join(' · ') : 'Données agrégées par Microsoft 365 Lighthouse';
 }
 
 /* Badge : le chiffre le plus parlant disponible, pas un décompte de champs.
-   Le Secure Score d'abord, sinon les alertes critiques, sinon l'ampleur. */
+   Le niveau de sécurité d'abord, sinon ce qui appelle une action. */
 function postureBadge(p) {
   if (p.secureScore) return p.secureScore.pourcent + '%';
   const crit = p.alertes?.parGravite?.high;
   if (crit) return crit + ' critique' + (crit > 1 ? 's' : '');
-  if (p.exposition?.critiques != null) return p.exposition.critiques + ' vuln.';
+  if (p.appareils?.nonConformes) return p.appareils.nonConformes + ' non conf.';
+  if (p.exposition?.critiques != null) return p.exposition.critiques + ' failles';
   if (p.baseline?.total) return p.baseline.conformes + '/' + p.baseline.total;
   return 'Lighthouse';
 }
 
+/* Phrase d'explication sous un titre de section. Les intitulés de Lighthouse
+   sont du jargon Microsoft traduit à la machine : « base de référence »,
+   « score d'exposition », « flexibilité » ne disent rien à qui n'a pas la
+   documentation sous les yeux. Chaque section porte donc une phrase qui dit
+   ce que le chiffre mesure, et dans quel sens il est bon. */
+function addSectionNote(b, texte) {
+  const d = document.createElement('div');
+  d.className = 'panel-section-note';
+  d.textContent = texte;
+  b.appendChild(d);
+}
+
 function buildPosturePanel(p, mfa) {
   return b => {
+    /* Le rapport en premier : c'est l'action, le reste est de la consultation. */
+    b.appendChild(buildBoutonRapport(p, mfa));
+
     if (p.secureScore) {
-      addSectionTitle(b, 'Secure Score Microsoft');
       const s = p.secureScore;
-      addRow(b, 'Score', s.courant + ' / ' + s.max + '  (' + s.pourcent + ' %)',
+      addSectionTitle(b, 'Niveau de sécurité du tenant');
+      addSectionNote(b, "Secure Score Microsoft : note attribuée à la configuration de sécurité du tenant. Plus le pourcentage est haut, mieux le tenant est durci. La moyenne des PME tourne autour de 45 %.");
+      addRow(b, 'Score', s.courant + ' sur ' + s.max + '  (' + s.pourcent + ' %)',
              s.pourcent >= 70 ? 'hi-ms' : s.pourcent >= 45 ? '' : 'hi-warn');
-      addRow(b, 'Arrêté le', posturDate(s.arreteLe));
+      addRow(b, 'Chiffres arrêtés au', posturDate(s.arreteLe));
     }
 
     /* La couverture MFA reste servie par checkMfa() : elle vient du même
@@ -5061,80 +5082,218 @@ function buildPosturePanel(p, mfa) {
        indépendamment du reste. */
     if (mfa && !mfa.erreur && mfa.total) {
       addSectionTitle(b, 'Authentification multifacteur');
-      addRow(b, 'Comptes couverts', mfa.couverts + ' / ' + mfa.total + '  (' + mfa.pourcentAvecMfa + ' %)',
+      addSectionNote(b, "Comptes ayant enregistré au moins une méthode d'authentification forte. Un compte sans MFA est protégé par son seul mot de passe.");
+      addRow(b, 'Comptes protégés', mfa.couverts + ' sur ' + mfa.total + '  (' + mfa.pourcentAvecMfa + ' %)',
              mfa.pourcentAvecMfa >= 90 ? 'hi-ms' : 'hi-warn');
       if (mfa.sansMfa) addRow(b, 'Comptes sans MFA', String(mfa.sansMfa), 'hi-warn');
-      addRow(b, 'Arrêté le', posturDate(mfa.majLe));
+      addRow(b, 'Chiffres arrêtés au', posturDate(mfa.majLe));
+    }
+
+    if (p.appareils) {
+      const a = p.appareils;
+      addSectionTitle(b, 'Conformité des appareils');
+      addSectionNote(b, "Appareils gérés par Intune. Un appareil non conforme ne respecte pas une règle de la politique de conformité (chiffrement, version d'OS, antivirus, code d'accès).");
+      addRow(b, 'Appareils non conformes', String(a.nonConformes), a.nonConformes ? 'hi-warn' : 'hi-ms');
+      addRow(b, 'Appareils conformes', String(a.conformes));
+      addRow(b, 'Appareils gérés au total', String(a.total) + (a.tronque ? "  (décompte limité aux 999 premiers)" : ''));
+      if (a.indetermines) addRow(b, 'Statut indéterminé', String(a.indetermines));
     }
 
     if (p.alertes) {
-      addSectionTitle(b, 'Alertes Lighthouse actives');
+      addSectionTitle(b, 'Alertes ouvertes');
+      addSectionNote(b, "Alertes remontées par Lighthouse et non encore traitées, réparties par gravité.");
       addRow(b, 'Total', String(p.alertes.total), p.alertes.parGravite.high ? 'hi-warn' : '');
       Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
-        if (n) addRow(b, GRAVITE_LBL[g] || g, String(n), g === 'high' ? 'hi-warn' : '');
+        if (n) addRow(b, 'Gravité ' + (GRAVITE_LBL[g] || g).toLowerCase(), String(n), g === 'high' ? 'hi-warn' : '');
       });
     }
 
     if (p.exposition) {
       const e = p.exposition;
-      addSectionTitle(b, 'Exposition aux vulnérabilités (Defender)');
-      if (e.appareils != null) addRow(b, 'Appareils', String(e.appareils) + (e.exposes != null ? '  dont ' + e.exposes + ' exposé(s)' : ''), e.exposes ? 'hi-warn' : '');
-      if (e.critiques != null) addRow(b, 'Vulnérabilités critiques', String(e.critiques), e.critiques ? 'hi-warn' : '');
-      if (e.elevees != null)   addRow(b, 'Vulnérabilités élevées', String(e.elevees));
-      if (e.total != null)     addRow(b, 'Total vulnérabilités', String(e.total));
-      if (e.recommandations != null) addRow(b, 'Recommandations', String(e.recommandations));
+      addSectionTitle(b, 'Vulnérabilités logicielles');
+      addSectionNote(b, "Failles connues détectées par Defender sur les appareils du client, le plus souvent des logiciels non mis à jour. Le score d'exposition va de 0 à 100 et, contrairement au niveau de sécurité, plus il est bas mieux c'est.");
+      if (e.critiques != null) addRow(b, 'Failles critiques', String(e.critiques), e.critiques ? 'hi-warn' : 'hi-ms');
+      if (e.elevees != null)   addRow(b, 'Failles élevées', String(e.elevees));
+      if (e.total != null)     addRow(b, 'Failles au total', String(e.total));
+      if (e.appareils != null) addRow(b, 'Appareils analysés', String(e.appareils) + (e.exposes != null ? ',  dont ' + e.exposes + ' exposé(s)' : ''), e.exposes ? 'hi-warn' : '');
+      if (e.recommandations != null) addRow(b, 'Correctifs recommandés', String(e.recommandations));
       if (e.score != null) {
-        const tend = e.derive == null ? '' : '  (' + (e.derive > 0 ? '+' : '') + e.derive + ' sur 30 j)';
-        addRow(b, "Score d'exposition", e.score + tend);
+        const tend = e.derive == null ? ''
+          : (e.derive > 0 ? ',  en hausse de ' + e.derive + ' sur 30 jours' : ',  en baisse de ' + Math.abs(e.derive) + ' sur 30 jours');
+        addRow(b, "Score d'exposition", e.score + ' sur 100' + tend);
       }
     }
 
     if (p.baseline) {
       const bl = p.baseline;
-      addSectionTitle(b, 'Base de référence — ' + bl.nom);
-      if (bl.total) addRow(b, 'Étapes conformes', bl.conformes + ' / ' + bl.total, bl.termine ? 'hi-ms' : 'hi-warn');
-      if (bl.incompletes) addRow(b, 'Étapes incomplètes', String(bl.incompletes), 'hi-warn');
-      if (bl.regressees)  addRow(b, 'Étapes en régression', String(bl.regressees), 'hi-warn');
-      if (bl.usagersIncomplets != null) addRow(b, 'Utilisateurs avec tâches en attente', String(bl.usagersIncomplets));
+      addSectionTitle(b, 'Tâches de sécurisation Lighthouse');
+      addSectionNote(b, "Liste de tâches de durcissement que Lighthouse suit pour ce tenant : MFA, accès conditionnel, conformité des appareils, partage OneDrive. Une tâche en régression était conforme et ne l'est plus, c'est le signal le plus utile de la liste. Modèle appliqué : " + bl.nom + ".");
+      if (bl.total) addRow(b, 'Tâches conformes', bl.conformes + ' sur ' + bl.total, bl.termine ? 'hi-ms' : 'hi-warn');
+      if (bl.incompletes) addRow(b, 'Tâches jamais mises en place', String(bl.incompletes), 'hi-warn');
+      if (bl.regressees)  addRow(b, 'Tâches en régression', String(bl.regressees), 'hi-warn');
+      if (bl.usagersIncomplets != null) addRow(b, 'Utilisateurs concernés par une tâche en attente', String(bl.usagersIncomplets));
       if (bl.sansLicence) addRow(b, 'Utilisateurs sans licence', String(bl.sansLicence));
     }
 
     if (p.adoption) {
       const a = p.adoption;
-      addSectionTitle(b, 'Adoption Microsoft 365');
-      [['Communication', a.communication], ['Collaboration', a.collaboration], ['Flexibilité', a.flexibilite],
-       ['Santé des applications', a.santeApps], ['Connectivité réseau', a.reseau], ['Travail en équipe', a.teamwork]]
+      addSectionTitle(b, 'Usage des services Microsoft 365');
+      addSectionNote(b, "Indicateurs d'utilisation, pas de sécurité. Ils mesurent à quel point les services achetés sont réellement employés, ce qui sert surtout aux points commerciaux.");
+      [['Communication (Teams, Outlook)', a.communication],
+       ['Collaboration sur documents',    a.collaboration],
+       ['Travail hors des heures de bureau', a.flexibilite],
+       ['Santé des applications Office',  a.santeApps],
+       ['Qualité de la connexion réseau', a.reseau],
+       ['Travail en équipe',              a.teamwork]]
         .forEach(([lbl, v]) => { if (v != null) addRow(b, lbl, v + ' %'); });
-      addRow(b, 'Arrêté le', posturDate(a.arreteLe));
+      addRow(b, 'Chiffres arrêtés au', posturDate(a.arreteLe));
     }
 
     if (p.identite) {
       const i = p.identite;
-      const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(' · ');
+      const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
       if (lieu || i.segment || i.industrie) {
-        addSectionTitle(b, 'Identité du tenant');
+        addSectionTitle(b, 'Fiche du client');
+        addSectionNote(b, "Informations déclaratives portées par le tenant, telles que Lighthouse les expose.");
         addRow(b, 'Localisation', lieu);
-        addRow(b, 'Segment', i.segment);
-        addRow(b, 'Secteur', i.industrie || i.vertical);
+        addRow(b, 'Segment commercial', i.segment);
+        addRow(b, "Secteur d'activité", i.industrie || i.vertical);
       }
     }
 
     /* Ce que les portées actuelles ne couvrent pas. Sans cette mention, une
-       donnée absente passerait pour une donnée à zéro. */
-    const manquants = Object.entries(p.refus || {}).filter(([, v]) => v === 403).map(([k]) => k);
-    if (manquants.length || (mfa && mfa.erreur)) {
-      addSectionTitle(b, 'Non disponible');
-      const d = document.createElement('div'); d.className = 'hc-desc'; d.style.padding = '0 2px 6px';
-      d.textContent = "Certains jeux de données sont refusés par Microsoft Graph : l'inscription d'application n'a pas encore la portée qui gouverne cette donnée. "
-        + "Les rôles GDAP, eux, sont suffisants. Détail en console avec graphDumpPosture().";
-      b.appendChild(d);
+       donnée absente passerait pour une donnée à zéro, ce qui est bien pire
+       qu'une donnée manquante sur une page de diagnostic. */
+    const table  = (typeof PORTEE_REQUISE === 'object' && PORTEE_REQUISE) || {};
+    const refuse = Object.entries(p.refus || {}).filter(([, v]) => v === 403).map(([k]) => k);
+    if (mfa?.erreur === 'portee') refuse.push('mfa');
+    const aExpliquer = [...new Set(refuse)].filter(k => table[k]);
+    if (aExpliquer.length) {
+      addSectionTitle(b, 'Données non disponibles');
+      addSectionNote(b, "Ces chiffres existent chez Microsoft mais l'application n'a pas encore le droit de les lire. Ce n'est pas un problème de délégation GDAP, qui est suffisante : il manque une autorisation sur l'inscription d'application, à accorder par un administrateur.");
+      aExpliquer.forEach(k => addRow(b, table[k].quoi, 'Nécessite ' + table[k].portee));
     }
 
-    const note = document.createElement('div'); note.className = 'hc-desc'; note.style.padding = '8px 2px 0';
-    note.textContent = "Source : Microsoft 365 Lighthouse (API beta). Le tenant doit y être intégré. "
-      + "Les chiffres sont agrégés périodiquement, ce n'est pas du temps réel.";
+    const note = document.createElement('div'); note.className = 'panel-section-note'; note.style.paddingTop = '10px';
+    note.textContent = "Source : Microsoft 365 Lighthouse. Le tenant doit y être intégré pour apparaître. "
+      + "Les chiffres sont recalculés une fois par jour par Microsoft, ce n'est pas de l'instantané, d'où les dates d'arrêté.";
     b.appendChild(note);
   };
+}
+
+/* ── Rapport de santé du tenant ──────────────────────────────────────────────
+   Volontairement basique : un texte prêt à coller dans un ticket ou un mail,
+   pas un document. Il reprend la même règle que le reste, à savoir qu'une
+   rubrique sans donnée est absente plutôt que vide, et il nomme explicitement
+   ce qui n'a pas pu être lu pour qu'un lecteur ne prenne pas un silence pour
+   un zéro.                                                                    */
+function rapportSanteTenant(p, mfa) {
+  const L = [];
+  const nom = currentState.graph?.tenant?.displayName || currentState.domain || 'Tenant';
+  const sep = '_'.repeat(40);
+
+  L.push('RAPPORT DE SANTE DU TENANT');
+  L.push(nom);
+  if (currentState.ms?.tenantId) L.push('Tenant ID : ' + currentState.ms.tenantId);
+  L.push('Genere le ' + new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }));
+  L.push(sep); L.push('');
+
+  if (p.secureScore) {
+    const s = p.secureScore;
+    L.push('NIVEAU DE SECURITE');
+    L.push('Secure Score : ' + s.courant + ' sur ' + s.max + '  (' + s.pourcent + ' %)');
+    L.push(s.pourcent >= 70 ? 'Bon niveau de durcissement.'
+         : s.pourcent >= 45 ? 'Niveau moyen, marge de progression.'
+         : 'Niveau faible, durcissement a prevoir.');
+    if (s.arreteLe) L.push('Chiffres arretes au ' + posturDate(s.arreteLe) + '.');
+    L.push('');
+  }
+
+  if (mfa && !mfa.erreur && mfa.total) {
+    L.push('AUTHENTIFICATION MULTIFACTEUR');
+    L.push(mfa.couverts + ' comptes proteges sur ' + mfa.total + '  (' + mfa.pourcentAvecMfa + ' %)');
+    if (mfa.sansMfa) L.push(mfa.sansMfa + ' compte(s) sans MFA, proteges par leur seul mot de passe.');
+    L.push('');
+  }
+
+  if (p.appareils) {
+    L.push('CONFORMITE DES APPAREILS');
+    L.push(p.appareils.nonConformes + ' appareil(s) non conforme(s) sur ' + p.appareils.total + ' gere(s).');
+    L.push('');
+  }
+
+  if (p.alertes) {
+    L.push('ALERTES OUVERTES');
+    L.push('Total : ' + p.alertes.total);
+    Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
+      if (n) L.push('  ' + (GRAVITE_LBL[g] || g) + ' : ' + n);
+    });
+    L.push('');
+  }
+
+  if (p.exposition) {
+    const e = p.exposition;
+    L.push('VULNERABILITES LOGICIELLES');
+    if (e.critiques != null) L.push('Failles critiques : ' + e.critiques + (e.elevees != null ? '   /   elevees : ' + e.elevees : ''));
+    if (e.appareils != null) L.push('Appareils analyses : ' + e.appareils + (e.exposes != null ? ', dont ' + e.exposes + ' expose(s)' : ''));
+    if (e.recommandations != null) L.push('Correctifs recommandes : ' + e.recommandations);
+    if (e.score != null) L.push("Score d'exposition : " + e.score + ' sur 100 (plus il est bas, mieux c\'est).');
+    L.push('');
+  }
+
+  if (p.baseline?.total) {
+    const bl = p.baseline;
+    L.push('TACHES DE SECURISATION');
+    L.push(bl.conformes + ' tache(s) conforme(s) sur ' + bl.total + '.');
+    if (bl.regressees) L.push(bl.regressees + ' tache(s) en regression : conformes auparavant, plus aujourd\'hui.');
+    if (bl.sansLicence) L.push(bl.sansLicence + ' utilisateur(s) sans licence.');
+    L.push('');
+  }
+
+  const table  = (typeof PORTEE_REQUISE === 'object' && PORTEE_REQUISE) || {};
+  const refuse = Object.entries(p.refus || {}).filter(([, v]) => v === 403).map(([k]) => k);
+  if (mfa?.erreur === 'portee') refuse.push('mfa');
+  const manquant = [...new Set(refuse)].filter(k => table[k]);
+  if (manquant.length) {
+    L.push('NON MESURE DANS CE RAPPORT');
+    manquant.forEach(k => L.push('  ' + table[k].quoi + ' (autorisation ' + table[k].portee + ' non accordee)'));
+    L.push('Absence de chiffre ne veut pas dire zero.');
+    L.push('');
+  }
+
+  L.push(sep);
+  L.push('Source : Microsoft 365 Lighthouse. Chiffres recalcules une fois par jour par Microsoft.');
+
+  /* Accents retires en sortie, comme pour le rapport d'analyse existant : ces
+     textes finissent colles dans des outils de ticketing dont l'encodage n'est
+     pas toujours maitrise. Le pli est fait ici plutot qu'a la main, sinon les
+     libelles partages avec l'interface (PORTEE_REQUISE) reintroduiraient des
+     accents a chaque evolution. */
+  return L.join('\n').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function buildBoutonRapport(p, mfa) {
+  const wrap = document.createElement('div');
+  wrap.className = 'panel-report-bar';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-report';
+  btn.textContent = 'Copier le rapport de santé';
+  btn.addEventListener('click', () => {
+    navigator.clipboard.writeText(rapportSanteTenant(p, mfa)).then(() => {
+      btn.textContent = '✓ Rapport copié';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copier le rapport de santé'; btn.classList.remove('copied'); }, 1800);
+    }).catch(() => {
+      btn.textContent = 'Copie refusée par le navigateur';
+      setTimeout(() => { btn.textContent = 'Copier le rapport de santé'; }, 2500);
+    });
+  });
+  const hint = document.createElement('span');
+  hint.className = 'panel-report-hint';
+  hint.textContent = 'Texte brut, prêt à coller dans un ticket ou un mail.';
+  wrap.appendChild(btn); wrap.appendChild(hint);
+  return wrap;
 }
 
 /* Retourne la carte, ou null s'il n'y a rien à montrer. Appelée depuis
@@ -5152,7 +5311,7 @@ function makePostureCard() {
     badge: postureBadge(p),
     badgeCls: 'ms-b',
     selCls: 'selected',
-    onClick: () => openPanel('posture', 'Posture du tenant — Microsoft 365 Lighthouse', buildPosturePanel(p, mfa))
+    onClick: () => openPanel('posture', 'Posture du tenant (Microsoft 365 Lighthouse)', buildPosturePanel(p, mfa))
   });
 }
 function healthScoreLbl(health) {
@@ -5199,7 +5358,7 @@ async function checkFastById(tenantId) {
     currentState.ms = ms; currentState.domain = domain || null;
     /* Posture Lighthouse : elle ne dépend que du tenantId, elle vaut donc aussi
        pour une recherche directe par GUID. Le nom du tenant, lui, exige un
-       domaine — `findTenantInformationByDomainName` ne prend pas de GUID — il
+       domaine, `findTenantInformationByDomainName` ne prenant pas de GUID. Il
        reste donc absent quand le domaine n'a pas pu être résolu. */
     if (graphConnecte() && typeof checkPosture === 'function') {
       const [posture, mfa, tenant] = await Promise.all([

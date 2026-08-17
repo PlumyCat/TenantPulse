@@ -494,7 +494,7 @@ async function checkMfa(tenantId, signal) {
    `ManagedTenants.Read.All` ouvre le **service** Lighthouse, pas les **données**
    qu'il agrège. Chaque jeu qui expose de la donnée client réclame en plus la
    portée Graph propre à cette donnée, et un refus se présente sous la forme
-   d'un 403 « Delegate scope doesn't meet requirement » — trompeur, car les
+   d'un 403 « Delegate scope doesn't meet requirement », message trompeur : les
    rôles GDAP, eux, sont bien suffisants.
 
    Correspondance relevée dans les bundles du portail Lighthouse (2026-08-17) :
@@ -504,15 +504,13 @@ async function checkMfa(tenantId, signal) {
      windowsDeviceMalwareStates            →  DeviceManagementManagedDevices.Read.All
      conditionalAccessPolicyCoverages      →  Policy.Read.All
 
-   Les jeux repris ci-dessous sont ceux pour lesquels **aucune portée
-   supplémentaire n'est citée**, et le contrôle négatif tient : ce sont
-   exactement ceux qui répondent 200 avec les portées actuelles.
-
    D'où le parti pris de cette section : **chaque jeu est indépendant et
    facultatif**. Un refus n'est pas une erreur, il retire une ligne de
-   l'affichage et rien d'autre. Le jour où une portée est accordée, la donnée
-   apparaît sans qu'une ligne de code change. `graphDumpPosture()` en console
-   donne le détail des refus quand quelque chose manque à l'écran.
+   l'affichage et rien d'autre. Les jeux encore refusés sont donc interrogés
+   quand même, pour qu'ils apparaissent d'eux-mêmes le jour où la portée est
+   accordée, sans qu'une ligne de code change. `graphDumpPosture()` en console
+   donne le détail des refus quand quelque chose manque à l'écran, et
+   `PORTEE_REQUISE` plus bas sert à l'expliquer à l'utilisateur.
 
    Rappel valable pour tout le bloc : l'API est en beta, le tenant doit être
    intégré à Lighthouse, et les chiffres sont agrégés périodiquement. La date
@@ -520,6 +518,15 @@ async function checkMfa(tenantId, signal) {
 
 const TP_GRAPH_MT = '/tenantRelationships/managedTenants';
 const TP_GRAPH_SEVERITES = ['high', 'medium', 'low', 'informational'];
+
+/* Ce qui manque, et pourquoi. Sert à écrire à l'écran une phrase exploitable
+   plutôt qu'un silence : sans elle, un chiffre absent se lit comme un zéro.
+   Le libellé est celui que l'utilisateur cherchait, pas le nom de l'entité. */
+const PORTEE_REQUISE = {
+  appareils:  { quoi: 'Appareils non conformes', portee: 'DeviceManagementManagedDevices.Read.All' },
+  mfa:        { quoi: 'Couverture MFA',          portee: 'Reports.Read.All' },
+  exposition: { quoi: 'Vulnérabilités Defender', portee: 'DeviceManagementManagedDevices.Read.All' }
+};
 
 /* Le tenantId part dans un littéral OData : on n'y laisse passer qu'un GUID. */
 const TP_GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -539,7 +546,7 @@ async function litJeu(nom, chemin, signal, refus) {
    tenant demandé. Le portail interroge certains jeux avec `filter=` sans `$` ;
    si une révision de la beta cessait de l'honorer, la réponse porterait la
    première ligne venue du parc. Ce contrôle évite d'attribuer à un client les
-   chiffres d'un autre — silencieusement, et sur une page de diagnostic. */
+   chiffres d'un autre, silencieusement, sur une page de diagnostic. */
 function ligneDuTenant(data, tenantId) {
   const row = (data?.value || [])[0];
   if (!row) return null;
@@ -556,12 +563,17 @@ async function checkPosture(tenantId, signal) {
 
   /* Les jeux sont indépendants : en série, une analyse coûterait la somme des
      latences pour un résultat identique. */
-  const [score, expo, base, ident, adopt, ...alertes] = await Promise.all([
+  const [score, expo, base, ident, adopt, appar, ...alertes] = await Promise.all([
     J('secureScore', `${TP_GRAPH_MT}/managedTenantSecureScores?$filter=tenantId eq '${id}'&$orderby=createdDateTime desc&$top=1`),
     J('exposition',  `${TP_GRAPH_MT}/tenantExposureSummaries?$filter=tenantId eq '${id}'`),
     J('baseline',    `${TP_GRAPH_MT}/managementTemplateCollectionTenantSummaries?$apply=filter((tenantId in ('${id}')))`),
     J('identite',    `${TP_GRAPH_MT}/tenantsDetailedInformation?filter=tenantId eq '${id}'`),
     J('adoption',    `${TP_GRAPH_MT}/managedTenantAdoptionReports?$filter=tenantId eq '${id}'&$orderBy=createdDateTime desc&$top=1`),
+    /* Refusé en l'état (DeviceManagementManagedDevices.Read.All manquante), mais
+       interrogé quand même : le jour où la portée est accordée, le décompte
+       apparaît sans modification. Le plafond à 999 évite de paginer un parc
+       d'appareils entier pour un simple décompte. */
+    J('appareils',   `${TP_GRAPH_MT}/managedDeviceCompliances?$filter=tenantId eq '${id}'&$count=true&$top=999`),
     ...TP_GRAPH_SEVERITES.map(s =>
       J('alertes_' + s, `${TP_GRAPH_MT}/managedTenantAlerts?$count=true&$select=id&$top=1&$filter=tenantId in ('${id}') and severity in ('${s}')`))
   ]);
@@ -590,8 +602,8 @@ async function checkPosture(tenantId, signal) {
       recommandations: rExpo.recommendationCount ?? null,
       score:         typeof rExpo.riskExposureScore === 'number' ? Math.round(rExpo.riskExposureScore * 10) / 10 : null,
       /* `riskExposureDrift` vaut l'écart avec la plus ancienne valeur de la
-         série, laquelle est parfois à zéro faute d'historique — la dérive
-         affichée serait alors égale au score lui-même. On la recalcule sur les
+         série, laquelle est parfois à zéro faute d'historique, si bien que la
+         dérive vaudrait le score lui-même. On la recalcule sur les
          seules valeurs réelles, et on ne l'affiche pas s'il n'y en a qu'une. */
       derive:        passe.length > 1 ? Math.round((passe[0] - passe[passe.length - 1]) * 10) / 10 : null
     };
@@ -643,6 +655,40 @@ async function checkPosture(tenantId, signal) {
     };
   }
 
+  /* Conformité des appareils. Les noms de propriétés de cette entité n'ont
+     jamais pu être observés sur une vraie réponse (403 avec les portées
+     actuelles), d'où une lecture volontairement tolérante : on cherche un champ
+     de statut quelle qu'en soit la graphie, et on ne conclut que si on l'a
+     trouvé. Mieux vaut ne rien afficher qu'un décompte faux. */
+  const rows = Array.isArray(appar?.value) ? appar.value : null;
+  if (rows && rows.length) {
+    const statut = r => {
+      for (const n of ['complianceStatus', 'complianceState', 'deviceComplianceStatus', 'status', 'state']) {
+        if (typeof r[n] === 'string' && r[n]) return r[n].toLowerCase().replace(/[\s_-]/g, '');
+      }
+      return null;
+    };
+    let conformes = 0, nonConformes = 0, indetermines = 0;
+    rows.forEach(r => {
+      const s = statut(r);
+      if (s === null) { indetermines++; return; }
+      if (s === 'compliant') conformes++;
+      else if (s === 'unknown' || s === 'notapplicable') indetermines++;
+      else nonConformes++;
+    });
+    if (indetermines < rows.length) {
+      out.appareils = {
+        total:      typeof appar['@odata.count'] === 'number' ? appar['@odata.count'] : rows.length,
+        conformes,
+        nonConformes,
+        indetermines,
+        /* Au-delà du plafond, le décompte ne porte que sur la page rapatriée :
+           l'annoncer évite de présenter un sous-total comme un total. */
+        tronque:    rows.length >= 999
+      };
+    }
+  }
+
   /* Les alertes ne sont comptées que côté serveur (`$count=true`, `$top=1`) :
      rapatrier les alertes elles-mêmes n'apporterait rien ici et Lighthouse en
      porte des milliers. */
@@ -659,7 +705,7 @@ async function checkPosture(tenantId, signal) {
 
   TP_GRAPH.dernierePosture = out;
   /* Aucun jeu n'a répondu : rien à afficher, et surtout pas une carte vide. */
-  const utiles = ['secureScore', 'exposition', 'baseline', 'identite', 'adoption', 'alertes'];
+  const utiles = ['secureScore', 'exposition', 'baseline', 'identite', 'adoption', 'alertes', 'appareils'];
   return utiles.some(k => out[k]) ? out : null;
 }
 
