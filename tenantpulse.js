@@ -4704,8 +4704,17 @@ function buildScoreRing(score, bonus) {
   const trk = document.createElementNS(NS, 'circle'); trk.setAttribute('class','trk'); trk.setAttribute('cx','27'); trk.setAttribute('cy','27'); trk.setAttribute('r', String(r));
   const fll = document.createElementNS(NS, 'circle'); fll.setAttribute('class','fll'); fll.setAttribute('cx','27'); fll.setAttribute('cy','27'); fll.setAttribute('r', String(r)); fll.setAttribute('stroke', color); fll.setAttribute('stroke-dasharray', String(circ)); fll.setAttribute('stroke-dashoffset', String(offset));
   svg.appendChild(trk); svg.appendChild(fll);
-  const lbl_el = document.createElement('div'); lbl_el.className = 'lbl'; lbl_el.textContent = score + '%';
-  if (bonus > 0) { const sup = document.createElement('span'); sup.style.cssText = 'font-size:9px;font-weight:700;color:#16a34a'; sup.textContent = ' +' + bonus; lbl_el.appendChild(sup); }
+  /* Le pourcentage seul dans l'anneau. Le bonus y figurait aussi, et « 92% +4 »
+     ne tenait pas dans les 42px de diametre interieur : le label passait a la
+     ligne et les deux valeurs venaient toucher le trace. Le bonus est de toute
+     facon annonce en clair juste a cote, avec ce qui le compose, ce que
+     l'anneau ne pouvait pas dire. */
+  const lbl_el = document.createElement('div');
+  /* « 100% » fait quatre caracteres et frole le trace a la taille normale. Une
+     classe plutot qu'un style calcule : le point de bascule est une regle de
+     mise en page, sa place est dans la feuille de style. */
+  lbl_el.className = 'lbl' + (String(score).length >= 3 ? ' long' : '');
+  lbl_el.textContent = score + '%';
   ring.appendChild(svg); ring.appendChild(lbl_el);
 
   const info = document.createElement('div'); info.className = 'score-info';
@@ -4792,11 +4801,39 @@ function renderHero(ms, domain, confidence) {
     return d;
   };
 
+  /* Fiche du client, en infobulle sur le nom du tenant. Elle occupait une tuile
+     entiere du panneau Posture pour trois lignes qui n'en relevent pas :
+     localisation, segment et secteur decrivent le client, pas l'etat de son
+     tenant. Rattachee au nom, elle est la ou on la cherche et ne coute plus
+     rien a la lecture du panneau. */
+  const mkFicheClient = () => {
+    const i = currentState.graph?.posture?.identite;
+    if (!i) return null;
+    const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
+    const secteur = i.industrie || i.vertical;
+    const lignes = [];
+    if (lieu)      lignes.push('Localisation : ' + lieu);
+    if (i.segment) lignes.push('Segment : ' + i.segment);
+    if (secteur)   lignes.push('Secteur : ' + secteur);
+    if (!lignes.length) return null;
+    const b = document.createElement('span');
+    b.className = 'hero-fiche-info';
+    b.tabIndex = 0;
+    b.title = ['FICHE DU CLIENT', ...lignes].join('\n');
+    /* L'infobulle native ne se lit pas au clavier ni au lecteur d'ecran : le
+       meme contenu est donc porte par aria-label. */
+    b.setAttribute('aria-label', 'Fiche du client. ' + lignes.join('. '));
+    b.appendChild(makeInfoIcon('white'));
+    return b;
+  };
+
   /* Nom du tenant : le seul identifiant lisible par un humain. */
   const mkTenantName = () => {
     if (!gt?.displayName) return null;
     const d = document.createElement('div'); d.className = 'hero-tenant-name';
-    d.textContent = gt.displayName;
+    d.appendChild(document.createTextNode(gt.displayName));
+    const fiche = mkFicheClient();
+    if (fiche) d.appendChild(fiche);
     return d;
   };
 
@@ -5747,12 +5784,14 @@ function tuilePosture(grille, def) {
   tete.appendChild(titre);
   tete.appendChild(val);
 
-  if (def.sousVal) {
-    const sv = document.createElement('span');
-    sv.className = 'posture-tuile-sousval';
-    sv.textContent = def.sousVal;
-    tete.appendChild(sv);
-  }
+  /* Toujours posée, même vide : c'est elle qui réserve la ligne, et sans cette
+     ligne une tuile sans sous-valeur serait plus courte que ses voisines. Le
+     CSS seul n'y suffit pas, une hauteur minimale ne s'applique qu'à un
+     élément qui existe. */
+  const sv = document.createElement('span');
+  sv.className = 'posture-tuile-sousval';
+  sv.textContent = def.sousVal || '';
+  tete.appendChild(sv);
 
   /* Chevron calqué sur celui des tuiles du hero : même pastille, même place. */
   const chev = document.createElement('span');
@@ -5826,6 +5865,25 @@ function bandeCritique(defs, tuiles) {
   });
 
   return n ? bande : null;
+}
+
+/* Volet santé du rapport exporté. Extrait ici parce qu'il était écrit deux fois
+   à l'identique, et surtout parce qu'il lisait `currentState.health` sans le
+   vérifier : quand l'analyse DNS échoue — filtrage DoH sur le poste, cas
+   courant en entreprise — checkHealth ne renseigne rien et l'export levait
+   « Cannot read properties of null (reading 'score') ». L'analyse complète
+   s'arrêtait alors sur une erreur brute, alors que tout le reste avait abouti.
+   Une santé absente vaut `null` dans le rapport : c'est une rubrique en moins,
+   pas une analyse perdue. */
+function rapportSante() {
+  const h = currentState.health;
+  if (!h) return null;
+  const lot = l => (l || []).map(c => ({ type: c.t, title: c.title, desc: c.desc }));
+  return {
+    score: h.score, bonus: h.bonus, dmarcIsQuarantine: h.dmarcIsQuarantine,
+    checks: lot(h.checks), m365: lot(h.m365),
+    dkim: { selector1: h.hasSel1, selector2: h.hasSel2, allResults: h.dkimResults }
+  };
 }
 
 function buildPosturePanel(p, mfa) {
@@ -5989,21 +6047,8 @@ function buildPosturePanel(p, mfa) {
       });
     }
 
-    if (p.identite) {
-      const i = p.identite;
-      const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
-      if (lieu || i.segment || i.industrie || i.vertical) {
-        defs.push({
-          id: 'fiche', titre: 'Fiche du client',
-          valeur: i.pays || i.ville || '—', sousVal: i.segment || null,
-          remplir: c => {
-            addInfoCompacte(c, 'Localisation', lieu);
-            addInfoCompacte(c, 'Segment', i.segment);
-            addInfoCompacte(c, 'Secteur', i.industrie || i.vertical);
-          }
-        });
-      }
-    }
+    /* `p.identite` n'a plus de tuile ici : la fiche du client est passée sur le
+       hero, en infobulle du nom du tenant. Voir mkFicheClient() dans renderHero. */
 
     /* Ce que les portées actuelles ne couvrent pas. Sans cette mention, une
        donnée absente passerait pour une donnée à zéro, ce qui est bien pire
@@ -6403,7 +6448,7 @@ async function runFullFromState(raw, domain, ctaBtn) {
     const oldHero = center.querySelector('.tenant-hero');
     if (oldHero) center.replaceChild(renderHero(currentState.ms, domain, confidence), oldHero);
 
-    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, bonus: currentState.health.bonus, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, graph: currentState.graph, tenantConfidence: confidence, fullDone: true };
+    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: rapportSante(), otherServices: currentState.others, host: currentState.host, graph: currentState.graph, tenantConfidence: confidence, fullDone: true };
     exportBtn.classList.add('visible');
 
     const newPb = document.createElement('div'); newPb.className = 'pills-block';
@@ -6470,7 +6515,7 @@ async function checkFull() {
     document.getElementById('progList').style.display = 'none';
     currentState.fullDone = true;
     const confidence = computeConfidence(currentState.ms);
-    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: { score: currentState.health.score, bonus: currentState.health.bonus, dmarcIsQuarantine: currentState.health.dmarcIsQuarantine, checks: currentState.health.checks.map(c => ({ type:c.t, title:c.title, desc:c.desc })), m365: (currentState.health.m365 || []).map(c => ({ type:c.t, title:c.title, desc:c.desc })), dkim: { selector1: currentState.health.hasSel1, selector2: currentState.health.hasSel2, allResults: currentState.health.dkimResults } }, otherServices: currentState.others, host: currentState.host, graph: currentState.graph, tenantConfidence: confidence, fullDone: true };
+    lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: rapportSante(), otherServices: currentState.others, host: currentState.host, graph: currentState.graph, tenantConfidence: confidence, fullDone: true };
     exportBtn.classList.add('visible');
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));
