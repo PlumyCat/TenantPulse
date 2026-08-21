@@ -4959,7 +4959,7 @@ function exportReport() {
   }
 
   // ── Footer ───────────────────────────────────
-  lines.push('TenantPulse \u2014 Internal RUN MW Platform \u2014 v1.5');
+  lines.push('TenantPulse \u2014 Internal RUN MW Platform \u2014 v2.0');
 
   const text = lines.join('\n');
   const btn  = document.getElementById('exportBtn');
@@ -5149,10 +5149,11 @@ function postureBadge(p) {
    #view/<extension>/<Vue>.ReactView/<cle>/<valeur>/... et l'extension de
    Lighthouse est `Microsoft_Intune_MTM`, relevee dans sa configuration.
 
-   Une seule route a ete observee telle quelle, donc une seule est certaine :
-   la fiche client (CustomerInsights.ReactView), qui porte les onglets
-   Presentation, Elements d'action, Plan de deploiement et Utilisateurs. C'est
-   elle qu'on utilise partout ou un doute existe.
+   Deux routes ont ete observees telles quelles, donc deux sont certaines : la
+   fiche client (CustomerInsights.ReactView), qui porte les onglets
+   Presentation, Elements d'action, Plan de deploiement et Utilisateurs, et la
+   vue conformite des appareils (DeviceCompliance.ReactView). La premiere est
+   celle qu'on utilise partout ou un doute existe.
 
    Les noms des vues thematiques viennent du code du portail, qui associe
    explicitement une vue a chaque jeu de donnees. Leurs parametres, eux, n'ont
@@ -5258,6 +5259,163 @@ function addSectionNote(b, texte) {
   b.appendChild(d);
 }
 
+/* ── Liste des appareils gérés ───────────────────────────────────────────────
+   Les compteurs disent combien, la liste dit lesquels : sur un ticket, c'est le
+   nom de la machine qu'on cherche, pas un pourcentage. Les lignes arrivent déjà
+   dans la réponse qui sert au décompte, les afficher ne coûte donc aucune
+   requête de plus.
+
+   Deux plafonds distincts, à ne pas confondre : le rendu s'arrête à
+   APPAREILS_VISIBLES lignes pour ne pas empiler un parc entier dans un panneau
+   qui défile déjà, tandis que le filtre et la recherche travaillent sur la
+   liste complète. Un appareil cherché par son nom doit se trouver même s'il se
+   situe au-delà du plafond d'affichage.                                       */
+const APPAREILS_VISIBLES = 60;
+
+/* Plafond du rapport texte, distinct de celui de l'affichage : un rapport colle
+   dans un ticket doit rester lisible d'un coup d'oeil. Au-dela, on renvoie a
+   l'application plutot que de deverser un inventaire dans un commentaire. */
+const RAPPORT_APPAREILS_MAX = 30;
+
+/* Lighthouse renvoie ces valeurs en anglais. Aucune n'est affichée telle
+   quelle : un libellé anglais au milieu d'un panneau français se lit comme une
+   fuite de donnée brute. Une valeur inconnue retombe sur le seau calculé. */
+const APPAREIL_PROPRIETE_LBL = { company: 'Entreprise', corporate: 'Entreprise', personal: 'Personnel', unknown: 'Inconnu' };
+const APPAREIL_ETAT_LBL      = { conforme: 'Conforme', nonconforme: 'Non conforme', indetermine: 'Non évalué' };
+const APPAREIL_ETAT_BRUT_LBL = {
+  compliant: 'Conforme', noncompliant: 'Non conforme', ingraceperiod: 'Période de grâce',
+  error: 'Erreur', conflict: 'Conflit', notapplicable: 'Non applicable', unknown: 'Non évalué',
+  configmanager: 'Géré par ConfigMgr'
+};
+
+function appareilEtatLbl(d) {
+  const brut = d.etatBrut ? String(d.etatBrut).toLowerCase().replace(/[\s_-]/g, '') : null;
+  return (brut && APPAREIL_ETAT_BRUT_LBL[brut]) || APPAREIL_ETAT_LBL[d.etat];
+}
+
+/* Ancienneté du dernier contact. Un appareil conforme mais muet depuis des mois
+   n'est pas conforme : son dernier verdict connu date, et c'est cette date qui
+   est conforme, pas la machine. En dessous d'un mois, le silence est normal. */
+function appareilInactivite(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  const jours = Math.floor((Date.now() - d.getTime()) / 86400000);
+  return jours >= 30 ? jours : null;
+}
+
+function ligneAppareil(d) {
+  const row  = document.createElement('div'); row.className = 'dev-row ' + d.etat;
+  const head = document.createElement('div'); head.className = 'dev-head';
+  const nom  = document.createElement('span'); nom.className = 'dev-nom';
+  nom.textContent = d.nom; nom.title = d.nom;
+  const etat = document.createElement('span'); etat.className = 'dev-etat';
+  etat.textContent = appareilEtatLbl(d);
+  head.appendChild(nom); head.appendChild(etat);
+  row.appendChild(head);
+
+  const bouts = [];
+  const sys = [d.os, d.version].filter(Boolean).join(' ');
+  if (sys) bouts.push(sys);
+  if (d.propriete) bouts.push(APPAREIL_PROPRIETE_LBL[String(d.propriete).toLowerCase()] || d.propriete);
+  const vu      = posturDate(d.vuLe);
+  const inactif = appareilInactivite(d.vuLe);
+  if (vu) bouts.push('vu le ' + vu + (inactif ? ', muet depuis ' + inactif + ' j' : ''));
+  if (bouts.length) {
+    const meta = document.createElement('div');
+    meta.className = 'dev-meta' + (inactif ? ' muet' : '');
+    meta.textContent = bouts.join(' · ');
+    row.appendChild(meta);
+  }
+  return row;
+}
+
+function addListeAppareils(b, a) {
+  const liste = a.liste;
+  /* Les compteurs de `a` portent sur toutes les lignes rapatriées, y compris
+     celles sans nom qui ne sont pas affichables. Les onglets comptent donc ce
+     qui est réellement dans la liste, sans quoi « Non conformes 6 » ouvrirait
+     sur cinq lignes. */
+  const compte = { tous: liste.length, conforme: 0, nonconforme: 0, indetermine: 0 };
+  liste.forEach(d => { compte[d.etat]++; });
+
+  let filtre  = compte.nonconforme ? 'nonconforme' : 'tous';
+  let requete = '';
+  let plafond = APPAREILS_VISIBLES;
+
+  const bloc = document.createElement('div'); bloc.className = 'dev-bloc';
+
+  const seg = document.createElement('div'); seg.className = 'dev-seg';
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', 'Filtrer par état de conformité');
+  const boutons = [];
+  [['tous', 'Tous'], ['nonconforme', 'Non conformes'], ['indetermine', 'Non évalués'], ['conforme', 'Conformes']]
+    .forEach(([cle, lbl]) => {
+      if (cle !== 'tous' && !compte[cle]) return;   // un onglet vide n'apprend rien
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'dev-seg-btn'; btn.dataset.filtre = cle;
+      btn.textContent = lbl + ' ' + compte[cle];
+      btn.addEventListener('click', () => { filtre = cle; plafond = APPAREILS_VISIBLES; rendre(); });
+      seg.appendChild(btn); boutons.push(btn);
+    });
+  bloc.appendChild(seg);
+
+  const rech = document.createElement('input');
+  rech.type = 'search'; rech.className = 'dev-rech';
+  rech.placeholder = 'Filtrer par nom ou système…';
+  rech.setAttribute('aria-label', 'Filtrer la liste des appareils');
+  rech.addEventListener('input', () => {
+    requete = rech.value.trim().toLowerCase();
+    plafond = APPAREILS_VISIBLES;
+    rendre();
+  });
+  bloc.appendChild(rech);
+
+  const corps = document.createElement('div'); corps.className = 'dev-liste';
+  const pied  = document.createElement('div'); pied.className  = 'dev-pied';
+  bloc.appendChild(corps); bloc.appendChild(pied);
+
+  const correspond = d => {
+    if (filtre !== 'tous' && d.etat !== filtre) return false;
+    if (!requete) return true;
+    return [d.nom, d.os, d.version, d.propriete].filter(Boolean).join(' ').toLowerCase().includes(requete);
+  };
+
+  function rendre() {
+    boutons.forEach(btn => {
+      const actif = btn.dataset.filtre === filtre;
+      btn.classList.toggle('actif', actif);
+      btn.setAttribute('aria-pressed', actif ? 'true' : 'false');
+    });
+    const vus = liste.filter(correspond);
+    corps.replaceChildren(...vus.slice(0, plafond).map(ligneAppareil));
+    pied.replaceChildren();
+
+    if (!vus.length) {
+      const vide = document.createElement('div'); vide.className = 'dev-vide';
+      vide.textContent = 'Aucun appareil ne correspond.';
+      pied.appendChild(vide);
+    } else if (vus.length > plafond) {
+      const reste = vus.length - plafond;
+      const plus  = document.createElement('button');
+      plus.type = 'button'; plus.className = 'dev-plus';
+      plus.textContent = 'Afficher les ' + reste + ' appareil' + (reste > 1 ? 's' : '') + ' restant' + (reste > 1 ? 's' : '');
+      plus.addEventListener('click', () => { plafond = vus.length; rendre(); });
+      pied.appendChild(plus);
+    }
+
+    /* Une liste tronquée sans mention se lit comme une liste complète. */
+    if (a.tronque) {
+      const t = document.createElement('div'); t.className = 'dev-vide';
+      t.textContent = "Lighthouse n'a renvoyé que les 999 premiers appareils du parc.";
+      pied.appendChild(t);
+    }
+  }
+
+  rendre();
+  b.appendChild(bloc);
+}
+
 function buildPosturePanel(p, mfa) {
   return b => {
     addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
@@ -5290,6 +5448,8 @@ function buildPosturePanel(p, mfa) {
                   part(a.nonConformes, a.total), a.nonConformes ? 'bad' : 'ok');
       addMetrique(b, 'Conformes', String(a.conformes), 'sur ' + a.total, part(a.conformes, a.total), 'ok');
       if (a.indetermines) addMetrique(b, 'Statut indéterminé', String(a.indetermines), null, part(a.indetermines, a.total), null);
+      if (a.liste?.length) addListeAppareils(b, a);
+      addLienLighthouse(b, 'Vue Conformité des appareils dans Lighthouse', 'DeviceCompliance.ReactView');
     }
 
     if (p.alertes) {
@@ -5427,6 +5587,22 @@ function rapportSanteTenant(p, mfa) {
   if (p.appareils) {
     L.push('CONFORMITE DES APPAREILS');
     L.push(p.appareils.nonConformes + ' appareil(s) non conforme(s) sur ' + p.appareils.total + ' gere(s).');
+    /* Nommer les machines en faute est ce qui rend le rapport actionnable :
+       sans elles, le lecteur du ticket doit rouvrir Lighthouse pour savoir sur
+       quoi intervenir. Seules les non conformes sont citees, les conformes
+       n'appellent aucune action. */
+    const fautifs = (p.appareils.liste || []).filter(d => d.etat === 'nonconforme');
+    if (fautifs.length) {
+      L.push('');
+      L.push('Appareils concernes :');
+      fautifs.slice(0, RAPPORT_APPAREILS_MAX).forEach(d => {
+        const q = [appareilEtatLbl(d), [d.os, d.version].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+        L.push('  - ' + d.nom + (q ? '   (' + q + ')' : ''));
+      });
+      if (fautifs.length > RAPPORT_APPAREILS_MAX) {
+        L.push('  ... et ' + (fautifs.length - RAPPORT_APPAREILS_MAX) + " autre(s), liste complete dans l'application.");
+      }
+    }
     L.push('');
   }
 

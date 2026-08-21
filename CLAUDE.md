@@ -551,8 +551,10 @@ réseau plus haut.
 
 ## Known issues
 
-- **Version string duplicated and inconsistent**: `index.html` `<title>` says `v0.8.5` but
-  the nav badge says `v0.8.1`. Update both when bumping.
+- **Version string duplicated in three places**: `index.html` `<title>`, the `.nav-badge`
+  in `index.html`, et le pied du rapport d'analyse dans `tenantpulse.js`. Les trois sont
+  alignees (v2.0) — les mettre a jour ensemble a chaque montee de version. La version de
+  l'extension (`extension/manifest.json`) est independante et suit son propre cycle.
 - CSP is delivered as `<meta>` tags in the prototype; a production host should also send real
   HTTP response headers (see `staticwebapp.config.json` for the production-side config).
 

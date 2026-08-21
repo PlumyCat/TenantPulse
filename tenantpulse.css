@@ -1034,6 +1034,49 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 .metric.texte{margin-bottom:7px}
 .metric.texte .metric-val{font-size:12px;font-weight:600;white-space:normal;text-align:right}
 
+/* ── Liste des appareils geres (panneau Posture) ─────────────────────────────
+   Un parc entier tient dans un panneau etroit : chaque ligne est donc sur deux
+   niveaux, le nom et l'etat sur la premiere, le reste en retrait. Le liseré de
+   gauche porte le verdict, ce qui laisse la couleur hors du texte et garde la
+   liste lisible quand on la parcourt du regard sans la lire.                  */
+.dev-bloc{margin:2px 0 4px}
+.dev-seg{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px}
+.dev-seg-btn{background:var(--row);border:1px solid var(--border);color:var(--soft);font-family:var(--font);font-size:10.5px;font-weight:600;letter-spacing:.02em;padding:3px 9px;border-radius:var(--r-pill);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.dev-seg-btn:hover{color:var(--text)}
+.dev-seg-btn.actif{background:var(--blue);border-color:var(--blue);color:#fff}
+.dev-rech{width:100%;box-sizing:border-box;background:var(--row);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);font-family:var(--font);font-size:12px;padding:6px 9px;margin-bottom:8px;transition:border-color .15s}
+.dev-rech::placeholder{color:var(--muted)}
+.dev-rech:focus{outline:none;border-color:var(--blue)}
+
+/* Plafonne a environ dix lignes : au-dela, la liste avalerait le panneau et les
+   sections suivantes deviendraient introuvables. */
+.dev-liste{max-height:340px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.dev-row{padding:6px 8px 6px 9px;border-left:2.5px solid var(--border);border-radius:0 var(--r-xs) var(--r-xs) 0;margin-bottom:3px;background:var(--row)}
+.dev-row.nonconforme{border-left-color:#dc2626}
+.dev-row.conforme{border-left-color:#16a34a}
+.dev-row.indetermine{border-left-color:var(--muted)}
+.dev-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.dev-nom{font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dev-etat{font-size:10px;font-weight:600;color:var(--soft);white-space:nowrap;flex-shrink:0}
+.dev-row.nonconforme .dev-etat{color:#dc2626}
+.dev-row.conforme .dev-etat{color:#15803d}
+/* La meta passe a la ligne plutot que de se faire couper : a 380px de panneau,
+   une version d'OS complete suffit a pousser « muet depuis N j » hors cadre, et
+   c'est precisement le bout de la ligne qui appelle une action. */
+.dev-meta{font-size:10.5px;line-height:1.4;color:var(--muted);margin-top:2px}
+/* Un appareil qui ne s'est plus manifeste depuis un mois : son verdict de
+   conformite date d'autant, il ne dit plus rien de son etat actuel. */
+.dev-meta.muet{color:#b45309}
+
+.dev-pied{margin-top:6px;display:flex;flex-direction:column;gap:5px}
+.dev-plus{align-self:flex-start;background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--soft);font-family:var(--font);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;transition:background .15s,color .15s}
+.dev-plus:hover{background:var(--row);color:var(--text)}
+.dev-vide{font-size:var(--text-xs);color:var(--soft);line-height:1.5}
+
+[data-theme="dark"] .dev-row.nonconforme .dev-etat{color:#fca5a5}
+[data-theme="dark"] .dev-row.conforme .dev-etat{color:#86efac}
+[data-theme="dark"] .dev-meta.muet{color:#fcd34d}
+
 /* Barre d'action en tête du panneau Posture. */
 .panel-report-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 /* Variante de bas de panneau : on lit, puis on agit. */
@@ -1371,6 +1414,9 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
   .detail-panel:not(.open){display:none;border-top:none}
   .detail-panel.open{display:flex;flex-direction:column;width:100%!important;height:auto;min-height:0}
   .panel-body{overflow:visible;max-height:none}
+  /* En colonne unique, le panneau defile avec la page : une liste d'appareils
+     qui garderait son propre defilement piegerait le doigt sur mobile. */
+  .dev-liste{max-height:none;overflow-y:visible}
 
   /* Hero compact */
   .tenant-hero{padding:18px 16px 16px;border-radius:var(--r-lg)}

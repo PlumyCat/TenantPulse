@@ -657,25 +657,63 @@ async function checkPosture(tenantId, signal) {
 
   /* Conformité des appareils. Les noms de propriétés de cette entité n'ont
      jamais pu être observés sur une vraie réponse (403 avec les portées
-     actuelles), d'où une lecture volontairement tolérante : on cherche un champ
-     de statut quelle qu'en soit la graphie, et on ne conclut que si on l'a
-     trouvé. Mieux vaut ne rien afficher qu'un décompte faux. */
+     actuelles), d'où une lecture volontairement tolérante : on cherche chaque
+     champ sous plusieurs graphies, et on ne conclut que sur ce qu'on a trouvé.
+     Mieux vaut ne rien afficher qu'un décompte faux.
+
+     C'est aussi pourquoi la requête n'emploie pas `$select` : restreindre les
+     colonnes sur des noms non vérifiés reviendrait à écarter d'avance le champ
+     dont la graphie a été mal devinée. */
   const rows = Array.isArray(appar?.value) ? appar.value : null;
   if (rows && rows.length) {
+    /* Première valeur exploitable parmi plusieurs graphies. Les booléens sont
+       volontairement écartés : le portail Lighthouse affiche littéralement
+       « True » en colonne « SE » sur certaines lignes, faute de ce garde. */
+    const champ = (r, noms) => {
+      for (const n of noms) {
+        const v = r[n];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+        if (typeof v === 'number' && isFinite(v)) return String(v);
+      }
+      return null;
+    };
     const statut = r => {
       for (const n of ['complianceStatus', 'complianceState', 'deviceComplianceStatus', 'status', 'state']) {
         if (typeof r[n] === 'string' && r[n]) return r[n].toLowerCase().replace(/[\s_-]/g, '');
       }
       return null;
     };
+    /* Trois seaux, et un seul rang de tri : sur un ticket, on cherche ce qui
+       ne va pas, pas l'inventaire. Les non conformes remontent donc en tête. */
+    const seau = s => s === null ? 'indetermine'
+                    : s === 'compliant' ? 'conforme'
+                    : (s === 'unknown' || s === 'notapplicable') ? 'indetermine'
+                    : 'nonconforme';
+    const RANG = { nonconforme: 0, indetermine: 1, conforme: 2 };
+
     let conformes = 0, nonConformes = 0, indetermines = 0;
-    rows.forEach(r => {
-      const s = statut(r);
-      if (s === null) { indetermines++; return; }
-      if (s === 'compliant') conformes++;
-      else if (s === 'unknown' || s === 'notapplicable') indetermines++;
+    const liste = rows.map(r => {
+      const etat = seau(statut(r));
+      if (etat === 'conforme') conformes++;
+      else if (etat === 'indetermine') indetermines++;
       else nonConformes++;
-    });
+      return {
+        nom:       champ(r, ['deviceName', 'managedDeviceName', 'displayName', 'name']),
+        etat,
+        /* Le libellé brut de Lighthouse est conservé à côté du seau : « in grace
+           period » et « non conforme » comptent pareil mais ne se disent pas
+           pareil à un technicien. */
+        etatBrut:  champ(r, ['complianceStatus', 'complianceState', 'deviceComplianceStatus', 'status', 'state']),
+        os:        champ(r, ['operatingSystem', 'osDescription', 'platform', 'deviceType']),
+        version:   champ(r, ['osVersion', 'operatingSystemVersion', 'osBuildNumber']),
+        propriete: champ(r, ['ownerType', 'managedDeviceOwnerType', 'ownership']),
+        vuLe:      champ(r, ['lastSyncDateTime', 'lastCheckInDateTime', 'lastContactDateTime', 'lastReportedDateTime'])
+      };
+      /* Les lignes sans nom sont écartées juste après : leur rang de tri
+         n'a pas d'importance. */
+    }).sort((x, y) => (RANG[x.etat] - RANG[y.etat])
+                   || (x.nom || '').localeCompare(y.nom || '', 'fr', { numeric: true }));
+
     if (indetermines < rows.length) {
       out.appareils = {
         total:      typeof appar['@odata.count'] === 'number' ? appar['@odata.count'] : rows.length,
@@ -684,9 +722,15 @@ async function checkPosture(tenantId, signal) {
         indetermines,
         /* Au-delà du plafond, le décompte ne porte que sur la page rapatriée :
            l'annoncer évite de présenter un sous-total comme un total. */
-        tronque:    rows.length >= 999
+        tronque:    rows.length >= 999,
+        /* Une ligne sans nom ne sert à rien dans une liste : on la garde dans
+           les compteurs, pas à l'écran. */
+        liste:      liste.filter(d => d.nom)
       };
     }
+    /* Forme réelle de la première ligne, pour relever les vraies graphies le
+       jour où l'entité répond enfin. Même usage que graphDumpMfa(). */
+    TP_GRAPH.dernierAppareil = rows[0];
   }
 
   /* Les alertes ne sont comptées que côté serveur (`$count=true`, `$top=1`) :
@@ -711,6 +755,12 @@ async function checkPosture(tenantId, signal) {
 
 /* Détail des refus et dernière charge utile, pour diagnostic en console. */
 function graphDumpPosture() { return TP_GRAPH.dernierePosture || null; }
+
+/* Première ligne brute de `managedDeviceCompliances`, pour relever les vraies
+   graphies de ses propriétés. Elles n'ont jamais pu être observées : tant que
+   `DeviceManagementManagedDevices.Read.All` n'est pas consentie, l'entité
+   répond 403 et la liste d'appareils repose sur des noms de champs devinés. */
+function graphDumpAppareil() { return TP_GRAPH.dernierAppareil || null; }
 
 /* Interroge Graph pour un domaine. Retourne null si l'utilisateur n'est pas
    connecté : l'application doit rester entièrement fonctionnelle sans Graph,
