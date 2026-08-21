@@ -707,7 +707,26 @@ async function checkPosture(tenantId, signal) {
     compte[CPT_SEAU[normStatut(r.complianceStatus)] || 'indetermine'] += n;
   });
 
-  const rows = Array.isArray(appar?.value) ? appar.value : null;
+  /* Même garde que `ligneDuTenant()` sur les jeux à ligne unique, et pour la
+     même raison, mais elle compte double ici : les autres jeux se tromperaient
+     de chiffres, celui-ci afficherait **les noms des machines d'un autre
+     client**. Le portail interroge certaines entités avec `filter=` sans `$` ;
+     si une révision de la beta cessait d'honorer le nôtre, la réponse porterait
+     tout le parc du partenaire. Pour un outil MSP dont l'argument est justement
+     de ne pas mélanger les clients, ça ne se rattrape pas.
+
+     Une ligne sans `tenantId` est conservée : le champ est présent dans la
+     charge utile observée, mais l'absence d'un champ n'est pas la preuve d'une
+     appartenance à un autre tenant, et c'est une API beta. */
+  const brutes = Array.isArray(appar?.value) ? appar.value : null;
+  const rows = brutes && brutes.filter(r =>
+    !r?.tenantId || String(r.tenantId).toLowerCase() === String(id).toLowerCase());
+  if (brutes && rows.length !== brutes.length) {
+    /* Silencieux à l'écran, bruyant en console : c'est exactement le signal que
+       le filtre serveur a cessé d'être honoré. */
+    console.warn('[TenantPulse] managedDeviceCompliances : '
+      + (brutes.length - rows.length) + " ligne(s) hors tenant écartée(s). Le filtre OData n'est plus honoré.");
+  }
   if (rows && rows.length) {
     /* Première valeur exploitable parmi plusieurs graphies. Les booléens sont
        volontairement écartés : le portail Lighthouse affiche littéralement
