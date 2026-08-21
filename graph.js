@@ -522,10 +522,16 @@ const TP_GRAPH_SEVERITES = ['high', 'medium', 'low', 'informational'];
 /* Ce qui manque, et pourquoi. Sert à écrire à l'écran une phrase exploitable
    plutôt qu'un silence : sans elle, un chiffre absent se lit comme un zéro.
    Le libellé est celui que l'utilisateur cherchait, pas le nom de l'entité. */
+/* `vue` porte la route du portail Lighthouse ou la donnee refusee est, elle,
+   consultable — `null` renvoyant a la fiche du client, comme addLienLighthouse.
+   Sans ce lien, la rubrique la plus utile est aussi la seule sans porte de
+   sortie : l'utilisateur lit qu'une autorisation manque et n'a nulle part ou
+   aller, alors que ses roles GDAP lui donnent acces a la donnee depuis le
+   portail dans la seconde. */
 const PORTEE_REQUISE = {
-  appareils:  { quoi: 'Appareils non conformes', portee: 'DeviceManagementManagedDevices.Read.All' },
-  mfa:        { quoi: 'Couverture MFA',          portee: 'Reports.Read.All' },
-  exposition: { quoi: 'Vulnérabilités Defender', portee: 'DeviceManagementManagedDevices.Read.All' }
+  appareils:  { quoi: 'Appareils non conformes', portee: 'DeviceManagementManagedDevices.Read.All', vue: 'DeviceCompliance.ReactView' },
+  mfa:        { quoi: 'Couverture MFA',          portee: 'Reports.Read.All',                        vue: null },
+  exposition: { quoi: 'Vulnérabilités Defender', portee: 'DeviceManagementManagedDevices.Read.All', vue: 'MDE.ReactView' }
 };
 
 /* Le tenantId part dans un littéral OData : on n'y laisse passer qu'un GUID. */

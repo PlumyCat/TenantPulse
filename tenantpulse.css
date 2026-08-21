@@ -1034,36 +1034,56 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 .metric.texte{margin-bottom:7px}
 .metric.texte .metric-val{font-size:12px;font-weight:600;white-space:normal;text-align:right}
 
-/* ── Grille de blocs du panneau Posture ──────────────────────────────────────
-   Les sections s'empilaient a la suite, sans rien pour marquer ou l'une finit
-   et ou la suivante commence : a huit sections, la lecture devenait une seule
-   colonne de chiffres. Chaque section est desormais une carte, et les cartes se
-   repartissent en colonnes des que la largeur le permet.
+/* ── Grille de cartes des panneaux ───────────────────────────────────────────
+   Partagee par Posture et Sante du domaine. Les sections s'empilaient a la
+   suite, sans rien pour marquer ou l'une finit et ou la suivante commence : a
+   huit rubriques, la lecture devenait une seule colonne de chiffres.
 
-   auto-fill plutot qu'auto-fit : auto-fit etirerait une carte solitaire sur
-   toute la largeur du panneau elargi, ce qui donne une carte de 900px pour deux
-   lignes de texte. auto-fill garde la piste vide et la carte a sa taille. */
-.posture-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(252px,1fr));gap:9px;align-items:start}
-.posture-bloc{background:var(--row);border:1px solid var(--border);border-radius:var(--r-md);padding:11px 12px 9px;min-width:0}
+   Multi-colonnes et non grille CSS, et c'est la le point : une grille range en
+   rangees, donc toutes les cartes d'une rangee subissent la hauteur de la plus
+   haute et les courtes laissent un trou sous elles. Le multi-colonnes remplit
+   chaque colonne de haut en bas puis passe a la suivante, et `column-fill:
+   balance` egalise les hauteurs — ce que la grille ne sait pas faire, faute de
+   `masonry` implemente nulle part.
+
+   Contrepartie assumee : l'ordre de lecture devient colonne par colonne, pas
+   rangee par rangee. Sans consequence ici, les cartes etant independantes. */
+.panel-cols{column-width:252px;column-gap:10px}
+/* 300 et non 330 : deux colonnes reclament 2*largeur + gouttiere, soit 610px
+   ici. A 330 il en aurait fallu 670, et un panneau de 660 serait reste
+   obstinement sur une colonne alors qu'il avait la place. */
+.panel-grille.dense .panel-cols{column-width:300px}
+/* Sans ce garde, une carte se coupe en deux au saut de colonne, moitie des
+   chiffres en bas d'une colonne et moitie en haut de la suivante. */
+.panel-bloc{break-inside:avoid;-webkit-column-break-inside:avoid;margin:0 0 10px;background:var(--row);border:1px solid var(--border);border-radius:var(--r-md);padding:11px 12px 10px;min-width:0}
 /* La derniere metrique d'une carte n'a personne en dessous a distancer. */
-.posture-bloc .metric:last-child{margin-bottom:0}
-.posture-bloc .panel-section-title{margin-top:0}
-.posture-bloc .panel-lh-link{margin-top:9px}
+.panel-bloc .metric:last-child{margin-bottom:0}
+.panel-bloc .panel-section-title{margin-top:0}
+.panel-bloc .panel-section-note{margin-bottom:9px}
+.panel-bloc .panel-lh-link{margin-top:9px}
+/* Une carte pleine largeur se lit en ligne : la liste d'appareils y tronquerait
+   des noms de machines, le pave des portees des noms de portees Graph. Le
+   multi-colonnes n'ayant pas d'equivalent de `grid-column: 1/-1`, ces cartes
+   sont posees hors du conteneur, en soeurs. */
+.panel-bloc.large{margin-bottom:0}
+.panel-bloc.large+.panel-bloc.large{margin-top:10px}
+/* Ce qui manque n'est pas une donnee : la carte le dit d'un lisere, sans quoi
+   elle se lit comme une rubrique de plus. */
+.panel-bloc.manquant{border-color:#d97706;border-left-width:3px}
 /* Dans une carte, un libelle long passe a la ligne au lieu d'etre coupe :
    « Appareils non conformes » tronque en « APPAREILS NO... » ne designe plus
    rien. Ailleurs le point de coupe reste, il n'y a pas la place de replier. */
-.posture-bloc .metric-lbl{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3}
-/* En deux colonnes, une carte fait ~230px et la valeur reste en nowrap avec son
-   complement (« 32.6 / 100  en hausse de 1 sur 30 j ») : elle prend tout et le
-   libelle deborde. L'en-tete cede donc et passe la valeur a la ligne quand la
-   place manque, plutot que d'ecraser l'intitule. */
-.posture-bloc .metric-head{flex-wrap:wrap;row-gap:1px}
-/* La liste d'appareils et le pave des donnees manquantes se lisent en pleine
-   largeur : mis en colonne, l'un tronque des noms de machines et l'autre coupe
-   des noms de portees Graph. */
-.posture-bloc.large{grid-column:1/-1}
+.panel-bloc .metric-lbl{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3}
+/* En colonnes etroites, la valeur reste en nowrap avec son complement
+   (« 28.1 / 100  en hausse de 2.5 sur 30 j ») : elle prend tout et le libelle
+   deborde. L'en-tete cede donc et passe la valeur a la ligne quand la place
+   manque, plutot que d'ecraser l'intitule. */
+.panel-bloc .metric-head{flex-wrap:wrap;row-gap:1px}
+/* Les intertitres de la sante du domaine sont portes par le titre de carte. */
+.panel-bloc .hc-list{margin-top:0}
+.panel-bloc .hc-subhead,.panel-bloc .hc-subhead-top{display:none}
 @media(max-width:768px){
-  .posture-grille{grid-template-columns:1fr}
+  .panel-cols,.panel-grille.dense .panel-cols{column-width:auto;column-count:1}
 }
 
 /* ── Liste des appareils geres (panneau Posture) ─────────────────────────────

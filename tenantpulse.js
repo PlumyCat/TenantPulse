@@ -5203,6 +5203,38 @@ function buildAxesSante(health) {
   return grille.children.length ? grille : null;
 }
 
+/* ── Grille de cartes de panneau ─────────────────────────────────────────────
+   Partagee par Posture et Sante du domaine. Une rubrique est une carte, la
+   grille decide du nombre de colonnes selon la largeur du panneau, laquelle est
+   a la main de l'utilisateur depuis la poignee. Mutualisee plutot que dupliquee
+   par panneau : les deux ont eu le meme defaut et auraient eu les memes
+   retouches a faire deux fois.
+
+   `large` force une carte sur toute la largeur. Reserve a ce qui se lit en
+   ligne — une liste de noms, un enregistrement DNS — jamais a un chiffre. */
+function panelGrille(dense) {
+  const wrap = document.createElement('div');
+  wrap.className = 'panel-grille' + (dense ? ' dense' : '');
+  const cols = document.createElement('div');
+  cols.className = 'panel-cols';
+  wrap.appendChild(cols);
+  return wrap;
+}
+
+function panelBloc(grille, titre, note, large) {
+  const s = document.createElement('section');
+  s.className = 'panel-bloc';
+  if (titre) addSectionTitle(s, titre);
+  if (note)  addSectionNote(s, note);
+  /* Une carte pleine largeur ne peut pas vivre dans le conteneur
+     multi-colonnes : il n'a pas d'equivalent de `grid-column: 1/-1`, elle y
+     serait rangee dans une colonne comme les autres. Elle est donc posee en
+     soeur du conteneur, donc sous lui. */
+  if (large) { s.classList.add('large'); grille.appendChild(s); }
+  else grille.firstElementChild.appendChild(s);
+  return s;
+}
+
 function buildHealthPanel(health, domain) {
   const renderChecks = (list) => {
     const hcl = document.createElement('div'); hcl.className = 'hc-list';
@@ -5224,19 +5256,44 @@ function buildHealthPanel(health, domain) {
     return hcl;
   };
   return b => {
+    /* La jauge et les axes restent en tete, pleine largeur : ce sont le verdict
+       et sa decomposition, ils se lisent avant le detail et non a cote. */
     b.appendChild(buildScoreRing(health.score, health.bonus));
     const axes = buildAxesSante(health);
     if (axes) b.appendChild(axes);
+
+    /* Pistes plus larges qu'en Posture : ces cartes portent des enregistrements
+       DNS, pas des chiffres a deux caracteres. */
+    const grille = panelGrille(true);
     // Prêt pour M365 en premier : ce sont les checks les plus utiles pour résoudre un ticket.
     if (health.m365?.length) {
-      const sub = document.createElement('div'); sub.className = 'hc-subhead hc-subhead-top'; sub.textContent = 'M365';
-      b.appendChild(sub);
-      b.appendChild(renderChecks(health.m365));
+      panelBloc(grille, 'M365', 'Points de configuration côté service.').appendChild(renderChecks(health.m365));
     }
-    const sub2 = document.createElement('div'); sub2.className = 'hc-subhead'; sub2.textContent = 'Hygiène e-mail & DNS';
-    b.appendChild(sub2);
-    b.appendChild(renderChecks(health.checks));
-    buildDkimBlock(b, health.dkimResults, health.hasSel1, health.hasSel2);
+    /* L'hygiene DNS est decoupee par severite, pour deux raisons qui vont dans
+       le meme sens. La premiere tient au fond : sur un ticket on cherche ce qui
+       ne va pas, et une liste ou le seul DKIM partiel est noye entre six lignes
+       vertes oblige a tout relire. La seconde tient a la mise en page : deux
+       cartes seulement, dont une tres haute, ne se repartissent pas en colonnes
+       — une carte ne se coupe pas, le packer n'a rien a repartir. Trois cartes
+       de tailles voisines, si. */
+    const parSeverite = [
+      ['À corriger',        ['error', 'warn'], "Ce qui appelle une action."],
+      ['Conforme',          ['ok'],            "Rien a faire ici."],
+      ['Pour information',  ['info'],          "Hors score, releve au passage."]
+    ];
+    parSeverite.forEach(([titre, tons, note]) => {
+      const lot = (health.checks || []).filter(c => tons.includes(c.t));
+      if (!lot.length) return;
+      panelBloc(grille, titre + ' (' + lot.length + ')', note).appendChild(renderChecks(lot));
+    });
+    /* buildDkimBlock ne produit rien quand il n'y a pas de selecteur a montrer.
+       On lui donne sa carte d'abord, puis on la retire si elle est restee vide :
+       une carte « DKIM » sans contenu vaut moins que pas de carte du tout. */
+    const cDkim = panelBloc(grille, null, null, true);
+    buildDkimBlock(cDkim, health.dkimResults, health.hasSel1, health.hasSel2);
+    if (!cDkim.childNodes.length) cDkim.remove();
+
+    b.appendChild(grille);
     const lnk = document.createElement('a'); lnk.className = 'ext-link'; lnk.href = `https://dnschecker.org/all-dns-records-of-domain.php?query=${encodeURIComponent(domain)}&rtype=ALL&dns=google`; lnk.target = '_blank'; lnk.rel = 'noopener';
     const lnkIcon = document.createTextNode('→ Analyse DNS complète sur DNSChecker — '); const lnkStrong = document.createElement('strong'); lnkStrong.textContent = domain;
     lnk.appendChild(lnkIcon); lnk.appendChild(lnkStrong); b.appendChild(lnk);
@@ -5573,16 +5630,8 @@ function buildPosturePanel(p, mfa) {
   return b => {
     addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
 
-    const grille = document.createElement('div');
-    grille.className = 'posture-grille';
-    const bloc = (titre, note, large) => {
-      const s = document.createElement('section');
-      s.className = 'posture-bloc' + (large ? ' large' : '');
-      addSectionTitle(s, titre);
-      if (note) addSectionNote(s, note);
-      grille.appendChild(s);
-      return s;
-    };
+    const grille = panelGrille();
+    const bloc = (titre, note, large) => panelBloc(grille, titre, note, large);
 
     if (p.secureScore) {
       const s = p.secureScore;
@@ -5702,8 +5751,15 @@ function buildPosturePanel(p, mfa) {
     const aExpliquer = [...new Set(refuse)].filter(k => table[k]);
     if (aExpliquer.length) {
       const c = bloc('Données non disponibles',
-        "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent.", true);
-      aExpliquer.forEach(k => addInfoCompacte(c, table[k].quoi, table[k].portee));
+        "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent : "
+        + "la donnée reste consultable dans le portail Lighthouse.", true);
+      c.classList.add('manquant');
+      aExpliquer.forEach(k => {
+        addInfoCompacte(c, table[k].quoi, table[k].portee);
+        /* Le lien est ce qui rend le bloc utile plutot que desolant : il mene
+           a l'endroit ou la donnee refusee ici est, elle, affichee. */
+        if ('vue' in table[k]) addLienLighthouse(c, table[k].quoi + ' dans Lighthouse', table[k].vue);
+      });
     }
 
     b.appendChild(grille);
