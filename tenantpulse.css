@@ -1106,12 +1106,16 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 .dev-row{padding:6px 8px 6px 9px;border-left:2.5px solid var(--border);border-radius:0 var(--r-xs) var(--r-xs) 0;margin-bottom:3px;background:var(--row)}
 .dev-row.nonconforme{border-left-color:#dc2626}
 .dev-row.conforme{border-left-color:#16a34a}
+/* La periode de grace n'est ni verte ni rouge : la machine est hors politique
+   mais la contrainte n'est pas encore appliquee. */
+.dev-row.grace{border-left-color:#d97706}
 .dev-row.indetermine{border-left-color:var(--muted)}
 .dev-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .dev-nom{font-size:12px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dev-etat{font-size:10px;font-weight:600;color:var(--soft);white-space:nowrap;flex-shrink:0}
 .dev-row.nonconforme .dev-etat{color:#dc2626}
 .dev-row.conforme .dev-etat{color:#15803d}
+.dev-row.grace .dev-etat{color:#b45309}
 /* La meta passe a la ligne plutot que de se faire couper : a 380px de panneau,
    une version d'OS complete suffit a pousser « muet depuis N j » hors cadre, et
    c'est precisement le bout de la ligne qui appelle une action. */
@@ -1124,9 +1128,14 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 .dev-plus{align-self:flex-start;background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--soft);font-family:var(--font);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;transition:background .15s,color .15s}
 .dev-plus:hover{background:var(--row);color:var(--text)}
 .dev-vide{font-size:var(--text-xs);color:var(--soft);line-height:1.5}
+/* Avis de troncature : il ne dit pas une erreur mais un ecart entre deux
+   chiffres justes, d'ou le ton neutre plutot qu'un rouge d'alerte. */
+.dev-avis{font-size:var(--text-xs);color:#b45309;line-height:1.45;background:rgba(217,119,6,.09);border-left:2px solid #d97706;border-radius:0 var(--r-xs) var(--r-xs) 0;padding:5px 8px;margin-bottom:7px}
+[data-theme="dark"] .dev-avis{color:#fcd34d}
 
 [data-theme="dark"] .dev-row.nonconforme .dev-etat{color:#fca5a5}
 [data-theme="dark"] .dev-row.conforme .dev-etat{color:#86efac}
+[data-theme="dark"] .dev-row.grace .dev-etat{color:#fcd34d}
 [data-theme="dark"] .dev-meta.muet{color:#fcd34d}
 
 /* Barre d'action en tête du panneau Posture. */

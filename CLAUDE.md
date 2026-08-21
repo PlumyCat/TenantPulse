@@ -207,6 +207,33 @@ totale du fichier.
 > `graphDumpPosture()` liste les refus de la dernière analyse.
 
 > [!IMPORTANT]
+> **Forme de `managedDeviceCompliances`, relevée par HAR le 2026-08-21.** L'entité répond
+> toujours 403 faute de portée, mais sa charge utile a été observée depuis le portail
+> Lighthouse. Ce ne sont donc plus des noms devinés :
+>
+> `managedDeviceName` · `complianceStatus` · `osDescription` · `osVersion` · `ownerType`
+> · `lastSyncDateTime` · `inGracePeriodUntilDateTime` · `model` · `manufacturer`
+> · `deviceType` · `tenantId` · `managedDeviceId` · `organizationId`
+>
+> `complianceStatus` prend exactement quatre valeurs : `Compliant`, `InGracePeriod`,
+> `Noncompliant`, `Unknown`. **La période de grâce est un état à part, pas une
+> non-conformité** — la machine est hors politique mais la contrainte n'est pas encore
+> appliquée. Les confondre gonfle le décompte des fautives, et c'est ce que fait tout code
+> qui teste seulement « différent de Compliant ».
+>
+> **La liste est paginée côté service, à 100 lignes** (observé sur un parc de 865), et
+> `$top` ne lève pas ce plafond. Compter les lignes rapatriées donne donc le décompte
+> d'une page pour celui d'un parc. `checkPosture()` émet pour cette raison **deux**
+> requêtes, comme le portail : un agrégat
+> `$apply=filter(tenantId in ('<guid>'))/groupby((complianceStatus),aggregate(1 with sum as complianceCount))`
+> qui porte sur tout le parc et ne coûte qu'une ligne par statut, et une page de liste qui
+> ne sert qu'à nommer les machines. Ne jamais recalculer les compteurs depuis la liste.
+>
+> `reportRoot/managedTenantAccessReports` confirme au passage le diagnostic de fond pour
+> cette entité : `accessLevel: "full"`, `requirements: []`, et Global Reader dans les rôles
+> acceptés. **Les rôles GDAP suffisent, seule la portée Graph manque.**
+
+> [!IMPORTANT]
 > **`GRAPH_CLIENT_ID` n'est jamais versionné.** L'identifiant est servi par `GET /api/me`
 > depuis un paramètre d'application. Ce n'est pas un secret au sens OAuth — un client public
 > l'expose forcément — mais il identifie l'organisation, ce que les règles de confidentialité

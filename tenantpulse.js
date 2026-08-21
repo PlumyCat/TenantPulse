@@ -5482,7 +5482,7 @@ const RAPPORT_APPAREILS_MAX = 30;
    quelle : un libellé anglais au milieu d'un panneau français se lit comme une
    fuite de donnée brute. Une valeur inconnue retombe sur le seau calculé. */
 const APPAREIL_PROPRIETE_LBL = { company: 'Entreprise', corporate: 'Entreprise', personal: 'Personnel', unknown: 'Inconnu' };
-const APPAREIL_ETAT_LBL      = { conforme: 'Conforme', nonconforme: 'Non conforme', indetermine: 'Non évalué' };
+const APPAREIL_ETAT_LBL      = { conforme: 'Conforme', nonconforme: 'Non conforme', grace: 'Période de grâce', indetermine: 'Non évalué' };
 const APPAREIL_ETAT_BRUT_LBL = {
   compliant: 'Conforme', noncompliant: 'Non conforme', ingraceperiod: 'Période de grâce',
   error: 'Erreur', conflict: 'Conflit', notapplicable: 'Non applicable', unknown: 'Non évalué',
@@ -5537,7 +5537,7 @@ function addListeAppareils(b, a) {
      celles sans nom qui ne sont pas affichables. Les onglets comptent donc ce
      qui est réellement dans la liste, sans quoi « Non conformes 6 » ouvrirait
      sur cinq lignes. */
-  const compte = { tous: liste.length, conforme: 0, nonconforme: 0, indetermine: 0 };
+  const compte = { tous: liste.length, conforme: 0, nonconforme: 0, grace: 0, indetermine: 0 };
   liste.forEach(d => { compte[d.etat]++; });
 
   let filtre  = compte.nonconforme ? 'nonconforme' : 'tous';
@@ -5546,11 +5546,24 @@ function addListeAppareils(b, a) {
 
   const bloc = document.createElement('div'); bloc.className = 'dev-bloc';
 
+  /* Lighthouse pagine la liste (100 lignes observees sur un parc de 865) alors
+     que les metriques du dessus viennent d'un agregat portant sur tout le parc.
+     Les deux chiffres divergent donc legitimement, et l'avertissement se lit
+     avant les onglets plutot qu'en pied de liste : place en dessous, il
+     arriverait apres la surprise. */
+  if (a.tronque) {
+    const t = document.createElement('div'); t.className = 'dev-avis';
+    t.textContent = 'Lighthouse ne renvoie que ' + (a.affiches ?? liste.length) + ' appareils sur '
+                  + a.total + '. Les décomptes ci-dessus portent sur le parc entier, les filtres ci-dessous sur ces '
+                  + (a.affiches ?? liste.length) + ' lignes.';
+    bloc.appendChild(t);
+  }
+
   const seg = document.createElement('div'); seg.className = 'dev-seg';
   seg.setAttribute('role', 'group');
   seg.setAttribute('aria-label', 'Filtrer par état de conformité');
   const boutons = [];
-  [['tous', 'Tous'], ['nonconforme', 'Non conformes'], ['indetermine', 'Non évalués'], ['conforme', 'Conformes']]
+  [['tous', 'Tous'], ['nonconforme', 'Non conformes'], ['grace', 'Période de grâce'], ['indetermine', 'Non évalués'], ['conforme', 'Conformes']]
     .forEach(([cle, lbl]) => {
       if (cle !== 'tous' && !compte[cle]) return;   // un onglet vide n'apprend rien
       const btn = document.createElement('button');
@@ -5605,12 +5618,7 @@ function addListeAppareils(b, a) {
       pied.appendChild(plus);
     }
 
-    /* Une liste tronquée sans mention se lit comme une liste complète. */
-    if (a.tronque) {
-      const t = document.createElement('div'); t.className = 'dev-vide';
-      t.textContent = "Lighthouse n'a renvoyé que les 999 premiers appareils du parc.";
-      pied.appendChild(t);
-    }
+
   }
 
   rendre();
@@ -5736,8 +5744,9 @@ function buildPosturePanel(p, mfa) {
         !!a.liste?.length);
       addMetrique(c, 'Non conformes', String(a.nonConformes), 'sur ' + a.total,
                   part(a.nonConformes, a.total), a.nonConformes ? 'bad' : 'ok');
+      if (a.grace) addMetrique(c, 'Période de grâce', String(a.grace), 'sur ' + a.total, part(a.grace, a.total), 'warn');
       addMetrique(c, 'Conformes', String(a.conformes), 'sur ' + a.total, part(a.conformes, a.total), 'ok');
-      if (a.indetermines) addMetrique(c, 'Statut indéterminé', String(a.indetermines), null, part(a.indetermines, a.total), null);
+      if (a.indetermines) addMetrique(c, 'Non évalués', String(a.indetermines), null, part(a.indetermines, a.total), null);
       if (a.liste?.length) addListeAppareils(c, a);
       addLienLighthouse(c, 'Vue Conformité des appareils dans Lighthouse', 'DeviceCompliance.ReactView');
     }

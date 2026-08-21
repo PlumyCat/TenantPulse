@@ -569,17 +569,25 @@ async function checkPosture(tenantId, signal) {
 
   /* Les jeux sont indépendants : en série, une analyse coûterait la somme des
      latences pour un résultat identique. */
-  const [score, expo, base, ident, adopt, appar, ...alertes] = await Promise.all([
+  const [score, expo, base, ident, adopt, apparCpt, appar, ...alertes] = await Promise.all([
     J('secureScore', `${TP_GRAPH_MT}/managedTenantSecureScores?$filter=tenantId eq '${id}'&$orderby=createdDateTime desc&$top=1`),
     J('exposition',  `${TP_GRAPH_MT}/tenantExposureSummaries?$filter=tenantId eq '${id}'`),
     J('baseline',    `${TP_GRAPH_MT}/managementTemplateCollectionTenantSummaries?$apply=filter((tenantId in ('${id}')))`),
     J('identite',    `${TP_GRAPH_MT}/tenantsDetailedInformation?filter=tenantId eq '${id}'`),
     J('adoption',    `${TP_GRAPH_MT}/managedTenantAdoptionReports?$filter=tenantId eq '${id}'&$orderBy=createdDateTime desc&$top=1`),
-    /* Refusé en l'état (DeviceManagementManagedDevices.Read.All manquante), mais
-       interrogé quand même : le jour où la portée est accordée, le décompte
-       apparaît sans modification. Le plafond à 999 évite de paginer un parc
-       d'appareils entier pour un simple décompte. */
-    J('appareils',   `${TP_GRAPH_MT}/managedDeviceCompliances?$filter=tenantId eq '${id}'&$count=true&$top=999`),
+    /* Refusés en l'état (DeviceManagementManagedDevices.Read.All manquante), mais
+       interrogés quand même : le jour où la portée est accordée, les chiffres
+       apparaissent sans modification.
+
+       Deux requêtes et non une, comme le fait le portail Lighthouse : la liste
+       est paginée par le service (100 lignes observées sur un parc de 865) et
+       compter les lignes rapatriées donnerait le décompte d'une page pour celui
+       d'un parc. L'agrégat, lui, porte sur la totalité et ne coûte qu'une ligne
+       par statut. La liste ne sert donc qu'à nommer les machines, jamais à les
+       compter. Syntaxe OData relevée telle quelle dans le portail. */
+    J('appareilsCpt', `${TP_GRAPH_MT}/managedDeviceCompliances`
+                    + `?$apply=filter(tenantId in ('${id}'))/groupby((complianceStatus),aggregate(1 with sum as complianceCount))`),
+    J('appareils',   `${TP_GRAPH_MT}/managedDeviceCompliances?$filter=(tenantId in ('${id}'))&$orderBy=managedDeviceName asc&$count=true&$top=999`),
     ...TP_GRAPH_SEVERITES.map(s =>
       J('alertes_' + s, `${TP_GRAPH_MT}/managedTenantAlerts?$count=true&$select=id&$top=1&$filter=tenantId in ('${id}') and severity in ('${s}')`))
   ]);
@@ -661,15 +669,36 @@ async function checkPosture(tenantId, signal) {
     };
   }
 
-  /* Conformité des appareils. Les noms de propriétés de cette entité n'ont
-     jamais pu être observés sur une vraie réponse (403 avec les portées
-     actuelles), d'où une lecture volontairement tolérante : on cherche chaque
-     champ sous plusieurs graphies, et on ne conclut que sur ce qu'on a trouvé.
-     Mieux vaut ne rien afficher qu'un décompte faux.
+  /* Conformité des appareils. Forme relevée le 2026-08-21 dans un export HAR du
+     portail Lighthouse, l'entité ayant toujours répondu 403 chez nous : les noms
+     de propriétés ci-dessous sont donc observés, plus devinés.
 
-     C'est aussi pourquoi la requête n'emploie pas `$select` : restreindre les
-     colonnes sur des noms non vérifiés reviendrait à écarter d'avance le champ
-     dont la graphie a été mal devinée. */
+       managedDeviceName · complianceStatus · osDescription · osVersion
+       ownerType · lastSyncDateTime · inGracePeriodUntilDateTime
+       model · manufacturer · deviceType · tenantId · managedDeviceId
+
+     `complianceStatus` prend exactement quatre valeurs, relevées sur l'agrégat
+     du parc entier : Compliant, InGracePeriod, Noncompliant, Unknown. La période
+     de grâce est un état à part et non une non-conformité : la machine est hors
+     politique mais la contrainte n'est pas encore appliquée, ce qui n'appelle
+     pas la même action. La confondre gonflerait le décompte des fautives.
+
+     La lecture reste tolérante par précaution : c'est une API beta, et les noms
+     de propriétés y ont déjà varié entre révisions. */
+  const CPT_SEAU = { compliant: 'conforme', noncompliant: 'nonconforme', ingraceperiod: 'grace' };
+  const normStatut = v => typeof v === 'string' && v ? v.toLowerCase().replace(/[\s_-]/g, '') : null;
+
+  /* Décompte du parc entier, indépendant de la pagination de la liste. */
+  const compte = { conforme: 0, nonconforme: 0, grace: 0, indetermine: 0 };
+  let compteLu = false, totalAgg = 0;
+  (Array.isArray(apparCpt?.value) ? apparCpt.value : []).forEach(r => {
+    const n = r.complianceCount ?? r.count;
+    if (typeof n !== 'number') return;
+    compteLu = true;
+    totalAgg += n;
+    compte[CPT_SEAU[normStatut(r.complianceStatus)] || 'indetermine'] += n;
+  });
+
   const rows = Array.isArray(appar?.value) ? appar.value : null;
   if (rows && rows.length) {
     /* Première valeur exploitable parmi plusieurs graphies. Les booléens sont
@@ -683,34 +712,20 @@ async function checkPosture(tenantId, signal) {
       }
       return null;
     };
-    const statut = r => {
-      for (const n of ['complianceStatus', 'complianceState', 'deviceComplianceStatus', 'status', 'state']) {
-        if (typeof r[n] === 'string' && r[n]) return r[n].toLowerCase().replace(/[\s_-]/g, '');
-      }
-      return null;
-    };
-    /* Trois seaux, et un seul rang de tri : sur un ticket, on cherche ce qui
-       ne va pas, pas l'inventaire. Les non conformes remontent donc en tête. */
-    const seau = s => s === null ? 'indetermine'
-                    : s === 'compliant' ? 'conforme'
-                    : (s === 'unknown' || s === 'notapplicable') ? 'indetermine'
-                    : 'nonconforme';
-    const RANG = { nonconforme: 0, indetermine: 1, conforme: 2 };
+    /* Sur un ticket, on cherche ce qui ne va pas, pas l'inventaire : les
+       fautives remontent, la période de grâce ensuite, les conformes en fin. */
+    const RANG = { nonconforme: 0, grace: 1, indetermine: 2, conforme: 3 };
 
-    let conformes = 0, nonConformes = 0, indetermines = 0;
+    const listeCompte = { conforme: 0, nonconforme: 0, grace: 0, indetermine: 0 };
     const liste = rows.map(r => {
-      const etat = seau(statut(r));
-      if (etat === 'conforme') conformes++;
-      else if (etat === 'indetermine') indetermines++;
-      else nonConformes++;
+      const brut = champ(r, ['complianceStatus', 'complianceState', 'deviceComplianceStatus', 'status', 'state']);
+      const etat = CPT_SEAU[normStatut(brut)] || 'indetermine';
+      listeCompte[etat]++;
       return {
-        nom:       champ(r, ['deviceName', 'managedDeviceName', 'displayName', 'name']),
+        nom:       champ(r, ['managedDeviceName', 'deviceName', 'displayName', 'name']),
         etat,
-        /* Le libellé brut de Lighthouse est conservé à côté du seau : « in grace
-           period » et « non conforme » comptent pareil mais ne se disent pas
-           pareil à un technicien. */
-        etatBrut:  champ(r, ['complianceStatus', 'complianceState', 'deviceComplianceStatus', 'status', 'state']),
-        os:        champ(r, ['operatingSystem', 'osDescription', 'platform', 'deviceType']),
+        etatBrut:  brut,
+        os:        champ(r, ['osDescription', 'operatingSystem', 'platform', 'deviceType']),
         version:   champ(r, ['osVersion', 'operatingSystemVersion', 'osBuildNumber']),
         propriete: champ(r, ['ownerType', 'managedDeviceOwnerType', 'ownership']),
         vuLe:      champ(r, ['lastSyncDateTime', 'lastCheckInDateTime', 'lastContactDateTime', 'lastReportedDateTime'])
@@ -720,23 +735,40 @@ async function checkPosture(tenantId, signal) {
     }).sort((x, y) => (RANG[x.etat] - RANG[y.etat])
                    || (x.nom || '').localeCompare(y.nom || '', 'fr', { numeric: true }));
 
-    if (indetermines < rows.length) {
+    /* Le total vient de l'agrégat, sinon du @odata.count, et seulement en
+       dernier recours du nombre de lignes reçues. Une liste tronquée dont on
+       compterait les lignes annoncerait 100 appareils sur un parc de 865. */
+    const totalOdata = typeof appar['@odata.count'] === 'number' ? appar['@odata.count'] : null;
+    const total = compteLu ? totalAgg : (totalOdata ?? rows.length);
+    const c = compteLu ? compte : listeCompte;
+
+    if (c.indetermine < total) {
       out.appareils = {
-        total:      typeof appar['@odata.count'] === 'number' ? appar['@odata.count'] : rows.length,
-        conformes,
-        nonConformes,
-        indetermines,
-        /* Au-delà du plafond, le décompte ne porte que sur la page rapatriée :
-           l'annoncer évite de présenter un sous-total comme un total. */
-        tronque:    rows.length >= 999,
-        /* Une ligne sans nom ne sert à rien dans une liste : on la garde dans
+        total,
+        conformes:    c.conforme,
+        nonConformes: c.nonconforme,
+        grace:        c.grace,
+        indetermines: c.indetermine,
+        /* Vrai dès que la liste ne porte pas tout le parc, quelle que soit la
+           taille de page réellement appliquée par le service. */
+        tronque:      rows.length < total,
+        affiches:     rows.length,
+        /* Une ligne sans nom ne sert à rien dans une liste : elle reste dans
            les compteurs, pas à l'écran. */
-        liste:      liste.filter(d => d.nom)
+        liste:        liste.filter(d => d.nom)
       };
     }
-    /* Forme réelle de la première ligne, pour relever les vraies graphies le
-       jour où l'entité répond enfin. Même usage que graphDumpMfa(). */
+    /* Forme réelle de la première ligne, pour relever une graphie qui aurait
+       change d'une révision beta à l'autre. */
     TP_GRAPH.dernierAppareil = rows[0];
+  } else if (compteLu && compte.indetermine < totalAgg) {
+    /* L'agrégat a répondu mais pas la liste : les chiffres valent d'être
+       affichés même sans les noms. */
+    out.appareils = {
+      total: totalAgg, conformes: compte.conforme, nonConformes: compte.nonconforme,
+      grace: compte.grace, indetermines: compte.indetermine,
+      tronque: false, affiches: 0, liste: []
+    };
   }
 
   /* Les alertes ne sont comptées que côté serveur (`$count=true`, `$top=1`) :
