@@ -221,9 +221,11 @@ totale du fichier.
 > appliquée. Les confondre gonfle le décompte des fautives, et c'est ce que fait tout code
 > qui teste seulement « différent de Compliant ».
 >
-> **La liste est paginée côté service, à 100 lignes** (observé sur un parc de 865), et
-> `$top` ne lève pas ce plafond. Compter les lignes rapatriées donne donc le décompte
-> d'une page pour celui d'un parc. `checkPosture()` émet pour cette raison **deux**
+> **La liste arrive paginée à 100 lignes** (observé sur un parc de 865). Attention à la
+> cause : le portail les demande, via l'en-tête `prefer: odata.maxpagesize=100`. Ce n'est
+> donc pas un plafond du service, et `$top=999` sera peut-être honoré — non vérifié, faute
+> de 200. Dans tous les cas, compter les lignes rapatriées donne le décompte d'une page
+> pour celui d'un parc. `checkPosture()` émet pour cette raison **deux**
 > requêtes, comme le portail : un agrégat
 > `$apply=filter(tenantId in ('<guid>'))/groupby((complianceStatus),aggregate(1 with sum as complianceCount))`
 > qui porte sur tout le parc et ne coûte qu'une ligne par statut, et une page de liste qui

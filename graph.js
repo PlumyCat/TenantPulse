@@ -580,11 +580,12 @@ async function checkPosture(tenantId, signal) {
        apparaissent sans modification.
 
        Deux requêtes et non une, comme le fait le portail Lighthouse : la liste
-       est paginée par le service (100 lignes observées sur un parc de 865) et
-       compter les lignes rapatriées donnerait le décompte d'une page pour celui
-       d'un parc. L'agrégat, lui, porte sur la totalité et ne coûte qu'une ligne
-       par statut. La liste ne sert donc qu'à nommer les machines, jamais à les
-       compter. Syntaxe OData relevée telle quelle dans le portail. */
+       est paginée (100 lignes observées sur un parc de 865) et compter les
+       lignes rapatriées donnerait le décompte d'une page pour celui d'un parc.
+       L'agrégat, lui, porte sur la totalité et ne coûte qu'une ligne par statut.
+       La liste ne sert donc qu'à nommer les machines, jamais à les compter, et
+       ce partage reste juste même si `$top` finit par être honoré. Syntaxe OData
+       relevée telle quelle dans le portail. */
     J('appareilsCpt', `${TP_GRAPH_MT}/managedDeviceCompliances`
                     + `?$apply=filter(tenantId in ('${id}'))/groupby((complianceStatus),aggregate(1 with sum as complianceCount))`),
     J('appareils',   `${TP_GRAPH_MT}/managedDeviceCompliances?$filter=(tenantId in ('${id}'))&$orderBy=managedDeviceName asc&$count=true&$top=999`),
@@ -682,6 +683,13 @@ async function checkPosture(tenantId, signal) {
      de grâce est un état à part et non une non-conformité : la machine est hors
      politique mais la contrainte n'est pas encore appliquée, ce qui n'appelle
      pas la même action. La confondre gonflerait le décompte des fautives.
+
+     Sur la pagination : le portail reçoit 100 lignes parce qu'il les demande,
+     via `prefer: odata.maxpagesize=100`. Ce n'est donc pas un plafond impose par
+     le service, et `$top=999` sera peut-être honoré — non vérifié, l'entité
+     n'ayant jamais répondu 200 ici. `tronque` se déduit pour cette raison de
+     l'écart entre le total et le nombre de lignes reçues, ce qui reste juste
+     quelle que soit la taille de page réellement appliquée.
 
      La lecture reste tolérante par précaution : c'est une API beta, et les noms
      de propriétés y ont déjà varié entre révisions. */
