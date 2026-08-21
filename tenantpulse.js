@@ -5505,15 +5505,90 @@ function appareilInactivite(iso) {
   return jours >= 30 ? jours : null;
 }
 
+/* Poste ou mobile. `deviceType` d'abord, seul champ fiable : `osDescription`
+   vaut littéralement « True » sur une partie des lignes. Les valeurs relevées
+   par HAR sont AndroidForWork, AndroidEnterprise, WindowsRT et WinMO6, mais
+   Intune en produit bien d'autres — on cherche donc un marqueur de mobilité
+   plutôt qu'on ne teste une liste fermée, et le poste reste le cas par défaut. */
+const APPAREIL_MOBILE_RE = /android|ios|iphone|ipad|ipod|winmo|windowsphone|windowsmobile|mobile|phone|tablet/i;
+
+function appareilIcone(d) {
+  const indice = [d.type, d.os].filter(Boolean).join(' ');
+  const mobile = APPAREIL_MOBILE_RE.test(indice);
+  const img = document.createElement('img');
+  img.className = 'dev-ico icon-adaptive';
+  img.src = mobile ? 'assets/Tel.png' : 'assets/PC.png';
+  img.alt = '';                       // décoratif : l'état est déjà écrit en toutes lettres
+  img.title = mobile ? 'Appareil mobile' : 'Poste de travail';
+  return img;
+}
+
+/* Fiche d'un appareil, prête à coller dans un ticket. L'adresse de l'utilisateur
+   principal y figure quand elle existe, ce qui n'est pas le cas aujourd'hui :
+   Lighthouse ne l'expose pas. Accents retirés comme pour le rapport de santé,
+   ces textes finissant dans des outils dont l'encodage n'est pas maîtrisé. */
+function ficheAppareil(d) {
+  const L = ['APPAREIL : ' + d.nom];
+  if (d.user)     L.push('Utilisateur principal : ' + d.user);
+  if (d.userMail) L.push('Adresse : ' + d.userMail);
+  L.push('Conformite : ' + appareilEtatLbl(d));
+  const sys = [d.os, d.version].filter(Boolean).join(' ');
+  if (sys) L.push('Systeme : ' + sys);
+  if (d.propriete) L.push('Propriete : ' + (APPAREIL_PROPRIETE_LBL[String(d.propriete).toLowerCase()] || d.propriete));
+  const vu = posturDate(d.vuLe), inactif = appareilInactivite(d.vuLe);
+  if (vu) L.push('Dernier contact : ' + vu + (inactif ? ' (muet depuis ' + inactif + ' j)' : ''));
+  const nom = currentState.graph?.tenant?.displayName || currentState.domain;
+  if (nom) L.push('Tenant : ' + nom);
+  return L.join('\n').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function boutonCopieAppareil(d) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'dev-copie';
+  b.title = "Copier la fiche de l'appareil";
+  b.setAttribute('aria-label', "Copier la fiche de " + d.nom);
+  const img = document.createElement('img');
+  img.className = 'icon-adaptive'; img.src = 'assets/copy.png'; img.alt = '';
+  b.appendChild(img);
+  b.addEventListener('click', e => {
+    /* La ligne entière n'est pas cliquable aujourd'hui, mais elle pourrait le
+       devenir : sans ça, copier ouvrirait aussi ce qu'on lui ajouterait. */
+    e.stopPropagation();
+    navigator.clipboard.writeText(ficheAppareil(d)).then(() => {
+      b.classList.add('ok');
+      setTimeout(() => b.classList.remove('ok'), 1400);
+    }).catch(() => {
+      b.classList.add('rate');
+      setTimeout(() => b.classList.remove('rate'), 2000);
+    });
+  });
+  return b;
+}
+
 function ligneAppareil(d) {
-  const row  = document.createElement('div'); row.className = 'dev-row ' + d.etat;
+  const row = document.createElement('div'); row.className = 'dev-row ' + d.etat;
+  row.appendChild(appareilIcone(d));
+
+  const corps = document.createElement('div'); corps.className = 'dev-corps';
+
   const head = document.createElement('div'); head.className = 'dev-head';
   const nom  = document.createElement('span'); nom.className = 'dev-nom';
   nom.textContent = d.nom; nom.title = d.nom;
   const etat = document.createElement('span'); etat.className = 'dev-etat';
   etat.textContent = appareilEtatLbl(d);
   head.appendChild(nom); head.appendChild(etat);
-  row.appendChild(head);
+  corps.appendChild(head);
+
+  /* Utilisateur principal : la ligne n'existe que si la donnée existe. Elle est
+     absente aujourd'hui, Lighthouse ne l'exposant pas — un intitulé vide serait
+     pire qu'une ligne en moins, il ferait croire à un appareil sans titulaire. */
+  if (d.user || d.userMail) {
+    const u = document.createElement('div'); u.className = 'dev-user';
+    u.textContent = d.user || d.userMail;
+    if (d.user && d.userMail) u.title = d.userMail;
+    corps.appendChild(u);
+  }
 
   const bouts = [];
   const sys = [d.os, d.version].filter(Boolean).join(' ');
@@ -5526,8 +5601,11 @@ function ligneAppareil(d) {
     const meta = document.createElement('div');
     meta.className = 'dev-meta' + (inactif ? ' muet' : '');
     meta.textContent = bouts.join(' · ');
-    row.appendChild(meta);
+    corps.appendChild(meta);
   }
+
+  row.appendChild(corps);
+  row.appendChild(boutonCopieAppareil(d));
   return row;
 }
 
@@ -5576,7 +5654,7 @@ function addListeAppareils(b, a) {
 
   const rech = document.createElement('input');
   rech.type = 'search'; rech.className = 'dev-rech';
-  rech.placeholder = 'Filtrer par nom ou système…';
+  rech.placeholder = 'Filtrer par nom, utilisateur ou système…';
   rech.setAttribute('aria-label', 'Filtrer la liste des appareils');
   rech.addEventListener('input', () => {
     requete = rech.value.trim().toLowerCase();
@@ -5592,7 +5670,10 @@ function addListeAppareils(b, a) {
   const correspond = d => {
     if (filtre !== 'tous' && d.etat !== filtre) return false;
     if (!requete) return true;
-    return [d.nom, d.os, d.version, d.propriete].filter(Boolean).join(' ').toLowerCase().includes(requete);
+    /* L'utilisateur est cherchable des qu'il existe : c'est souvent par lui
+       qu'on arrive, un ticket nommant une personne avant une machine. */
+    return [d.nom, d.user, d.userMail, d.os, d.version, d.propriete]
+      .filter(Boolean).join(' ').toLowerCase().includes(requete);
   };
 
   function rendre() {

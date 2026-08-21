@@ -1065,8 +1065,11 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
    des noms de machines, le pave des portees des noms de portees Graph. Le
    multi-colonnes n'ayant pas d'equivalent de `grid-column: 1/-1`, ces cartes
    sont posees hors du conteneur, en soeurs. */
-.panel-bloc.large{margin-bottom:0}
-.panel-bloc.large+.panel-bloc.large{margin-top:10px}
+/* Marge en haut et non en bas : une carte large suit toujours quelque chose
+   (le conteneur multi-colonnes, ou une autre carte large) et ne precede jamais
+   rien. La regle precedente ne posait de marge qu'entre deux cartes larges,
+   d'ou la premiere collee au bas des colonnes. */
+.panel-bloc.large{margin:10px 0 0}
 /* Ce qui manque n'est pas une donnee : la carte le dit d'un lisere, sans quoi
    elle se lit comme une rubrique de plus. */
 .panel-bloc.manquant{border-color:#d97706;border-left-width:3px}
@@ -1103,7 +1106,15 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 /* Plafonne a environ dix lignes : au-dela, la liste avalerait le panneau et les
    sections suivantes deviendraient introuvables. */
 .dev-liste{max-height:340px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.dev-row{padding:6px 8px 6px 9px;border-left:2.5px solid var(--border);border-radius:0 var(--r-xs) var(--r-xs) 0;margin-bottom:3px;background:var(--row)}
+.dev-row{display:flex;align-items:flex-start;gap:8px;padding:7px 7px 7px 9px;border-left:2.5px solid var(--border);border-radius:0 var(--r-xs) var(--r-xs) 0;margin-bottom:3px;background:var(--row)}
+/* Pictogramme poste/mobile. PNG noir a plat : `icon-adaptive` l'inverse en
+   theme sombre, comme partout ailleurs dans l'application. Opacite reduite,
+   c'est un reperage visuel et non une information a lire. */
+.dev-ico{width:15px;height:15px;margin-top:1px;opacity:.62;object-fit:contain}
+.dev-row:hover .dev-ico{opacity:.9}
+/* Le corps prend la place restante ; min-width:0 est ce qui autorise le nom a
+   se tronquer au lieu de pousser le bouton hors de la ligne. */
+.dev-corps{flex:1;min-width:0}
 .dev-row.nonconforme{border-left-color:#dc2626}
 .dev-row.conforme{border-left-color:#16a34a}
 /* La periode de grace n'est ni verte ni rouge : la machine est hors politique
@@ -1119,7 +1130,21 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 /* La meta passe a la ligne plutot que de se faire couper : a 380px de panneau,
    une version d'OS complete suffit a pousser « muet depuis N j » hors cadre, et
    c'est precisement le bout de la ligne qui appelle une action. */
+/* Utilisateur principal : plus petit que le nom de machine, plus present que
+   la meta — c'est le second critere de reconnaissance apres le nom. */
+.dev-user{font-size:11px;font-weight:500;color:var(--soft);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dev-meta{font-size:10.5px;line-height:1.4;color:var(--muted);margin-top:2px}
+/* Bouton de copie : efface au repos, il ne doit pas concurrencer l'etat de
+   conformite dans une liste de soixante lignes. */
+.dev-copie{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;margin-top:-1px;background:none;border:1px solid transparent;border-radius:var(--r-sm);color:var(--muted);cursor:pointer;opacity:.45;transition:opacity .15s,background .15s,border-color .15s}
+.dev-copie img{width:12px;height:12px}
+.dev-row:hover .dev-copie{opacity:.85}
+.dev-copie:hover{opacity:1;background:var(--surface);border-color:var(--border)}
+.dev-copie:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:1px}
+.dev-copie.ok{opacity:1;background:#16a34a;border-color:#16a34a}
+.dev-copie.ok img{filter:brightness(0) invert(1)}
+.dev-copie.rate{opacity:1;background:#dc2626;border-color:#dc2626}
+.dev-copie.rate img{filter:brightness(0) invert(1)}
 /* Un appareil qui ne s'est plus manifeste depuis un mois : son verdict de
    conformite date d'autant, il ne dit plus rien de son etat actuel. */
 .dev-meta.muet{color:#b45309}

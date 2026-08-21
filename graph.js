@@ -734,7 +734,10 @@ async function checkPosture(tenantId, signal) {
     const champ = (r, noms) => {
       for (const n of noms) {
         const v = r[n];
-        if (typeof v === 'string' && v.trim()) return v.trim();
+        /* « True » et « False » sont écartés en plus des booléens : la source
+           renvoie ces chaînes en guise de système sur certaines lignes, et le
+           portail Lighthouse les affiche telles quelles faute de ce garde. */
+        if (typeof v === 'string' && v.trim() && !/^(true|false)$/i.test(v.trim())) return v.trim();
         if (typeof v === 'number' && isFinite(v)) return String(v);
       }
       return null;
@@ -755,7 +758,21 @@ async function checkPosture(tenantId, signal) {
         os:        champ(r, ['osDescription', 'operatingSystem', 'platform', 'deviceType']),
         version:   champ(r, ['osVersion', 'operatingSystemVersion', 'osBuildNumber']),
         propriete: champ(r, ['ownerType', 'managedDeviceOwnerType', 'ownership']),
-        vuLe:      champ(r, ['lastSyncDateTime', 'lastCheckInDateTime', 'lastContactDateTime', 'lastReportedDateTime'])
+        vuLe:      champ(r, ['lastSyncDateTime', 'lastCheckInDateTime', 'lastContactDateTime', 'lastReportedDateTime']),
+        /* Type d'appareil, pour choisir entre pictogramme de poste et de mobile.
+           `deviceType` est le champ le plus fiable des deux : `osDescription`
+           vaut littéralement « True » sur certaines lignes (12 sur 260
+           observées), un artefact de la source que le portail affiche tel quel
+           en colonne « SE ». */
+        type:      champ(r, ['deviceType', 'managedDeviceType', 'chassisType']),
+        /* Utilisateur principal. Absent de `managedDeviceCompliances` : la
+           charge utile relevée par HAR ne porte aucun champ d'identité, et le
+           portail Lighthouse n'affiche pas cette colonne non plus. Le lire
+           quand même coûte deux lignes et évite d'avoir à retoucher la mise en
+           page si une révision beta l'ajoute — d'ici là il reste nul, et
+           l'interface se contente de ne rien afficher. */
+        user:      champ(r, ['userDisplayName', 'primaryUserDisplayName', 'userName']),
+        userMail:  champ(r, ['userPrincipalName', 'primaryUserPrincipalName', 'emailAddress', 'userEmail'])
       };
       /* Les lignes sans nom sont écartées juste après : leur rang de tri
          n'a pas d'importance. */
