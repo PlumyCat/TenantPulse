@@ -32,9 +32,25 @@ const TP_GRAPH_BASE      = 'https://graph.microsoft.com/v1.0';
 /* Portées déléguées du palier 0 : tout est lu depuis le tenant de l'utilisateur,
    aucun accès aux tenants clients n'est requis. Les deux premières exigent un
    consentement administrateur — un technicien ne peut pas se l'accorder seul. */
+/* `ManagedTenants.Read.All` ouvre le service Lighthouse, pas les donnees qu'il
+   agrege : chaque entite exposant de la donnee client reclame en plus la portee
+   Graph qui gouverne cette donnee. Voir le tableau du CLAUDE.md.
+
+   N'ajouter une portee ici qu'une fois le consentement admin au vert dans
+   l'inscription d'application. L'ordre inverse casse tout : la liste part
+   entiere a chaque renouvellement de jeton, une portee non consentie fait
+   echouer l'echange, et graphClearSession() coupe alors la session de tous les
+   utilisateurs connectes, y compris ce qui fonctionnait deja.
+
+   Restent a consentir, et donc absentes ci-dessous :
+     Reports.Read.All   -> couverture MFA (credentialUserRegistrationsSummaries)
+     User.Read.All      -> recherche d'utilisateur sur tout le parc            */
 const TP_GRAPH_SCOPES = [
   'https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All',
   'https://graph.microsoft.com/ManagedTenants.Read.All',
+  /* Accordee le 2026-08-21. Ouvre managedDeviceCompliances : decompte et liste
+     nommee des appareils, et les vulnerabilites Defender. */
+  'https://graph.microsoft.com/DeviceManagementManagedDevices.Read.All',
   'offline_access', 'openid', 'profile'
 ];
 
@@ -365,6 +381,43 @@ async function graphGet(path, signal, opts = {}) {
     const attente = Math.min(Number(res.headers.get('Retry-After')) || 2, 10) * 1000;
     await new Promise(r => setTimeout(r, attente));
     return graphGet(path, signal, { base, _retried: true });
+  }
+
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, status: res.status, data };
+}
+
+/* Écriture Graph, même contrat que graphGet : mêmes reprises sur 401 et sur
+   429/503, même forme de retour. Employé pour ouvrir une opération Lighthouse,
+   qui est le seul POST de l'application — et un POST qui ne modifie rien chez
+   le client, il ouvre une lecture diffusée puis rend son identifiant. */
+async function graphPost(path, corps, signal, opts = {}) {
+  const base     = opts.base || TP_GRAPH_BASE;
+  const _retried = opts._retried === true;
+  const token = await graphToken();
+  if (!token) return { ok: false, status: 0, data: null };
+
+  let res;
+  try {
+    res = await fetch(base + path, {
+      method:  'POST',
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/json',
+                 'Content-Type': 'application/json' },
+      body:    JSON.stringify(corps),
+      signal
+    });
+  } catch (e) {
+    return { ok: false, status: 0, data: null, aborted: e?.name === 'AbortError' };
+  }
+
+  if (res.status === 401 && !_retried) {
+    TP_GRAPH.expiresAt = 0;
+    return graphPost(path, corps, signal, { base, _retried: true });
+  }
+  if ((res.status === 429 || res.status === 503) && !_retried) {
+    const attente = Math.min(Number(res.headers.get('Retry-After')) || 2, 10) * 1000;
+    await new Promise(r => setTimeout(r, attente));
+    return graphPost(path, corps, signal, { base, _retried: true });
   }
 
   const data = await res.json().catch(() => null);
@@ -844,6 +897,150 @@ function graphDumpPosture() { return TP_GRAPH.dernierePosture || null; }
    répond 403 et la liste d'appareils repose sur des noms de champs devinés. */
 function graphDumpAppareil() { return TP_GRAPH.dernierAppareil || null; }
 
+/* ── Recherche d'utilisateur sur tout le parc ────────────────────────────────
+   Repose sur `managedTenantOperations`, moteur de diffusion de Lighthouse : on
+   lui confie une requête Graph modèle, il l'exécute **côté serveur** dans
+   chaque tenant géré et agrège les réponses. C'est ce qui rend la chose
+   possible depuis un navigateur — l'alternative, itérer plus de trois mille
+   tenants côté client, ne l'aurait pas été.
+
+   Mécanique relevée par HAR du portail le 2026-08-21 :
+     POST managedTenantOperations            → 202, rend l'opération et son id
+     GET  managedTenantOperations/{id}        → sondage jusqu'à la fin
+     result.results                           → lignes, chacune une CHAÎNE JSON
+     result.executionInfo                     → {tenantsSucceeded, tenantsFailed}
+     result.isComplete                        → vrai quand l'agrégat est clos
+
+   Deux mesures qui ont dicté le code. D'abord chaque sondage renvoie
+   l'intégralité des résultats, 144 Ko dans la capture : le portail en a tiré
+   24 en six secondes, soit 3,4 Mo pour une recherche, parce qu'il attend que
+   le statut global quitte `running`. On s'arrête ici sur `result.isComplete`,
+   qui était vrai dès le premier sondage. Ensuite 33 tenants sur 3285 ont
+   échoué : un échec partiel est la normale et doit être affiché, pas tu.
+
+   Réserve honnête : le corps du POST n'a pas été observé, la capture ne portait
+   que les sondages. Il est reconstruit à partir de l'opération que les GET
+   renvoient, qui en contient les trois champs. Si la forme diffère, c'est ici
+   et nulle part ailleurs qu'il faut corriger, et `graphDumpRecherche()` donne
+   la dernière réponse brute.                                                 */
+
+const TP_RECHERCHE_PLAFOND   = 200;   // lignes agrégées, tous termes confondus
+const TP_RECHERCHE_PAR_TENANT = 5;    // lignes par tenant, comme le portail
+const TP_RECHERCHE_SONDAGES  = 40;    // garde-fou : ~20 s à 500 ms
+const TP_RECHERCHE_CADENCE   = 500;
+
+/* Un terme part dans un littéral de `$search` entre guillemets. On retire donc
+   les guillemets et les caractères de contrôle plutôt que d'espérer que le
+   service les échappe. */
+function nettoieTerme(t) {
+  return String(t).replace(/["\\\r\n\t]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+}
+
+/* Découpe une saisie libre en termes : une colonne collée depuis un tableur
+   arrive séparée par des sauts de ligne, une liste tapée à la main par des
+   virgules ou des points-virgules. */
+function decoupeTermes(brut) {
+  return [...new Set(String(brut || '')
+    .split(/[\r\n,;]+/)
+    .map(nettoieTerme)
+    .filter(t => t.length >= 2))];
+}
+
+/* Recherche `termes` dans tous les tenants gérés.
+   `onProgres({tenantsOk, tenantsKo, lignes})` est appelé à chaque sondage.
+   Retourne {lignes, tenantsOk, tenantsKo, tronque, termes} ou null. */
+async function chercheUtilisateurs(termes, signal, onProgres) {
+  const propres = (termes || []).map(nettoieTerme).filter(t => t.length >= 2);
+  if (!propres.length) return null;
+
+  /* `$search` accepte des OR : plusieurs utilisateurs tiennent dans une seule
+     opération, ce n'est pas une opération par ligne. On interroge à la fois le
+     champ par défaut et displayName, comme le portail. */
+  const clause = propres
+    .map(t => `"${t}" OR "displayName:${t}"`)
+    .join(' OR ');
+  const gabarit = `@sys.normalize([ConsistencyLevel: eventual GET /v1.0/users`
+                + `?$top=${TP_RECHERCHE_PAR_TENANT}&$search=${clause}])`;
+
+  const corps = {
+    displayName: 'getUsers',
+    target: { allTenants: true },
+    operationDefinition:   { values: [gabarit], managedTenantOperationLogLevel: 'none', failOnError: false },
+    aggregationDefinition: { values: [`@sys.append([/result],${TP_RECHERCHE_PLAFOND})`],
+                             managedTenantOperationLogLevel: 'none', failOnError: false }
+  };
+
+  const cree = await graphPost(`${TP_GRAPH_MT}/managedTenantOperations`, corps, signal, { base: TP_GRAPH_BETA });
+  TP_GRAPH.derniereRecherche = cree;
+  if (!cree.ok || !cree.data?.id) return { erreur: cree.status || 'réseau', lignes: [] };
+
+  const id = cree.data.id;
+  let vu = null;
+
+  for (let i = 0; i < TP_RECHERCHE_SONDAGES; i++) {
+    if (signal?.aborted) return null;
+    const r = await graphGet(`${TP_GRAPH_MT}/managedTenantOperations/${encodeURIComponent(id)}`,
+                             signal, { base: TP_GRAPH_BETA });
+    if (!r.ok) return { erreur: r.status || 'réseau', lignes: [] };
+    TP_GRAPH.derniereRecherche = r;
+    vu = lisRecherche(r.data, propres);
+    if (onProgres) onProgres(vu);
+    if (vu.termine) return vu;
+    await new Promise(res => setTimeout(res, TP_RECHERCHE_CADENCE));
+  }
+  /* Plafond de sondages atteint : on rend ce qu'on a, en le disant. */
+  return vu ? { ...vu, tronque: true } : null;
+}
+
+/* Lecture d'une réponse d'opération. Chaque ligne est une chaîne JSON portant
+   un objet `user` Graph standard, plus un `_tenantId` injecté par Lighthouse —
+   c'est lui qui permet de dire de quel client vient le compte. Une ligne
+   illisible est ignorée plutôt que de faire échouer toute la recherche. */
+function lisRecherche(op, termes) {
+  const res = op?.result || {};
+  let ok = null, ko = null;
+  try {
+    const info = typeof res.executionInfo === 'string' ? JSON.parse(res.executionInfo) : res.executionInfo;
+    if (info) { ok = info.tenantsSucceeded ?? null; ko = info.tenantsFailed ?? null; }
+  } catch { /* champ absent ou illisible : la progression n'est pas vitale */ }
+
+  const lignes = [];
+  (Array.isArray(res.results) ? res.results : []).forEach(l => {
+    let u;
+    try { u = typeof l === 'string' ? JSON.parse(l) : l; } catch { return; }
+    if (!u || (!u.userPrincipalName && !u.displayName)) return;
+    lignes.push({
+      nom:      u.displayName || null,
+      upn:      u.userPrincipalName || null,
+      mail:     u.mail || null,
+      poste:    u.jobTitle || null,
+      mobile:   u.mobilePhone || null,
+      bureau:   u.officeLocation || null,
+      id:       u.id || null,
+      tenantId: u._tenantId || u.tenantId || null
+    });
+  });
+
+  return {
+    termes,
+    lignes,
+    tenantsOk: ok,
+    tenantsKo: ko,
+    /* `isComplete` porte sur l'agrégat et devient vrai bien avant que le statut
+       global quitte `running` : c'est lui qui dit qu'il n'y a plus rien à
+       attendre, et s'en tenir au statut coûterait des mégaoctets pour rien. */
+    termine: res.isComplete === true || op?.managedTenantOperationStatus === 'completed',
+    /* Le plafond d'agrégation est atteint : d'autres comptes existent peut-être
+       et ne seront jamais renvoyés. */
+    plafonne: lignes.length >= TP_RECHERCHE_PLAFOND,
+    tronque: false
+  };
+}
+
+/* Dernière réponse brute, pour relever la forme réelle le jour ou le POST
+   passe. Même usage que graphDumpAppareil(). */
+function graphDumpRecherche() { return TP_GRAPH.derniereRecherche || null; }
+
 /* Interroge Graph pour un domaine. Retourne null si l'utilisateur n'est pas
    connecté : l'application doit rester entièrement fonctionnelle sans Graph,
    c'est un enrichissement, pas un prérequis. */
@@ -875,6 +1072,11 @@ async function checkGraph(domain, tenantIdConnu) {
    bouton d'appel à l'action tant que rien n'est connecté, pastille verte ensuite.
    Rien du tout si le déploiement n'a pas d'identifiant client configuré. */
 function syncGraphUI() {
+  /* La recherche d'utilisateur n'existe que Graph connecte. Appel tolerant a
+     l'absence de la fonction : graph.js doit rester chargeable seul, et
+     tenantpulse.js pouvoir evoluer sans casser ce fichier. */
+  if (typeof syncUserSearchUI === 'function') syncUserSearchUI();
+
   const badge = document.getElementById('graphStatus');
   const cta   = document.getElementById('graphConnect');
   const label = document.getElementById('graphStatusLabel');

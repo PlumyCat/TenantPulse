@@ -1401,6 +1401,7 @@ function applyHashQuery() {
 window.addEventListener('load', () => {
   bindEvents();
   bindPanelResizer(); loadPanelWidth();
+  bindUserSearch(); syncUserSearchUI();
   applyAnalysisMode(loadProfile().analysisMode);
   loadDohPref(); syncDohUI();
   syncHistoryToggleUI();
@@ -5290,6 +5291,274 @@ function buildAxesSante(health) {
     grille.appendChild(tuile);
   });
   return grille.children.length ? grille : null;
+}
+
+/* ── Recherche d'utilisateur sur tout le parc : interface ────────────────────
+   La saisie vit dans la barre latérale, avec le reste de ce qu'on cherche ; les
+   résultats s'affichent dans le panneau de détail, qui est le seul endroit
+   assez large pour trois colonnes et que l'utilisateur peut élargir à la
+   poignée. Le bloc n'apparaît que si Graph est connecté — sans jeton la
+   recherche ne peut rien faire, et un champ inerte se lit comme une panne.
+
+   Le contrôle d'accès est déjà fait ailleurs et n'est pas repris ici : sans
+   `graphClientId`, que `GET /api/me` ne sert qu'aux utilisateurs autorisés, il
+   n'y a pas de session Graph du tout. Graph oppose un 403 en dernier ressort si
+   les rôles GDAP manquent.                                                    */
+
+/* Domaine deja connu pour un Tenant ID, depuis le seul historique local. Une
+   variante synchrone de resolveKnownDomainForTenantId(), qui interroge en plus
+   l'annuaire partage : ici on rend une ligne de tableau parmi des dizaines,
+   une requete reseau par ligne serait absurde. Rien de trouve : la colonne
+   affiche le GUID, qui reste exploitable.
+
+   Ce que Lighthouse renvoie est un `_tenantId`, pas un nom de client. C'est
+   donc l'historique de l'utilisateur qui donne un sens humain a la colonne. */
+function domaineConnuPourTenant(tenantId) {
+  if (!tenantId) return null;
+  const t = String(tenantId).toLowerCase();
+  try {
+    return loadHistory().find(i => i.tenantId?.toLowerCase() === t)?.domain || null;
+  } catch { return null; }
+}
+
+let usEnCours = null;   // AbortController de la recherche courante
+
+function syncUserSearchUI() {
+  const bloc = document.getElementById('userSearchBlock');
+  if (!bloc) return;
+  const ouvert = !!window.TP_GRAPH?.connected;
+  bloc.hidden = !ouvert;
+  /* Une recherche laissée en vol quand l'accès est retiré doit s'arrêter, pas
+     seulement disparaître de l'écran. */
+  if (!ouvert && usEnCours) { usEnCours.abort(); usEnCours = null; }
+}
+
+function usEtat(texte, ton) {
+  const e = document.getElementById('usEtat');
+  if (!e) return;
+  e.hidden = !texte;
+  e.className = 'us-etat' + (ton ? ' ' + ton : '');
+  e.textContent = texte || '';
+}
+
+function usOccupe(oui) {
+  const btn = document.getElementById('btnUserSearch');
+  const txt = document.getElementById('usGoText');
+  const spi = document.getElementById('usSpinner');
+  if (!btn) return;
+  btn.disabled = oui;
+  if (txt) txt.style.display = oui ? 'none' : '';
+  if (spi) spi.style.display = oui ? '' : 'none';
+}
+
+async function lanceRechercheUtilisateur() {
+  const champ = document.getElementById('userSearchInput');
+  const termes = decoupeTermes(champ?.value);
+  if (!termes.length) { usEtat('Saisissez au moins un nom ou une adresse (2 caractères).', 'bad'); return; }
+
+  if (usEnCours) usEnCours.abort();
+  usEnCours = new AbortController();
+  const ctrl = usEnCours;
+  usOccupe(true);
+  usEtat('Interrogation du parc…', null);
+
+  let res;
+  try {
+    res = await chercheUtilisateurs(termes, ctrl.signal, p => {
+      if (ctrl.signal.aborted) return;
+      const vus = p.tenantsOk != null ? p.tenantsOk.toLocaleString('fr-FR') + ' tenants interrogés' : 'interrogation…';
+      usEtat(vus + ' · ' + p.lignes.length + ' résultat' + (p.lignes.length > 1 ? 's' : ''), null);
+    });
+  } catch {
+    res = null;
+  }
+  if (ctrl.signal.aborted) return;
+  usOccupe(false);
+  usEnCours = null;
+
+  if (!res) { usEtat('Recherche interrompue.', null); return; }
+  if (res.erreur) {
+    /* 403 : la portée User.Read.All n'est pas consentie sur l'inscription. Le
+       dire précisément vaut mieux qu'« erreur », c'est une action possible. */
+    usEtat(res.erreur === 403
+      ? "Autorisation Graph manquante (User.Read.All) sur l'inscription d'application."
+      : 'Recherche impossible (' + res.erreur + ').', 'bad');
+    return;
+  }
+
+  usEtat(res.lignes.length + ' résultat' + (res.lignes.length > 1 ? 's' : '')
+    + (res.tenantsOk != null ? ' sur ' + res.tenantsOk.toLocaleString('fr-FR') + ' tenants' : ''),
+    res.lignes.length ? 'ok' : null);
+  ouvreResultatsUtilisateur(res);
+}
+
+/* Fiche d'un compte, prête à coller dans un ticket. */
+function ficheUtilisateur(u, nomTenant) {
+  const L = ['UTILISATEUR : ' + (u.nom || u.upn || '')];
+  if (u.upn)    L.push('UPN : ' + u.upn);
+  if (u.mail && u.mail !== u.upn) L.push('Adresse : ' + u.mail);
+  if (u.poste)  L.push('Fonction : ' + u.poste);
+  if (u.mobile) L.push('Mobile : ' + u.mobile);
+  if (u.bureau) L.push('Site : ' + u.bureau);
+  if (nomTenant) L.push('Tenant : ' + nomTenant);
+  if (u.tenantId) L.push('Tenant ID : ' + u.tenantId);
+  if (u.id)     L.push('Object ID : ' + u.id);
+  return L.join('\n').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function ouvreResultatsUtilisateur(res) {
+  const titre = 'Recherche utilisateur (' + res.lignes.length + ')';
+  closePanel();
+  openPanel('usearch', titre, b => {
+    const note = document.createElement('div'); note.className = 'panel-section-note';
+    note.textContent = 'Termes : ' + res.termes.join(', ') + '.'
+      + (res.tenantsOk != null ? ' ' + res.tenantsOk.toLocaleString('fr-FR') + ' tenants interrogés.' : '');
+    b.appendChild(note);
+
+    /* Un échec partiel est la normale : 33 tenants sur 3285 dans la mesure de
+       référence. Le taire ferait passer une liste incomplète pour exhaustive. */
+    if (res.tenantsKo) {
+      const a = document.createElement('div'); a.className = 'dev-avis';
+      a.textContent = res.tenantsKo.toLocaleString('fr-FR') + ' tenant(s) n’ont pas répondu. '
+                    + 'Un compte peut donc exister sans figurer ici.';
+      b.appendChild(a);
+    }
+    if (res.plafonne || res.tronque) {
+      const a = document.createElement('div'); a.className = 'dev-avis';
+      a.textContent = res.plafonne
+        ? 'Plafond de ' + TP_RECHERCHE_PLAFOND + ' résultats atteint. Affinez les termes pour être sûr de tout voir.'
+        : 'Recherche arrêtée avant la fin du parc. Les résultats ci-dessous sont partiels.';
+      b.appendChild(a);
+    }
+
+    if (!res.lignes.length) {
+      const v = document.createElement('div'); v.className = 'dev-vide';
+      v.textContent = 'Aucun compte ne correspond dans les tenants interrogés.';
+      b.appendChild(v);
+      return;
+    }
+
+    const liste = document.createElement('div'); liste.className = 'us-liste';
+    res.lignes.forEach(u => {
+      const nomTenant = domaineConnuPourTenant(u.tenantId);
+
+      const row = document.createElement('div'); row.className = 'us-row';
+      const corps = document.createElement('div'); corps.className = 'us-corps';
+
+      const head = document.createElement('div'); head.className = 'us-head';
+      const nom = document.createElement('span'); nom.className = 'us-nom';
+      nom.textContent = u.nom || u.upn || '(sans nom)'; nom.title = nom.textContent;
+      head.appendChild(nom);
+      if (u.poste) { const p = document.createElement('span'); p.className = 'us-poste'; p.textContent = u.poste; head.appendChild(p); }
+      corps.appendChild(head);
+
+      if (u.upn) {
+        const upn = document.createElement('div'); upn.className = 'us-upn';
+        upn.textContent = u.upn; upn.title = u.upn;
+        corps.appendChild(upn);
+      }
+
+      const bas = document.createElement('div'); bas.className = 'us-meta';
+      const tn = document.createElement('span'); tn.className = 'us-tenant';
+      tn.textContent = nomTenant || u.tenantId || 'tenant inconnu';
+      if (u.tenantId) tn.title = 'Tenant ID : ' + u.tenantId;
+      bas.appendChild(tn);
+      [u.mail && u.mail !== u.upn ? u.mail : null, u.mobile, u.bureau].filter(Boolean).forEach(v => {
+        const s = document.createElement('span'); s.className = 'us-plus'; s.textContent = v; bas.appendChild(s);
+      });
+      corps.appendChild(bas);
+      row.appendChild(corps);
+
+      const cp = document.createElement('button');
+      cp.type = 'button'; cp.className = 'dev-copie';
+      cp.title = 'Copier la fiche du compte';
+      cp.setAttribute('aria-label', 'Copier la fiche de ' + (u.nom || u.upn || 'ce compte'));
+      const im = document.createElement('img'); im.className = 'icon-adaptive'; im.src = 'assets/copy.png'; im.alt = '';
+      cp.appendChild(im);
+      cp.addEventListener('click', e => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(ficheUtilisateur(u, nomTenant))
+          .then(() => { cp.classList.add('ok');   setTimeout(() => cp.classList.remove('ok'), 1400); })
+          .catch(() => { cp.classList.add('rate'); setTimeout(() => cp.classList.remove('rate'), 2000); });
+      });
+      row.appendChild(cp);
+      liste.appendChild(row);
+    });
+    b.appendChild(liste);
+
+    /* Export global : sur une recherche en masse, c'est le tableau entier qu'on
+       veut reverser dans un ticket ou un tableur, pas quarante fiches. */
+    const barre = document.createElement('div'); barre.className = 'panel-report-bar bas';
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn-report';
+    const libelle = 'Copier les ' + res.lignes.length + ' résultats (CSV)';
+    btn.textContent = libelle;
+    btn.addEventListener('click', () => {
+      const cell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+      const csv = [['Nom', 'UPN', 'Adresse', 'Fonction', 'Tenant', 'Tenant ID'].map(cell).join(';')]
+        .concat(res.lignes.map(u => [u.nom, u.upn, u.mail, u.poste,
+          domaineConnuPourTenant(u.tenantId) || '', u.tenantId].map(cell).join(';')))
+        .join('\r\n');
+      navigator.clipboard.writeText(csv).then(() => {
+        btn.textContent = '✓ Copié'; btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = libelle; btn.classList.remove('copied'); }, 1800);
+      }).catch(() => {
+        btn.textContent = 'Copie refusée par le navigateur';
+        setTimeout(() => { btn.textContent = libelle; }, 2500);
+      });
+    });
+    barre.appendChild(btn);
+    b.appendChild(barre);
+  });
+}
+
+function bindUserSearch() {
+  const btn   = document.getElementById('btnUserSearch');
+  const champ = document.getElementById('userSearchInput');
+  const fich  = document.getElementById('userSearchFile');
+  if (!btn || !champ) return;
+
+  document.getElementById('btnUserSearchToggle')
+    ?.addEventListener('click', () => toggleCollapsible('userSearchBody', 'userSearchArrow'));
+  btn.addEventListener('click', lanceRechercheUtilisateur);
+  /* Entrée lance, Maj+Entrée passe à la ligne : le champ accepte une liste. */
+  champ.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); lanceRechercheUtilisateur(); }
+  });
+
+  /* Fichier texte ou CSV. Le XLSX n'est pas accepté : c'est une archive ZIP que
+     rien ne sait ouvrir ici sans bibliothèque, et le projet n'en a pas. Coller
+     une colonne depuis le tableur fait le même travail sans fichier. */
+  fich?.addEventListener('change', async () => {
+    const f = fich.files?.[0];
+    if (!f) return;
+    try {
+      const texte = await f.text();
+      const termes = decoupeTermes(texte);
+      champ.value = termes.join('\n');
+      usEtat(termes.length + ' terme(s) chargé(s) depuis ' + f.name + '.', null);
+    } catch {
+      usEtat('Fichier illisible.', 'bad');
+    }
+    fich.value = '';   // permet de recharger le même fichier
+  });
+
+  /* Dépôt direct sur la zone de saisie, plus court que passer par le bouton. */
+  champ.addEventListener('dragover', e => { e.preventDefault(); champ.classList.add('depot'); });
+  champ.addEventListener('dragleave', () => champ.classList.remove('depot'));
+  champ.addEventListener('drop', async e => {
+    e.preventDefault(); champ.classList.remove('depot');
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;
+    if (/\.xlsx?$/i.test(f.name)) {
+      usEtat('Les fichiers Excel ne sont pas lus. Enregistrez en CSV, ou collez la colonne directement.', 'bad');
+      return;
+    }
+    try {
+      const termes = decoupeTermes(await f.text());
+      champ.value = termes.join('\n');
+      usEtat(termes.length + ' terme(s) chargé(s) depuis ' + f.name + '.', null);
+    } catch { usEtat('Fichier illisible.', 'bad'); }
+  });
 }
 
 /* ── Grille de cartes de panneau ─────────────────────────────────────────────

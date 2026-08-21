@@ -191,6 +191,14 @@ totale du fichier.
 > | `conditionalAccessPolicyCoverages` | `Policy.Read.All` |
 > | `managedTenantSecureScores`, `tenantExposureSummaries`, `managementTemplateCollectionTenantSummaries`, `tenantsDetailedInformation`, `managedTenantAdoptionReports`, `managedTenantAlerts`, `tenants`, `myRoles`, `auditEvents` | aucune |
 >
+> **État des consentements au 2026-08-21** : `CrossTenantInformation.ReadBasic.All`,
+> `ManagedTenants.Read.All`, `DelegatedAdminRelationship.Read.All` et
+> `DeviceManagementManagedDevices.Read.All` sont accordées. Restent à consentir
+> `Reports.Read.All` (couverture MFA) et `User.Read.All` (recherche d'utilisateur).
+> `TP_GRAPH_SCOPES` ne doit lister que les portées **déjà consenties** : la liste part
+> entière à chaque renouvellement de jeton, une portée non consentie fait échouer l'échange,
+> et `graphClearSession()` coupe alors la session de tous les utilisateurs connectés.
+>
 > Contrôle négatif vérifié : les entités de la dernière ligne sont exactement celles qui
 > répondent 200 avec les portées actuelles. **Ne pas demander `ManagedTenants.ReadWrite.All`** :
 > fausse piste explorée puis écartée, elle n'apporte rien et ouvre l'écriture sur les actions
@@ -234,6 +242,37 @@ totale du fichier.
 > `reportRoot/managedTenantAccessReports` confirme au passage le diagnostic de fond pour
 > cette entité : `accessLevel: "full"`, `requirements: []`, et Global Reader dans les rôles
 > acceptés. **Les rôles GDAP suffisent, seule la portée Graph manque.**
+
+> [!IMPORTANT]
+> **Recherche d'utilisateur sur tout le parc : `managedTenantOperations`.** Relevé par HAR
+> du portail le 2026-08-21. C'est un **moteur de diffusion générique** : on lui confie une
+> requête Graph modèle, il l'exécute côté serveur dans chaque tenant géré et agrège les
+> réponses. C'est ce qui rend la chose possible depuis un navigateur — itérer trois mille
+> tenants côté client ne l'aurait pas été.
+>
+> ```
+> POST managedTenantOperations   → 202, rend l'opération et son id
+>   target               : { allTenants: true }
+>   operationDefinition  : @sys.normalize([ConsistencyLevel: eventual
+>                            GET /v1.0/users?$top=5&$search="<terme>" OR "displayName:<terme>"])
+>   aggregationDefinition: @sys.append([/result],<plafond>)
+> GET  managedTenantOperations/{id} → sondage
+>   result.results       : lignes, chacune une CHAÎNE JSON (user Graph + `_tenantId`)
+>   result.executionInfo : chaîne JSON {tenantsSucceeded, tenantsFailed}
+>   result.isComplete    : vrai quand l'agrégat est clos
+> ```
+>
+> Trois faits mesurés qui dictent le code. **`result.isComplete` devient vrai bien avant que
+> `managedTenantOperationStatus` quitte `running`** : le portail attend le statut et tire 24
+> sondages de 144 Ko en six secondes, soit 3,4 Mo pour une recherche, là où s'arrêter sur
+> `isComplete` en coûte deux. **33 tenants sur 3285 ont échoué** : un échec partiel est la
+> normale et doit être affiché, sans quoi une liste incomplète passe pour exhaustive. Et
+> **`$search` accepte des `OR`**, donc plusieurs utilisateurs tiennent dans une seule
+> opération : une recherche en masse n'est pas une opération par ligne.
+>
+> Réserve : le corps du POST n'a pas été observé, la capture ne portait que les sondages. Il
+> est reconstruit à partir de l'opération que les GET renvoient, qui en contient les trois
+> champs. `graphDumpRecherche()` donne la dernière réponse brute.
 
 > [!IMPORTANT]
 > **`GRAPH_CLIENT_ID` n'est jamais versionné.** L'identifiant est servi par `GET /api/me`

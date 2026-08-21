@@ -579,6 +579,32 @@
         </div>
       </div>
 
+      <!-- Recherche d'utilisateur sur tout le parc, via Microsoft 365 Lighthouse.
+           Masque tant que Graph n'est pas connecte : sans jeton, la recherche
+           ne peut rien faire, et un champ inerte se lit comme une panne. -->
+      <div class="msa-check-block" id="userSearchBlock" hidden>
+        <button class="collapsible-btn" id="btnUserSearchToggle">
+          <span><img src="assets/user.png" class="icon-adaptive" alt=""> Rechercher un utilisateur</span>
+          <span class="coll-arrow" id="userSearchArrow">▾</span>
+        </button>
+        <div class="collapsible-body" id="userSearchBody">
+          <p class="us-note">Cherche dans <strong>tous les tenants gérés</strong>. Un nom ou une adresse par ligne : collez une colonne depuis un tableur, ou déposez un fichier .txt ou .csv.</p>
+          <textarea id="userSearchInput" class="us-input" rows="3" spellcheck="false"
+                    placeholder="nom.prenom@client.fr&#10;Autre Utilisateur"></textarea>
+          <div class="us-actions">
+            <button class="btn-go us-go" id="btnUserSearch">
+              <span id="usGoText"><img src="assets/LOUPE.png" width="14" height="14" alt=""> Rechercher</span>
+              <div class="spinner" id="usSpinner"></div>
+            </button>
+            <label class="us-file" id="usFileLabel">
+              <input type="file" id="userSearchFile" accept=".txt,.csv,text/plain,text/csv" hidden>
+              <img src="assets/save.png" class="icon-adaptive" alt=""> Fichier
+            </label>
+          </div>
+          <div class="us-etat" id="usEtat" hidden></div>
+        </div>
+      </div>
+
       <div class="privacy-block">
         <button class="collapsible-btn" id="btnPrivacyToggle">
           <span><img src="assets/padlock.png" class="icon-adaptive" alt=""> Confidentialité</span>

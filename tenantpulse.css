@@ -1247,6 +1247,52 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
   .posture-crit{flex-basis:80px}
 }
 
+/* ── Recherche d'utilisateur : saisie en barre laterale ──────────────────────
+   Le bloc reprend l'ossature des autres blocs depliables de la colonne
+   (.msa-check-block), seuls le champ et la barre d'actions sont propres. */
+.us-note{font-size:var(--text-xs);line-height:1.5;color:var(--soft);margin:0 0 8px}
+.us-input{width:100%;box-sizing:border-box;resize:vertical;min-height:56px;
+  background:var(--row);border:1px solid var(--border);border-radius:var(--r-sm);
+  color:var(--text);font-family:var(--font);font-size:12px;line-height:1.5;padding:7px 9px;
+  transition:border-color .15s,background .15s}
+.us-input::placeholder{color:var(--muted)}
+.us-input:focus{outline:none;border-color:var(--blue)}
+/* Cible de depot : le liserre doit se voir pendant qu'on tient un fichier. */
+.us-input.depot{border-color:var(--blue);background:var(--acc-hover)}
+.us-actions{display:flex;gap:6px;margin-top:7px}
+.us-go{flex:1}
+/* Le champ de fichier natif est masque et pilote par son label : son rendu
+   n'est pas stylable et jure avec le reste de la colonne. */
+.us-file{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;
+  background:var(--row);border:1px solid var(--border);border-radius:var(--r-sm);
+  color:var(--soft);font-size:11px;font-weight:600;padding:0 10px;cursor:pointer;
+  transition:background .15s,color .15s}
+.us-file:hover{background:var(--acc-hover);color:var(--text)}
+.us-file img{width:12px;height:12px}
+.us-etat{margin-top:7px;font-size:var(--text-xs);line-height:1.45;color:var(--soft)}
+.us-etat.ok{color:#15803d}
+.us-etat.bad{color:#dc2626}
+[data-theme="dark"] .us-etat.ok{color:#86efac}
+[data-theme="dark"] .us-etat.bad{color:#fca5a5}
+
+/* ── Recherche d'utilisateur : resultats dans le panneau ─────────────────────
+   Meme ossature de ligne que la liste d'appareils, dont elle partage le bouton
+   de copie (.dev-copie) et les avis (.dev-avis, .dev-vide) : ce sont deux
+   listes de resultats, elles se lisent de la meme facon. */
+.us-liste{display:flex;flex-direction:column;gap:3px;margin-top:2px}
+.us-row{display:flex;align-items:flex-start;gap:8px;padding:7px 7px 7px 9px;
+  border-left:2.5px solid var(--blue);border-radius:0 var(--r-xs) var(--r-xs) 0;background:var(--row)}
+.us-corps{flex:1;min-width:0}
+.us-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.us-nom{font-size:12.5px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.us-poste{font-size:10px;color:var(--soft);white-space:nowrap;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.us-upn{font-size:11px;color:var(--soft);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.us-meta{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:10.5px;color:var(--muted);margin-top:3px}
+/* Le tenant est la colonne qui donne son sens au resultat : c'est lui qui dit
+   chez quel client le compte se trouve. Il ressort du reste de la meta. */
+.us-tenant{font-weight:600;color:var(--soft)}
+.us-plus{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
 /* ── Liste des appareils geres (panneau Posture) ─────────────────────────────
    Un parc entier tient dans un panneau etroit : chaque ligne est donc sur deux
    niveaux, le nom et l'etat sur la premiere, le reste en retrait. Le liseré de
