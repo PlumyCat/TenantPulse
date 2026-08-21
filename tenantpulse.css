@@ -1089,6 +1089,146 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
   .panel-cols,.panel-grille.dense .panel-cols{column-width:auto;column-count:1}
 }
 
+/* ── Panneau Posture : bande critique et tuiles dépliables ───────────────────
+   Glassmorphisme calqué sur les tuiles du hero (.hero-partner-btn), avec une
+   différence qui compte : le hero est posé sur un fond sombre et peut donc
+   empiler des voiles blancs. Le panneau prend la couleur du thème, un voile
+   blanc y serait invisible en clair. Les deux teintes du verre passent donc par
+   des variables, redéfinies en thème sombre. */
+:root{
+  --verre-1:rgba(255,255,255,.78);
+  --verre-2:rgba(255,255,255,.42);
+  --verre-bord:rgba(0,0,0,.10);
+  --verre-eclat:rgba(255,255,255,.85);
+  --verre-ombre:rgba(0,0,0,.07);
+}
+[data-theme="dark"]{
+  --verre-1:rgba(255,255,255,.10);
+  --verre-2:rgba(255,255,255,.03);
+  --verre-bord:rgba(255,255,255,.14);
+  --verre-eclat:rgba(255,255,255,.22);
+  --verre-ombre:rgba(0,0,0,.28);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --verre-1:rgba(255,255,255,.10);
+    --verre-2:rgba(255,255,255,.03);
+    --verre-bord:rgba(255,255,255,.14);
+    --verre-eclat:rgba(255,255,255,.22);
+    --verre-ombre:rgba(0,0,0,.28);
+  }
+}
+
+/* Bande de valeurs critiques, en tête de panneau. Elle défile avec le reste
+   plutôt que d'être collée en haut : figée, elle mangerait un tiers de la
+   hauteur utile sur un panneau étroit. */
+.posture-critiques{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px}
+.posture-crit{
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+  flex:1 1 96px;min-width:0;padding:7px 10px 6px;
+  background:linear-gradient(180deg,var(--verre-1) 0%,var(--verre-2) 100%);
+  -webkit-backdrop-filter:blur(10px) saturate(140%);backdrop-filter:blur(10px) saturate(140%);
+  border:1px solid var(--verre-bord);border-radius:var(--r-md);
+  box-shadow:0 1px 0 var(--verre-eclat) inset,0 2px 8px var(--verre-ombre);
+  font-family:var(--font);cursor:pointer;text-align:left;
+  transition:transform .15s,box-shadow .2s,border-color .2s
+}
+.posture-crit:hover{transform:translateY(-1px);box-shadow:0 1px 0 var(--verre-eclat) inset,0 5px 14px var(--verre-ombre)}
+.posture-crit:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.posture-crit-val{font-size:17px;font-weight:700;line-height:1.1;color:var(--text)}
+.posture-crit-lbl{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.posture-crit.ok   .posture-crit-val{color:#15803d}
+.posture-crit.warn .posture-crit-val{color:#b45309}
+.posture-crit.bad  .posture-crit-val{color:#dc2626}
+[data-theme="dark"] .posture-crit.ok   .posture-crit-val{color:#86efac}
+[data-theme="dark"] .posture-crit.warn .posture-crit-val{color:#fcd34d}
+[data-theme="dark"] .posture-crit.bad  .posture-crit-val{color:#fca5a5}
+/* Le liseré gauche donne le ton sans recolorer toute la pastille. */
+.posture-crit.ok{border-left:2px solid #16a34a}
+.posture-crit.warn{border-left:2px solid #d97706}
+.posture-crit.bad{border-left:2px solid #dc2626}
+
+/* Grille de tuiles. Grille et non multi-colonnes : une tuile qui se déplie
+   change de hauteur, et un conteneur multi-colonnes ferait alors sauter le
+   contenu d'une colonne à l'autre. Fermées, toutes les tuiles ont la même
+   hauteur, donc la grille ne laisse pas les trous qui avaient motivé le
+   multi-colonnes ailleurs dans les panneaux. */
+/* `dense` n'est pas cosmetique ici : une tuile depliee prend toute la largeur,
+   donc elle passe a la ligne et laisserait la fin de la rangee precedente vide.
+   Le placement dense y remonte les tuiles fermees suivantes. L'ordre visuel
+   bouge au depliage, ce qui est le prix a payer — et il est modique, les tuiles
+   portant chacune son titre. */
+.posture-tuiles{display:grid;grid-auto-flow:dense;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px;align-items:start}
+.posture-tuile{
+  min-width:0;border-radius:var(--r-lg);position:relative;
+  background:linear-gradient(180deg,var(--verre-1) 0%,var(--verre-2) 100%);
+  -webkit-backdrop-filter:blur(10px) saturate(140%);backdrop-filter:blur(10px) saturate(140%);
+  border:1px solid var(--verre-bord);
+  box-shadow:0 1px 0 var(--verre-eclat) inset,0 3px 12px var(--verre-ombre);
+  transition:box-shadow .2s,border-color .2s
+}
+/* Bordure dégradée verre via mask, comme .hero-partner-btn. */
+.posture-tuile::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(180deg,var(--verre-eclat) 0%,var(--verre-bord) 55%,transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;opacity:.9;transition:opacity .2s
+}
+.posture-tuile:hover{box-shadow:0 1px 0 var(--verre-eclat) inset,0 6px 18px var(--verre-ombre)}
+.posture-tuile:hover::before{opacity:1}
+/* Une tuile dépliée prend toute la largeur : son détail se lit en ligne, pas
+   dans une piste de 148px. */
+.posture-tuile.ouverte{grid-column:1/-1}
+/* Repère bref après un clic depuis la bande critique : sur un panneau large,
+   la tuile ouverte peut être loin du chiffre qu'on vient de cliquer. */
+.posture-tuile.vise{border-color:var(--blue);box-shadow:0 0 0 2px rgba(75,63,190,.35),0 6px 18px var(--verre-ombre)}
+
+.posture-tuile-tete{
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+  width:100%;padding:10px 11px 17px;background:none;border:none;border-radius:inherit;
+  font-family:var(--font);text-align:left;cursor:pointer;color:var(--text);position:relative
+}
+.posture-tuile-tete:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.posture-tuile-titre{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--soft);line-height:1.3}
+.posture-tuile-val{font-size:19px;font-weight:700;line-height:1.15;color:var(--text);margin-top:3px}
+.posture-tuile-sousval{font-size:10px;font-weight:500;color:var(--muted);line-height:1.3}
+.posture-tuile.ok   .posture-tuile-val{color:#15803d}
+.posture-tuile.warn .posture-tuile-val{color:#b45309}
+.posture-tuile.bad  .posture-tuile-val{color:#dc2626}
+[data-theme="dark"] .posture-tuile.ok   .posture-tuile-val{color:#86efac}
+[data-theme="dark"] .posture-tuile.warn .posture-tuile-val{color:#fcd34d}
+[data-theme="dark"] .posture-tuile.bad  .posture-tuile-val{color:#fca5a5}
+/* Ce qui manque n'est pas une mesure : la tuile le dit sans emprunter la
+   couleur d'un résultat. */
+.posture-tuile.manquant{border-color:#d97706}
+.posture-tuile.manquant .posture-tuile-val{color:#b45309}
+[data-theme="dark"] .posture-tuile.manquant .posture-tuile-val{color:#fcd34d}
+
+/* Chevron : même pastille et même place que sur les tuiles du hero. */
+.posture-tuile-chevron{
+  position:absolute;bottom:5px;left:50%;transform:translateX(-50%);
+  display:inline-flex;align-items:center;justify-content:center;width:34px;height:11px;
+  border:1px solid var(--verre-bord);border-radius:var(--r-pill);background:var(--verre-2);
+  color:var(--muted);font-size:9px;font-weight:700;line-height:1;
+  transition:transform .2s,color .15s,background .15s
+}
+.posture-tuile-tete:hover .posture-tuile-chevron{color:var(--text);background:var(--verre-1)}
+.posture-tuile.ouverte .posture-tuile-chevron{transform:translateX(-50%) rotate(180deg)}
+
+.posture-tuile-corps{display:none;padding:0 11px 11px}
+.posture-tuile.ouverte .posture-tuile-corps{display:block;border-top:1px solid var(--verre-bord);padding-top:10px;margin-top:-4px}
+.posture-tuile-corps .panel-section-note{margin:0 0 9px}
+.posture-tuile-corps .metric:last-child{margin-bottom:0}
+/* Mêmes replis qu'ailleurs : un libellé long passe à la ligne plutôt que d'être
+   coupé, et la valeur cède sa ligne quand la place manque. */
+.posture-tuile-corps .metric-lbl{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3}
+.posture-tuile-corps .metric-head{flex-wrap:wrap;row-gap:1px}
+
+@media(max-width:768px){
+  .posture-tuiles{grid-template-columns:repeat(auto-fill,minmax(128px,1fr))}
+  .posture-crit{flex-basis:80px}
+}
+
 /* ── Liste des appareils geres (panneau Posture) ─────────────────────────────
    Un parc entier tient dans un panneau etroit : chaque ligne est donc sur deux
    niveaux, le nom et l'etat sur la premiere, le reste en retrait. Le liseré de

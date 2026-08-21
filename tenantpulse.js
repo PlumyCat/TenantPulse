@@ -5706,130 +5706,303 @@ function addListeAppareils(b, a) {
   b.appendChild(bloc);
 }
 
-/* Le panneau Posture est une grille de cartes, pas une pile de sections. A huit
-   rubriques empilees, rien ne marquait ou l'une finissait et ou la suivante
-   commencait, et le panneau elargi n'en profitait pas : il allongeait les
-   barres au lieu de mettre les rubriques cote a cote. Chaque rubrique construit
-   donc dans sa propre carte, et c'est la grille CSS qui decide du nombre de
-   colonnes selon la largeur disponible.
+/* ── Panneau Posture : tuiles dépliables ─────────────────────────────────────
+   Le panneau montrait huit rubriques dépliées en permanence, soit une colonne
+   de chiffres qu'il fallait parcourir pour trouver celui qu'on cherchait. Il
+   présente maintenant une bande de valeurs critiques en tête, puis des tuiles
+   compactes qui ne donnent que leur chiffre de tête. Cliquer déplie le détail.
 
-   `large` force une carte sur toute la largeur : reserve a ce qui se lit en
-   ligne (la liste d'appareils, les portees manquantes), jamais a un chiffre. */
+   Grille et non multi-colonnes, contrairement au reste : une tuile qui change
+   de hauteur ferait sauter tout le contenu d'une colonne à l'autre à chaque
+   dépliage. Toutes les tuiles fermées ayant la même hauteur, la grille ne
+   laisse pas les trous qui avaient motivé le multi-colonnes ailleurs. Une
+   tuile ouverte prend toute la largeur : son détail se lit en ligne.
+
+   L'ordre est délibéré. Secure Score d'abord, c'est le verdict ; conformité
+   des appareils juste après, c'est ce qui appelle une action ; le reste
+   ensuite. Ce que les portées ne couvrent pas ferme la marche.             */
+
+const POSTURE_TON_SEUIL = (v, bon, moyen) => v >= bon ? 'ok' : v >= moyen ? 'warn' : 'bad';
+
+/* Une tuile : en-tête cliquable portant le titre et le chiffre de tête, et un
+   corps construit à la demande. `remplir` reçoit le corps de la tuile. */
+function tuilePosture(grille, def) {
+  const t = document.createElement('section');
+  t.className = 'posture-tuile' + (def.ton ? ' ' + def.ton : '');
+  t.dataset.tuile = def.id;
+
+  const tete = document.createElement('button');
+  tete.type = 'button';
+  tete.className = 'posture-tuile-tete';
+  tete.setAttribute('aria-expanded', 'false');
+
+  const titre = document.createElement('span');
+  titre.className = 'posture-tuile-titre';
+  titre.textContent = def.titre;
+
+  const val = document.createElement('span');
+  val.className = 'posture-tuile-val';
+  val.textContent = def.valeur ?? '—';
+
+  tete.appendChild(titre);
+  tete.appendChild(val);
+
+  if (def.sousVal) {
+    const sv = document.createElement('span');
+    sv.className = 'posture-tuile-sousval';
+    sv.textContent = def.sousVal;
+    tete.appendChild(sv);
+  }
+
+  /* Chevron calqué sur celui des tuiles du hero : même pastille, même place. */
+  const chev = document.createElement('span');
+  chev.className = 'posture-tuile-chevron';
+  chev.textContent = '⌄';
+  chev.setAttribute('aria-hidden', 'true');
+  tete.appendChild(chev);
+
+  const corps = document.createElement('div');
+  corps.className = 'posture-tuile-corps';
+
+  let construit = false;
+  const basculer = ouvrir => {
+    const etat = ouvrir ?? !t.classList.contains('ouverte');
+    /* Le corps n'est construit qu'au premier dépliage : la liste d'appareils
+       porte jusqu'à 999 lignes, les bâtir toutes pour les cacher aussitôt
+       coûterait à chaque analyse ce dont personne ne se sert. */
+    if (etat && !construit) { def.remplir(corps); construit = true; }
+    t.classList.toggle('ouverte', etat);
+    tete.setAttribute('aria-expanded', etat ? 'true' : 'false');
+    return etat;
+  };
+
+  tete.addEventListener('click', () => basculer());
+  t.appendChild(tete);
+  t.appendChild(corps);
+  grille.appendChild(t);
+
+  /* Rendu à l'appelant pour que la bande de valeurs critiques puisse ouvrir
+     une tuile depuis l'extérieur. */
+  return { element: t, ouvrir: () => basculer(true) };
+}
+
+/* Bande de valeurs critiques. Elle ne répète pas les tuiles : elle sort le
+   chiffre que quelqu'un vient chercher, et sert de raccourci vers la tuile qui
+   le détaille. Une valeur sans tuile correspondante n'y figure pas. */
+function bandeCritique(defs, tuiles) {
+  const bande = document.createElement('div');
+  bande.className = 'posture-critiques';
+  let n = 0;
+
+  /* `valeurCritique` prime quand elle existe : la tuile MFA affiche un taux de
+     couverture, la bande doit sortir le nombre de comptes decouverts. Ce n'est
+     pas la meme question, et ce n'est pas le meme chiffre. */
+  defs.filter(d => d.critique && (d.valeurCritique ?? d.valeur) != null).forEach(d => {
+    const c = document.createElement('button');
+    c.type = 'button';
+    c.className = 'posture-crit' + (d.ton ? ' ' + d.ton : '');
+    c.title = 'Ouvrir : ' + d.titre;
+
+    const v = document.createElement('span');
+    v.className = 'posture-crit-val';
+    v.textContent = d.valeurCritique ?? d.valeur;
+    const l = document.createElement('span');
+    l.className = 'posture-crit-lbl';
+    l.textContent = d.critique;
+    c.appendChild(v); c.appendChild(l);
+
+    c.addEventListener('click', () => {
+      const cible = tuiles[d.id];
+      if (!cible) return;
+      cible.ouvrir();
+      cible.element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      /* Un repère visuel bref : sur un panneau large, la tuile ouverte peut
+         être loin du chiffre qu'on vient de cliquer. */
+      cible.element.classList.add('vise');
+      setTimeout(() => cible.element.classList.remove('vise'), 1200);
+    });
+
+    bande.appendChild(c); n++;
+  });
+
+  return n ? bande : null;
+}
+
 function buildPosturePanel(p, mfa) {
   return b => {
     addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
 
-    const grille = panelGrille();
-    const bloc = (titre, note, large) => panelBloc(grille, titre, note, large);
+    /* Chaque rubrique se décrit avant d'être construite : la bande de valeurs
+       critiques a besoin des chiffres de tête, et les tuiles du reste. Décrire
+       d'abord évite de parcourir deux fois la même donnée avec deux règles de
+       seuil qui finiraient par diverger. */
+    const defs = [];
 
     if (p.secureScore) {
       const s = p.secureScore;
-      const c = bloc('Niveau de sécurité du tenant',
-        "Note Microsoft sur la configuration du tenant. Plus haut, mieux durci. Moyenne PME : 45 %."
-        + (posturDate(s.arreteLe) ? ' Arrêté au ' + posturDate(s.arreteLe) + '.' : ''));
-      addMetrique(c, 'Secure Score', s.pourcent + ' %',
-                  Math.round(s.courant) + ' / ' + Math.round(s.max), s.pourcent,
-                  s.pourcent >= 70 ? 'ok' : s.pourcent >= 45 ? 'warn' : 'bad');
+      defs.push({
+        id: 'score', titre: 'Niveau de sécurité',
+        valeur: s.pourcent + ' %', sousVal: Math.round(s.courant) + ' / ' + Math.round(s.max),
+        ton: POSTURE_TON_SEUIL(s.pourcent, 70, 45), critique: 'Secure Score',
+        remplir: c => {
+          addSectionNote(c, "Note Microsoft sur la configuration du tenant. Plus haut, mieux durci. Moyenne PME : 45 %."
+            + (posturDate(s.arreteLe) ? ' Arrêté au ' + posturDate(s.arreteLe) + '.' : ''));
+          addMetrique(c, 'Secure Score', s.pourcent + ' %',
+                      Math.round(s.courant) + ' / ' + Math.round(s.max), s.pourcent,
+                      POSTURE_TON_SEUIL(s.pourcent, 70, 45));
+        }
+      });
+    }
+
+    /* Juste après le Secure Score : c'est la rubrique qui appelle une action,
+       pas celle qui décrit un état. */
+    if (p.appareils) {
+      const a = p.appareils;
+      defs.push({
+        id: 'appareils', titre: 'Conformité des appareils',
+        valeur: String(a.nonConformes), sousVal: 'sur ' + a.total,
+        ton: a.nonConformes ? 'bad' : 'ok', critique: 'Appareils non conformes',
+        remplir: c => {
+          addSectionNote(c, "Appareils Intune hors politique : chiffrement, OS, antivirus, code d'accès.");
+          addMetrique(c, 'Non conformes', String(a.nonConformes), 'sur ' + a.total,
+                      part(a.nonConformes, a.total), a.nonConformes ? 'bad' : 'ok');
+          if (a.grace) addMetrique(c, 'Période de grâce', String(a.grace), 'sur ' + a.total, part(a.grace, a.total), 'warn');
+          addMetrique(c, 'Conformes', String(a.conformes), 'sur ' + a.total, part(a.conformes, a.total), 'ok');
+          if (a.indetermines) addMetrique(c, 'Non évalués', String(a.indetermines), null, part(a.indetermines, a.total), null);
+          if (a.liste?.length) addListeAppareils(c, a);
+          addLienLighthouse(c, 'Vue Conformité des appareils dans Lighthouse', 'DeviceCompliance.ReactView');
+        }
+      });
     }
 
     if (mfa && !mfa.erreur && mfa.total) {
-      const c = bloc('Authentification multifacteur',
-        "Comptes ayant enregistré une méthode forte."
-        + (posturDate(mfa.majLe) ? ' Arrêté au ' + posturDate(mfa.majLe) + '.' : ''));
-      addMetrique(c, 'Comptes protégés', mfa.pourcentAvecMfa + ' %',
-                  mfa.couverts + ' / ' + mfa.total, mfa.pourcentAvecMfa,
-                  mfa.pourcentAvecMfa >= 90 ? 'ok' : 'warn');
-      if (mfa.sansMfa) addMetrique(c, 'Sans MFA', String(mfa.sansMfa), 'comptes', part(mfa.sansMfa, mfa.total), 'bad');
+      defs.push({
+        id: 'mfa', titre: 'Authentification multifacteur',
+        valeur: mfa.pourcentAvecMfa + ' %', sousVal: mfa.couverts + ' / ' + mfa.total,
+        ton: mfa.pourcentAvecMfa >= 90 ? 'ok' : 'warn',
+        critique: mfa.sansMfa ? 'Comptes sans MFA' : null,
+        remplir: c => {
+          addSectionNote(c, "Comptes ayant enregistré une méthode forte."
+            + (posturDate(mfa.majLe) ? ' Arrêté au ' + posturDate(mfa.majLe) + '.' : ''));
+          addMetrique(c, 'Comptes protégés', mfa.pourcentAvecMfa + ' %',
+                      mfa.couverts + ' / ' + mfa.total, mfa.pourcentAvecMfa,
+                      mfa.pourcentAvecMfa >= 90 ? 'ok' : 'warn');
+          if (mfa.sansMfa) addMetrique(c, 'Sans MFA', String(mfa.sansMfa), 'comptes', part(mfa.sansMfa, mfa.total), 'bad');
+        }
+      });
+      /* La bande porte le nombre de comptes découverts, pas le pourcentage
+         couvert : c'est le premier qui appelle une action. */
+      if (mfa.sansMfa) defs[defs.length - 1].valeurCritique = String(mfa.sansMfa);
     }
 
     if (p.alertes) {
-      const c = bloc('Alertes ouvertes', 'Non encore traitées.');
-      addMetrique(c, 'Total', String(p.alertes.total), null, null, p.alertes.parGravite.high ? 'bad' : null);
-      /* Les barres se lisent en proportion du total, pas en absolu : c'est la
-         repartition par gravite qui interesse, pas le volume brut. */
-      Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
-        if (!n) return;
-        addMetrique(c, GRAVITE_LBL[g] || g, String(n), null, part(n, p.alertes.total),
-                    g === 'high' ? 'bad' : g === 'medium' ? 'warn' : null);
+      const crit = p.alertes.parGravite.high || 0;
+      defs.push({
+        id: 'alertes', titre: 'Alertes ouvertes',
+        valeur: String(p.alertes.total), sousVal: crit ? crit + ' critiques' : 'non traitées',
+        ton: crit ? 'bad' : 'warn', critique: 'Alertes ouvertes',
+        remplir: c => {
+          addSectionNote(c, 'Non encore traitées.');
+          addMetrique(c, 'Total', String(p.alertes.total), null, null, crit ? 'bad' : null);
+          /* Les barres se lisent en proportion du total, pas en absolu : c'est la
+             repartition par gravite qui interesse, pas le volume brut. */
+          Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
+            if (!n) return;
+            addMetrique(c, GRAVITE_LBL[g] || g, String(n), null, part(n, p.alertes.total),
+                        g === 'high' ? 'bad' : g === 'medium' ? 'warn' : null);
+          });
+          addLienLighthouse(c, 'Liste des alertes dans Lighthouse', 'ManagedTenantAlerts.ReactView');
+        }
       });
-      addLienLighthouse(c, 'Liste des alertes dans Lighthouse', 'ManagedTenantAlerts.ReactView');
     }
 
     if (p.exposition) {
       const e = p.exposition;
-      const c = bloc('Vulnérabilités logicielles',
-        "Détectées par Defender, surtout des logiciels non à jour. Score d'exposition : plus bas, mieux c'est.");
-      if (e.critiques != null) addMetrique(c, 'Failles critiques', String(e.critiques),
-                                           e.total ? 'sur ' + e.total : null, part(e.critiques, e.total), 'bad');
-      if (e.elevees != null)   addMetrique(c, 'Failles élevées', String(e.elevees),
-                                           e.total ? 'sur ' + e.total : null, part(e.elevees, e.total), 'warn');
-      if (e.appareils != null) addMetrique(c, 'Appareils exposés', String(e.exposes ?? 0), 'sur ' + e.appareils,
-                                           part(e.exposes, e.appareils), e.exposes ? 'bad' : 'ok');
-      if (e.recommandations != null) addMetrique(c, 'Correctifs recommandés', String(e.recommandations), null, null, null);
-      if (e.score != null) {
-        /* Une derive nulle ne se dit pas « en baisse de 0 » : arrondie au
-           dixieme, elle vaut zero des que le score n'a pas bouge sur le mois,
-           ce qui est le cas courant. On tait alors la tendance. */
-        const tend = (e.derive == null || Math.abs(e.derive) < 0.1) ? null
-          : (e.derive > 0 ? 'en hausse de ' + e.derive + ' sur 30 j' : 'en baisse de ' + Math.abs(e.derive) + ' sur 30 j');
-        addMetrique(c, "Score d'exposition", e.score + ' / 100', tend, e.score,
-                    e.score <= 30 ? 'ok' : e.score <= 60 ? 'warn' : 'bad');
-      }
-      addLienLighthouse(c, 'Vue Defender dans Lighthouse', 'MDE.ReactView');
+      defs.push({
+        id: 'expo', titre: 'Vulnérabilités logicielles',
+        valeur: e.critiques != null ? String(e.critiques) : (e.score != null ? e.score + ' / 100' : '—'),
+        sousVal: e.critiques != null ? 'critiques' : null,
+        ton: e.critiques ? 'bad' : 'warn',
+        critique: e.critiques != null ? 'Failles critiques' : null,
+        remplir: c => {
+          addSectionNote(c, "Détectées par Defender, surtout des logiciels non à jour. Score d'exposition : plus bas, mieux c'est.");
+          if (e.critiques != null) addMetrique(c, 'Failles critiques', String(e.critiques),
+                                               e.total ? 'sur ' + e.total : null, part(e.critiques, e.total), 'bad');
+          if (e.elevees != null)   addMetrique(c, 'Failles élevées', String(e.elevees),
+                                               e.total ? 'sur ' + e.total : null, part(e.elevees, e.total), 'warn');
+          if (e.appareils != null) addMetrique(c, 'Appareils exposés', String(e.exposes ?? 0), 'sur ' + e.appareils,
+                                               part(e.exposes, e.appareils), e.exposes ? 'bad' : 'ok');
+          if (e.recommandations != null) addMetrique(c, 'Correctifs recommandés', String(e.recommandations), null, null, null);
+          if (e.score != null) {
+            /* Une derive nulle ne se dit pas « en baisse de 0 » : arrondie au
+               dixieme, elle vaut zero des que le score n'a pas bouge sur le mois,
+               ce qui est le cas courant. On tait alors la tendance. */
+            const tend = (e.derive == null || Math.abs(e.derive) < 0.1) ? null
+              : (e.derive > 0 ? 'en hausse de ' + e.derive + ' sur 30 j' : 'en baisse de ' + Math.abs(e.derive) + ' sur 30 j');
+            addMetrique(c, "Score d'exposition", e.score + ' / 100', tend, e.score,
+                        POSTURE_TON_SEUIL(100 - e.score, 70, 40));
+          }
+          addLienLighthouse(c, 'Vue Defender dans Lighthouse', 'MDE.ReactView');
+        }
+      });
     }
 
     if (p.baseline) {
       const bl = p.baseline;
       const usagers = (bl.usagersIncomplets || 0) + (bl.usagersComplets || 0);
-      const c = bloc('Tâches de sécurisation Lighthouse',
-        "Durcissement suivi par Lighthouse. Une tâche en régression était conforme et ne l'est plus.");
-      if (bl.total) addMetrique(c, 'Conformes', bl.conformes + ' / ' + bl.total, null,
-                                part(bl.conformes, bl.total), bl.termine ? 'ok' : 'warn');
-      if (bl.incompletes) addMetrique(c, 'Jamais mises en place', String(bl.incompletes), null, part(bl.incompletes, bl.total), 'warn');
-      if (bl.regressees)  addMetrique(c, 'En régression', String(bl.regressees), null, part(bl.regressees, bl.total), 'bad');
-      if (bl.usagersIncomplets != null) addMetrique(c, 'Utilisateurs avec tâche en attente', String(bl.usagersIncomplets),
-                                                    usagers ? 'sur ' + usagers : null, part(bl.usagersIncomplets, usagers), 'warn');
-      if (bl.sansLicence) addMetrique(c, 'Utilisateurs sans licence', String(bl.sansLicence),
-                                      usagers ? 'sur ' + usagers : null, part(bl.sansLicence, usagers), null);
-      addLienLighthouse(c, 'Plan de déploiement dans Lighthouse', null);
+      defs.push({
+        id: 'baseline', titre: 'Tâches de sécurisation',
+        valeur: bl.total ? bl.conformes + ' / ' + bl.total : '—', sousVal: 'conformes',
+        ton: bl.termine ? 'ok' : bl.regressees ? 'bad' : 'warn',
+        critique: bl.total ? 'Tâches conformes' : null,
+        remplir: c => {
+          addSectionNote(c, "Durcissement suivi par Lighthouse. Une tâche en régression était conforme et ne l'est plus.");
+          if (bl.total) addMetrique(c, 'Conformes', bl.conformes + ' / ' + bl.total, null,
+                                    part(bl.conformes, bl.total), bl.termine ? 'ok' : 'warn');
+          if (bl.incompletes) addMetrique(c, 'Jamais mises en place', String(bl.incompletes), null, part(bl.incompletes, bl.total), 'warn');
+          if (bl.regressees)  addMetrique(c, 'En régression', String(bl.regressees), null, part(bl.regressees, bl.total), 'bad');
+          if (bl.usagersIncomplets != null) addMetrique(c, 'Utilisateurs avec tâche en attente', String(bl.usagersIncomplets),
+                                                        usagers ? 'sur ' + usagers : null, part(bl.usagersIncomplets, usagers), 'warn');
+          if (bl.sansLicence) addMetrique(c, 'Utilisateurs sans licence', String(bl.sansLicence),
+                                          usagers ? 'sur ' + usagers : null, part(bl.sansLicence, usagers), null);
+          addLienLighthouse(c, 'Plan de déploiement dans Lighthouse', null);
+        }
+      });
     }
 
     if (p.adoption) {
       const a = p.adoption;
-      const c = bloc('Usage des services Microsoft 365', 'Utilisation des services, pas sécurité.'
-        + (posturDate(a.arreteLe) ? ' Arrêté au ' + posturDate(a.arreteLe) + '.' : ''));
-      [['Communication', a.communication], ['Collaboration', a.collaboration],
-       ['Hors heures de bureau', a.flexibilite], ['Santé des applications', a.santeApps],
-       ['Réseau', a.reseau], ['Travail en équipe', a.teamwork]]
-        .forEach(([lbl, v]) => { if (v != null) addMetrique(c, lbl, v + ' %', null, v, v >= 70 ? 'ok' : v >= 45 ? 'warn' : 'bad'); });
+      const notes = [a.communication, a.collaboration, a.flexibilite, a.santeApps, a.reseau, a.teamwork].filter(v => v != null);
+      const moy = notes.length ? Math.round(notes.reduce((x, y) => x + y, 0) / notes.length) : null;
+      defs.push({
+        id: 'adoption', titre: 'Usage des services M365',
+        valeur: moy != null ? moy + ' %' : '—', sousVal: 'en moyenne',
+        ton: moy != null ? POSTURE_TON_SEUIL(moy, 70, 45) : null,
+        remplir: c => {
+          addSectionNote(c, 'Utilisation des services, pas sécurité.'
+            + (posturDate(a.arreteLe) ? ' Arrêté au ' + posturDate(a.arreteLe) + '.' : ''));
+          [['Communication', a.communication], ['Collaboration', a.collaboration],
+           ['Hors heures de bureau', a.flexibilite], ['Santé des applications', a.santeApps],
+           ['Réseau', a.reseau], ['Travail en équipe', a.teamwork]]
+            .forEach(([lbl, v]) => { if (v != null) addMetrique(c, lbl, v + ' %', null, v, POSTURE_TON_SEUIL(v, 70, 45)); });
+        }
+      });
     }
 
     if (p.identite) {
       const i = p.identite;
       const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
       if (lieu || i.segment || i.industrie || i.vertical) {
-        const c = bloc('Fiche du client', null);
-        addInfoCompacte(c, 'Localisation', lieu);
-        addInfoCompacte(c, 'Segment', i.segment);
-        addInfoCompacte(c, 'Secteur', i.industrie || i.vertical);
+        defs.push({
+          id: 'fiche', titre: 'Fiche du client',
+          valeur: i.pays || i.ville || '—', sousVal: i.segment || null,
+          remplir: c => {
+            addInfoCompacte(c, 'Localisation', lieu);
+            addInfoCompacte(c, 'Segment', i.segment);
+            addInfoCompacte(c, 'Secteur', i.industrie || i.vertical);
+          }
+        });
       }
-    }
-
-    /* La conformite des appareils vient apres les cartes de chiffres : elle
-       porte une liste, donc une carte pleine largeur, et une carte pleine
-       largeur placee au milieu couperait la grille en deux. */
-    if (p.appareils) {
-      const a = p.appareils;
-      const c = bloc('Conformité des appareils',
-        "Appareils Intune hors politique : chiffrement, OS, antivirus, code d'accès.",
-        !!a.liste?.length);
-      addMetrique(c, 'Non conformes', String(a.nonConformes), 'sur ' + a.total,
-                  part(a.nonConformes, a.total), a.nonConformes ? 'bad' : 'ok');
-      if (a.grace) addMetrique(c, 'Période de grâce', String(a.grace), 'sur ' + a.total, part(a.grace, a.total), 'warn');
-      addMetrique(c, 'Conformes', String(a.conformes), 'sur ' + a.total, part(a.conformes, a.total), 'ok');
-      if (a.indetermines) addMetrique(c, 'Non évalués', String(a.indetermines), null, part(a.indetermines, a.total), null);
-      if (a.liste?.length) addListeAppareils(c, a);
-      addLienLighthouse(c, 'Vue Conformité des appareils dans Lighthouse', 'DeviceCompliance.ReactView');
     }
 
     /* Ce que les portées actuelles ne couvrent pas. Sans cette mention, une
@@ -5840,18 +6013,32 @@ function buildPosturePanel(p, mfa) {
     if (mfa?.erreur === 'portee') refuse.push('mfa');
     const aExpliquer = [...new Set(refuse)].filter(k => table[k]);
     if (aExpliquer.length) {
-      const c = bloc('Données non disponibles',
-        "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent : "
-        + "la donnée reste consultable dans le portail Lighthouse.", true);
-      c.classList.add('manquant');
-      aExpliquer.forEach(k => {
-        addInfoCompacte(c, table[k].quoi, table[k].portee);
-        /* Le lien est ce qui rend le bloc utile plutot que desolant : il mene
-           a l'endroit ou la donnee refusee ici est, elle, affichee. */
-        if ('vue' in table[k]) addLienLighthouse(c, table[k].quoi + ' dans Lighthouse', table[k].vue);
+      defs.push({
+        id: 'manquant', titre: 'Données non disponibles',
+        valeur: String(aExpliquer.length), sousVal: aExpliquer.length > 1 ? 'rubriques' : 'rubrique',
+        ton: 'manquant',
+        remplir: c => {
+          addSectionNote(c, "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent : "
+            + "la donnée reste consultable dans le portail Lighthouse.");
+          aExpliquer.forEach(k => {
+            addInfoCompacte(c, table[k].quoi, table[k].portee);
+            /* Le lien est ce qui rend la tuile utile plutot que desolante : il
+               mene a l'endroit ou la donnee refusee ici est, elle, affichee. */
+            if ('vue' in table[k]) addLienLighthouse(c, table[k].quoi + ' dans Lighthouse', table[k].vue);
+          });
+        }
       });
     }
 
+    const grille = document.createElement('div');
+    grille.className = 'posture-tuiles';
+    const tuiles = {};
+    defs.forEach(d => { tuiles[d.id] = tuilePosture(grille, d); });
+
+    /* La bande vient avant la grille dans le document, mais après elle dans le
+       code : elle a besoin des tuiles pour pouvoir les ouvrir. */
+    const bande = bandeCritique(defs, tuiles);
+    if (bande) b.appendChild(bande);
     b.appendChild(grille);
 
     /* Le rapport ferme le panneau : on lit, puis on agit. */
