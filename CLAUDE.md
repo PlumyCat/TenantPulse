@@ -277,6 +277,10 @@ Opt-in by design. Keys:
   `tenantIdHistory_retentionMs`. Retention uses `RETENTION_STEPS` ladder (13 intervals);
   `pruneExpiredHistory` runs on open, on each save, and on retention change.
 - Profiles: `tenantpulse_profile_v1` (TP button order), `messagerie_profile_v1` (ML block layout).
+- Largeur du panneau de detail : `tenantpulse_panel_w_v1` (entier, pixels). Bornee a la
+  lecture comme a l'ecriture par `setPanelWidth()` : la valeur stockee n'est jamais crue
+  telle quelle, et une fenetre plus etroite la borne a l'affichage sans l'ecraser en
+  stockage, pour qu'un agrandissement retrouve la preference.
 - Résolveur DoH : `tenantpulse_doh_v1` (`cloudflare` | `google`). Absente = mode automatique,
   et choisir « Automatique » supprime la clé plutôt que d'y écrire une valeur par défaut.
 - Graph : `tenantpulse_graph_v1` et `tenantpulse_graph_pending_v1` sont en **sessionStorage**,

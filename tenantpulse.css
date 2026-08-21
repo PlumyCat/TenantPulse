@@ -1034,6 +1034,38 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 .metric.texte{margin-bottom:7px}
 .metric.texte .metric-val{font-size:12px;font-weight:600;white-space:normal;text-align:right}
 
+/* ── Grille de blocs du panneau Posture ──────────────────────────────────────
+   Les sections s'empilaient a la suite, sans rien pour marquer ou l'une finit
+   et ou la suivante commence : a huit sections, la lecture devenait une seule
+   colonne de chiffres. Chaque section est desormais une carte, et les cartes se
+   repartissent en colonnes des que la largeur le permet.
+
+   auto-fill plutot qu'auto-fit : auto-fit etirerait une carte solitaire sur
+   toute la largeur du panneau elargi, ce qui donne une carte de 900px pour deux
+   lignes de texte. auto-fill garde la piste vide et la carte a sa taille. */
+.posture-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(252px,1fr));gap:9px;align-items:start}
+.posture-bloc{background:var(--row);border:1px solid var(--border);border-radius:var(--r-md);padding:11px 12px 9px;min-width:0}
+/* La derniere metrique d'une carte n'a personne en dessous a distancer. */
+.posture-bloc .metric:last-child{margin-bottom:0}
+.posture-bloc .panel-section-title{margin-top:0}
+.posture-bloc .panel-lh-link{margin-top:9px}
+/* Dans une carte, un libelle long passe a la ligne au lieu d'etre coupe :
+   « Appareils non conformes » tronque en « APPAREILS NO... » ne designe plus
+   rien. Ailleurs le point de coupe reste, il n'y a pas la place de replier. */
+.posture-bloc .metric-lbl{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3}
+/* En deux colonnes, une carte fait ~230px et la valeur reste en nowrap avec son
+   complement (« 32.6 / 100  en hausse de 1 sur 30 j ») : elle prend tout et le
+   libelle deborde. L'en-tete cede donc et passe la valeur a la ligne quand la
+   place manque, plutot que d'ecraser l'intitule. */
+.posture-bloc .metric-head{flex-wrap:wrap;row-gap:1px}
+/* La liste d'appareils et le pave des donnees manquantes se lisent en pleine
+   largeur : mis en colonne, l'un tronque des noms de machines et l'autre coupe
+   des noms de portees Graph. */
+.posture-bloc.large{grid-column:1/-1}
+@media(max-width:768px){
+  .posture-grille{grid-template-columns:1fr}
+}
+
 /* ── Liste des appareils geres (panneau Posture) ─────────────────────────────
    Un parc entier tient dans un panneau etroit : chaque ligne est donc sur deux
    niveaux, le nom et l'etat sur la premiere, le reste en retrait. Le liseré de
@@ -1181,9 +1213,30 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 .card-chevron{font-size:var(--text-xs);color:var(--muted);transition:transform .2s}
 .result-card.selected .card-chevron,.result-card.sel-google .card-chevron,.result-card.sel-health .card-chevron,.result-card.sel-host .card-chevron,.result-card.sel-dns .card-chevron{transform:rotate(90deg)}
 
-.detail-panel{width:380px;flex-shrink:0;overflow:hidden;background:var(--surface);border-left:1.5px solid var(--border);height:100%;display:flex;flex-direction:column;transition:width .28s cubic-bezier(.4,0,.2,1),background .25s;--panel-w:380px}
-.detail-panel.open{width:380px}
+/* La largeur vit dans --panel-w, ecrite par le glissement de la poignee et
+   relue au demarrage depuis localStorage. Le littéral reste ici comme valeur
+   de repli : sans preference enregistree, ou si la valeur stockee est illisible,
+   le panneau s'ouvre a sa largeur d'origine. */
+.detail-panel{--panel-w:380px;width:var(--panel-w);flex-shrink:0;overflow:hidden;background:var(--surface);border-left:1.5px solid var(--border);height:100%;display:flex;flex-direction:column;transition:width .28s cubic-bezier(.4,0,.2,1),background .25s}
+.detail-panel.open{width:var(--panel-w)}
 .detail-panel:not(.open){width:0;border-left:none}
+/* La transition de largeur sert a l'ouverture et a la fermeture. Pendant un
+   glissement elle ferait trainer le panneau derriere le curseur, d'ou sa
+   suspension le temps du geste. */
+.detail-panel.sans-transition{transition:background .25s}
+
+/* Poignee de redimensionnement. Elle n'existe que panneau ouvert : sans lui
+   elle proposerait de redimensionner le vide. La zone de saisie fait 7px alors
+   que le trait visible n'en fait qu'un — une cible d'un pixel se rate. */
+.panel-resizer{display:none;flex:0 0 7px;position:relative;cursor:col-resize;background:transparent;z-index:11;touch-action:none}
+.panel-resizer.actif{display:block}
+.panel-resizer::before{content:'';position:absolute;top:0;bottom:0;left:3px;width:1px;background:transparent;transition:background .15s}
+.panel-resizer:hover::before,.panel-resizer:focus-visible::before,.panel-resizer.tire::before{background:var(--blue);width:2px;left:2.5px}
+.panel-resizer:focus-visible{outline:none}
+/* Pendant le glissement, le curseur doit rester col-resize partout et le texte
+   ne doit pas se selectionner sous la souris. */
+body.redimensionne{cursor:col-resize;user-select:none}
+body.redimensionne *{cursor:col-resize!important}
 .panel-head{padding:14px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
 .panel-title{font-size:var(--text-base);font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .panel-close{background:none;border:none;cursor:pointer;font-size:var(--text-xl);color:var(--muted);padding:2px 6px;border-radius:var(--r-sm);transition:background .15s}
@@ -1410,6 +1463,9 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
   .center{padding:14px 12px;gap:10px;height:auto;min-height:auto;overflow:visible;scrollbar-gutter:auto}
 
   /* Detail panel inline */
+  /* En colonne unique le panneau occupe toute la largeur : il n'y a plus rien
+     a repartir, la poignee n'a plus d'objet. */
+  .panel-resizer{display:none!important}
   .detail-panel{width:100%!important;height:auto;position:static;border-left:none;border-top:1px solid var(--border);overflow:visible}
   .detail-panel:not(.open){display:none;border-top:none}
   .detail-panel.open{display:flex;flex-direction:column;width:100%!important;height:auto;min-height:0}

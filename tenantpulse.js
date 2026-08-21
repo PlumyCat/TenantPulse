@@ -1400,6 +1400,7 @@ function applyHashQuery() {
 
 window.addEventListener('load', () => {
   bindEvents();
+  bindPanelResizer(); loadPanelWidth();
   applyAnalysisMode(loadProfile().analysisMode);
   loadDohPref(); syncDohUI();
   syncHistoryToggleUI();
@@ -3647,12 +3648,153 @@ async function setTenantLock(tenantId, domain, lock) {
   } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
+/* ── Largeur ajustable du panneau de détail ──────────────────────────────────
+   Le panneau était figé à 380px, largeur tenable pour une fiche DNS mais pas
+   pour la Posture, dont les libellés se faisaient tronquer. Il se tire donc à
+   la poignée, et la largeur choisie est conservée d'une session à l'autre.
+
+   Deux bornes, et la seconde est la moins évidente : le panneau ne peut pas
+   descendre sous PANEL_W_MIN (en dessous, les métriques se replient et il ne
+   sert plus à rien), et il ne peut pas manger la colonne centrale au point de
+   la faire disparaître — c'est elle qu'il documente. Le maximum se recalcule
+   donc à partir de la largeur réelle disponible, jamais d'un littéral. */
+const PANEL_W_KEY = 'tenantpulse_panel_w_v1';
+const PANEL_W_MIN = 320;
+const PANEL_W_DEF = 380;
+const CENTER_W_MIN = 430;
+
+function panelWMax() {
+  const app = document.querySelector('.app');
+  /* La poignee est un element de la meme rangee flex : oubliee ici, elle
+     rogne le plancher du centre de sa propre largeur. */
+  const pris = (document.querySelector('.sidebar')?.offsetWidth || 0)
+             + (document.getElementById('panelResizer')?.offsetWidth || 0);
+  return Math.max(PANEL_W_MIN, (app?.clientWidth || window.innerWidth) - pris - CENTER_W_MIN);
+}
+
+/* Applique une largeur bornée et retourne celle qui a réellement été posée. */
+function setPanelWidth(px) {
+  const panel = document.getElementById('detailPanel');
+  if (!panel) return PANEL_W_DEF;
+  const w = Math.round(Math.min(panelWMax(), Math.max(PANEL_W_MIN, px)));
+  panel.style.setProperty('--panel-w', w + 'px');
+  return w;
+}
+
+/* La préférence est tenue en mémoire en plus du stockage : le redimensionnement
+   de fenêtre la relit à chaque événement, et une lecture localStorage
+   synchrone par frame de resize se paie. */
+let panelWPref = PANEL_W_DEF;
+
+function savePanelWidth(w) {
+  panelWPref = w;
+  try { localStorage.setItem(PANEL_W_KEY, String(w)); } catch {}
+}
+
+/* Une valeur illisible ou hors bornes ne bloque pas l'ouverture du panneau :
+   on retombe sur la largeur d'origine plutôt que d'échouer. */
+function loadPanelWidth() {
+  try {
+    const brut = parseInt(localStorage.getItem(PANEL_W_KEY), 10);
+    if (Number.isFinite(brut)) panelWPref = brut;
+  } catch {}
+  return setPanelWidth(panelWPref);
+}
+
+/* La poignée n'a de sens que panneau ouvert : sinon elle proposerait de
+   redimensionner le vide. Appelé par openPanel() et closePanel(). */
+function syncPanelResizer() {
+  const r = document.getElementById('panelResizer');
+  const panel = document.getElementById('detailPanel');
+  if (!r || !panel) return;
+  const ouvert = panel.classList.contains('open');
+  r.classList.toggle('actif', ouvert);
+  /* La largeur cible, pas la largeur mesuree : appele juste apres l'ouverture,
+     un getBoundingClientRect tombe au premier pas de la transition et annonce
+     un panneau de 1px a la synthese vocale. */
+  const cible = parseInt(panel.style.getPropertyValue('--panel-w'), 10);
+  r.setAttribute('aria-valuenow', String(Number.isFinite(cible) ? cible : PANEL_W_DEF));
+  r.setAttribute('aria-valuemin', String(PANEL_W_MIN));
+  r.setAttribute('aria-valuemax', String(Math.round(panelWMax())));
+}
+
+function bindPanelResizer() {
+  const r = document.getElementById('panelResizer');
+  const panel = document.getElementById('detailPanel');
+  if (!r || !panel) return;
+
+  let depart = 0, largeurDepart = 0;
+
+  const bouger = e => {
+    /* Le panneau est ancré à droite : le curseur qui va vers la gauche
+       l'élargit, d'où la soustraction plutôt qu'une addition. */
+    setPanelWidth(largeurDepart + (depart - e.clientX));
+  };
+
+  const finir = e => {
+    document.removeEventListener('pointermove', bouger);
+    document.removeEventListener('pointerup', finir);
+    document.removeEventListener('pointercancel', finir);
+    try { r.releasePointerCapture(e.pointerId); } catch {}
+    document.body.classList.remove('redimensionne');
+    r.classList.remove('tire');
+    panel.classList.remove('sans-transition');
+    savePanelWidth(parseInt(panel.style.getPropertyValue('--panel-w'), 10) || PANEL_W_DEF);
+    syncPanelResizer();
+  };
+
+  r.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    depart = e.clientX;
+    largeurDepart = panel.getBoundingClientRect().width;
+    panel.classList.add('sans-transition');
+    document.body.classList.add('redimensionne');
+    r.classList.add('tire');
+    try { r.setPointerCapture(e.pointerId); } catch {}
+    document.addEventListener('pointermove', bouger);
+    document.addEventListener('pointerup', finir);
+    document.addEventListener('pointercancel', finir);
+  });
+
+  /* Double-clic : retour à la largeur d'origine. Plus rapide que de viser
+     380px à la souris, et c'est la sortie de secours quand on s'est piégé
+     avec un panneau trop large. */
+  r.addEventListener('dblclick', () => {
+    savePanelWidth(setPanelWidth(PANEL_W_DEF));
+    syncPanelResizer();
+  });
+
+  /* Clavier : la poignée est focalisable, elle doit donc être actionnable
+     sans souris. Les flèches déplacent de 24px, Maj de 96px. */
+  r.addEventListener('keydown', e => {
+    const pas = e.shiftKey ? 96 : 24;
+    let d = 0;
+    if (e.key === 'ArrowLeft')  d =  pas;
+    else if (e.key === 'ArrowRight') d = -pas;
+    else if (e.key === 'Home') { savePanelWidth(setPanelWidth(PANEL_W_DEF)); syncPanelResizer(); e.preventDefault(); return; }
+    else return;
+    e.preventDefault();
+    savePanelWidth(setPanelWidth((parseInt(panel.style.getPropertyValue('--panel-w'), 10) || PANEL_W_DEF) + d));
+    syncPanelResizer();
+  });
+
+  /* Une fenêtre rétrécie peut rendre la largeur enregistrée intenable. On
+     réapplique la préférence bornée plutôt que de l'écraser : un agrandissement
+     ultérieur retrouve alors la largeur choisie, au lieu de rester coincé à la
+     valeur de repli imposée par la fenêtre la plus étroite de la session. */
+  window.addEventListener('resize', () => {
+    setPanelWidth(panelWPref);
+    syncPanelResizer();
+  });
+}
+
 function openPanel(id, title, buildFn) {
   const panel   = document.getElementById('detailPanel');
   const body    = document.getElementById('panelBody');
   const titleEl = document.getElementById('panelTitle');
   document.querySelectorAll('.result-card').forEach(c => c.className = c.className.replace(/\bsel-\w+\b|\bselected\b/g, '').trim());
-  if (openCardId === id) { openCardId = null; panel.classList.remove('open'); return; }
+  if (openCardId === id) { openCardId = null; panel.classList.remove('open'); syncPanelResizer(); return; }
   openCardId = id;
   const card = document.getElementById('card-' + id);
   if (card) card.classList.add(card.dataset.selClass || 'selected');
@@ -3660,10 +3802,12 @@ function openPanel(id, title, buildFn) {
   body.replaceChildren(); // FIX 2a : remplacé body.innerHTML = ''
   buildFn(body);
   panel.classList.add('open');
+  syncPanelResizer();
 }
 function closePanel() {
   const panel = document.getElementById('detailPanel');
   panel.classList.remove('open');
+  syncPanelResizer();
   document.querySelectorAll('.result-card').forEach(c => c.className = c.className.replace(/\bsel-\w+\b|\bselected\b/g, '').trim());
   openCardId = null;
 }
@@ -5416,115 +5560,137 @@ function addListeAppareils(b, a) {
   b.appendChild(bloc);
 }
 
+/* Le panneau Posture est une grille de cartes, pas une pile de sections. A huit
+   rubriques empilees, rien ne marquait ou l'une finissait et ou la suivante
+   commencait, et le panneau elargi n'en profitait pas : il allongeait les
+   barres au lieu de mettre les rubriques cote a cote. Chaque rubrique construit
+   donc dans sa propre carte, et c'est la grille CSS qui decide du nombre de
+   colonnes selon la largeur disponible.
+
+   `large` force une carte sur toute la largeur : reserve a ce qui se lit en
+   ligne (la liste d'appareils, les portees manquantes), jamais a un chiffre. */
 function buildPosturePanel(p, mfa) {
   return b => {
     addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
 
+    const grille = document.createElement('div');
+    grille.className = 'posture-grille';
+    const bloc = (titre, note, large) => {
+      const s = document.createElement('section');
+      s.className = 'posture-bloc' + (large ? ' large' : '');
+      addSectionTitle(s, titre);
+      if (note) addSectionNote(s, note);
+      grille.appendChild(s);
+      return s;
+    };
+
     if (p.secureScore) {
       const s = p.secureScore;
-      addSectionTitle(b, 'Niveau de sécurité du tenant');
-      addSectionNote(b, "Note Microsoft sur la configuration du tenant. Plus haut, mieux durci. Moyenne PME : 45 %."
+      const c = bloc('Niveau de sécurité du tenant',
+        "Note Microsoft sur la configuration du tenant. Plus haut, mieux durci. Moyenne PME : 45 %."
         + (posturDate(s.arreteLe) ? ' Arrêté au ' + posturDate(s.arreteLe) + '.' : ''));
-      addMetrique(b, 'Secure Score', s.pourcent + ' %',
+      addMetrique(c, 'Secure Score', s.pourcent + ' %',
                   Math.round(s.courant) + ' / ' + Math.round(s.max), s.pourcent,
                   s.pourcent >= 70 ? 'ok' : s.pourcent >= 45 ? 'warn' : 'bad');
     }
 
     if (mfa && !mfa.erreur && mfa.total) {
-      addSectionTitle(b, 'Authentification multifacteur');
-      addSectionNote(b, "Comptes ayant enregistré une méthode forte."
+      const c = bloc('Authentification multifacteur',
+        "Comptes ayant enregistré une méthode forte."
         + (posturDate(mfa.majLe) ? ' Arrêté au ' + posturDate(mfa.majLe) + '.' : ''));
-      addMetrique(b, 'Comptes protégés', mfa.pourcentAvecMfa + ' %',
+      addMetrique(c, 'Comptes protégés', mfa.pourcentAvecMfa + ' %',
                   mfa.couverts + ' / ' + mfa.total, mfa.pourcentAvecMfa,
                   mfa.pourcentAvecMfa >= 90 ? 'ok' : 'warn');
-      if (mfa.sansMfa) addMetrique(b, 'Sans MFA', String(mfa.sansMfa), 'comptes', part(mfa.sansMfa, mfa.total), 'bad');
-    }
-
-    if (p.appareils) {
-      const a = p.appareils;
-      addSectionTitle(b, 'Conformité des appareils');
-      addSectionNote(b, "Appareils Intune hors politique : chiffrement, OS, antivirus, code d'accès.");
-      addMetrique(b, 'Non conformes', String(a.nonConformes), 'sur ' + a.total,
-                  part(a.nonConformes, a.total), a.nonConformes ? 'bad' : 'ok');
-      addMetrique(b, 'Conformes', String(a.conformes), 'sur ' + a.total, part(a.conformes, a.total), 'ok');
-      if (a.indetermines) addMetrique(b, 'Statut indéterminé', String(a.indetermines), null, part(a.indetermines, a.total), null);
-      if (a.liste?.length) addListeAppareils(b, a);
-      addLienLighthouse(b, 'Vue Conformité des appareils dans Lighthouse', 'DeviceCompliance.ReactView');
+      if (mfa.sansMfa) addMetrique(c, 'Sans MFA', String(mfa.sansMfa), 'comptes', part(mfa.sansMfa, mfa.total), 'bad');
     }
 
     if (p.alertes) {
-      addSectionTitle(b, 'Alertes ouvertes');
-      addSectionNote(b, 'Non encore traitées.');
-      addMetrique(b, 'Total', String(p.alertes.total), null, null, p.alertes.parGravite.high ? 'bad' : null);
+      const c = bloc('Alertes ouvertes', 'Non encore traitées.');
+      addMetrique(c, 'Total', String(p.alertes.total), null, null, p.alertes.parGravite.high ? 'bad' : null);
       /* Les barres se lisent en proportion du total, pas en absolu : c'est la
          repartition par gravite qui interesse, pas le volume brut. */
       Object.entries(p.alertes.parGravite).forEach(([g, n]) => {
         if (!n) return;
-        addMetrique(b, GRAVITE_LBL[g] || g, String(n), null, part(n, p.alertes.total),
+        addMetrique(c, GRAVITE_LBL[g] || g, String(n), null, part(n, p.alertes.total),
                     g === 'high' ? 'bad' : g === 'medium' ? 'warn' : null);
       });
-      addLienLighthouse(b, 'Liste des alertes dans Lighthouse', 'ManagedTenantAlerts.ReactView');
+      addLienLighthouse(c, 'Liste des alertes dans Lighthouse', 'ManagedTenantAlerts.ReactView');
     }
 
     if (p.exposition) {
       const e = p.exposition;
-      addSectionTitle(b, 'Vulnérabilités logicielles');
-      addSectionNote(b, "Détectées par Defender, surtout des logiciels non à jour. Score d'exposition : plus bas, mieux c'est.");
-      if (e.critiques != null) addMetrique(b, 'Failles critiques', String(e.critiques),
+      const c = bloc('Vulnérabilités logicielles',
+        "Détectées par Defender, surtout des logiciels non à jour. Score d'exposition : plus bas, mieux c'est.");
+      if (e.critiques != null) addMetrique(c, 'Failles critiques', String(e.critiques),
                                            e.total ? 'sur ' + e.total : null, part(e.critiques, e.total), 'bad');
-      if (e.elevees != null)   addMetrique(b, 'Failles élevées', String(e.elevees),
+      if (e.elevees != null)   addMetrique(c, 'Failles élevées', String(e.elevees),
                                            e.total ? 'sur ' + e.total : null, part(e.elevees, e.total), 'warn');
-      if (e.appareils != null) addMetrique(b, 'Appareils exposés', String(e.exposes ?? 0), 'sur ' + e.appareils,
+      if (e.appareils != null) addMetrique(c, 'Appareils exposés', String(e.exposes ?? 0), 'sur ' + e.appareils,
                                            part(e.exposes, e.appareils), e.exposes ? 'bad' : 'ok');
-      if (e.recommandations != null) addMetrique(b, 'Correctifs recommandés', String(e.recommandations), null, null, null);
+      if (e.recommandations != null) addMetrique(c, 'Correctifs recommandés', String(e.recommandations), null, null, null);
       if (e.score != null) {
         /* Une derive nulle ne se dit pas « en baisse de 0 » : arrondie au
            dixieme, elle vaut zero des que le score n'a pas bouge sur le mois,
            ce qui est le cas courant. On tait alors la tendance. */
         const tend = (e.derive == null || Math.abs(e.derive) < 0.1) ? null
           : (e.derive > 0 ? 'en hausse de ' + e.derive + ' sur 30 j' : 'en baisse de ' + Math.abs(e.derive) + ' sur 30 j');
-        addMetrique(b, "Score d'exposition", e.score + ' / 100', tend, e.score,
+        addMetrique(c, "Score d'exposition", e.score + ' / 100', tend, e.score,
                     e.score <= 30 ? 'ok' : e.score <= 60 ? 'warn' : 'bad');
       }
-      addLienLighthouse(b, 'Vue Defender dans Lighthouse', 'MDE.ReactView');
+      addLienLighthouse(c, 'Vue Defender dans Lighthouse', 'MDE.ReactView');
     }
 
     if (p.baseline) {
       const bl = p.baseline;
       const usagers = (bl.usagersIncomplets || 0) + (bl.usagersComplets || 0);
-      addSectionTitle(b, 'Tâches de sécurisation Lighthouse');
-      addSectionNote(b, "Durcissement suivi par Lighthouse. Une tâche en régression était conforme et ne l'est plus.");
-      if (bl.total) addMetrique(b, 'Conformes', bl.conformes + ' / ' + bl.total, null,
+      const c = bloc('Tâches de sécurisation Lighthouse',
+        "Durcissement suivi par Lighthouse. Une tâche en régression était conforme et ne l'est plus.");
+      if (bl.total) addMetrique(c, 'Conformes', bl.conformes + ' / ' + bl.total, null,
                                 part(bl.conformes, bl.total), bl.termine ? 'ok' : 'warn');
-      if (bl.incompletes) addMetrique(b, 'Jamais mises en place', String(bl.incompletes), null, part(bl.incompletes, bl.total), 'warn');
-      if (bl.regressees)  addMetrique(b, 'En régression', String(bl.regressees), null, part(bl.regressees, bl.total), 'bad');
-      if (bl.usagersIncomplets != null) addMetrique(b, 'Utilisateurs avec tâche en attente', String(bl.usagersIncomplets),
+      if (bl.incompletes) addMetrique(c, 'Jamais mises en place', String(bl.incompletes), null, part(bl.incompletes, bl.total), 'warn');
+      if (bl.regressees)  addMetrique(c, 'En régression', String(bl.regressees), null, part(bl.regressees, bl.total), 'bad');
+      if (bl.usagersIncomplets != null) addMetrique(c, 'Utilisateurs avec tâche en attente', String(bl.usagersIncomplets),
                                                     usagers ? 'sur ' + usagers : null, part(bl.usagersIncomplets, usagers), 'warn');
-      if (bl.sansLicence) addMetrique(b, 'Utilisateurs sans licence', String(bl.sansLicence),
+      if (bl.sansLicence) addMetrique(c, 'Utilisateurs sans licence', String(bl.sansLicence),
                                       usagers ? 'sur ' + usagers : null, part(bl.sansLicence, usagers), null);
-      addLienLighthouse(b, 'Plan de déploiement dans Lighthouse', null);
+      addLienLighthouse(c, 'Plan de déploiement dans Lighthouse', null);
     }
 
     if (p.adoption) {
       const a = p.adoption;
-      addSectionTitle(b, 'Usage des services Microsoft 365');
-      addSectionNote(b, 'Utilisation des services, pas sécurité.'
+      const c = bloc('Usage des services Microsoft 365', 'Utilisation des services, pas sécurité.'
         + (posturDate(a.arreteLe) ? ' Arrêté au ' + posturDate(a.arreteLe) + '.' : ''));
       [['Communication', a.communication], ['Collaboration', a.collaboration],
        ['Hors heures de bureau', a.flexibilite], ['Santé des applications', a.santeApps],
        ['Réseau', a.reseau], ['Travail en équipe', a.teamwork]]
-        .forEach(([lbl, v]) => { if (v != null) addMetrique(b, lbl, v + ' %', null, v, v >= 70 ? 'ok' : v >= 45 ? 'warn' : 'bad'); });
+        .forEach(([lbl, v]) => { if (v != null) addMetrique(c, lbl, v + ' %', null, v, v >= 70 ? 'ok' : v >= 45 ? 'warn' : 'bad'); });
     }
 
     if (p.identite) {
       const i = p.identite;
       const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
       if (lieu || i.segment || i.industrie || i.vertical) {
-        addSectionTitle(b, 'Fiche du client');
-        addInfoCompacte(b, 'Localisation', lieu);
-        addInfoCompacte(b, 'Segment', i.segment);
-        addInfoCompacte(b, 'Secteur', i.industrie || i.vertical);
+        const c = bloc('Fiche du client', null);
+        addInfoCompacte(c, 'Localisation', lieu);
+        addInfoCompacte(c, 'Segment', i.segment);
+        addInfoCompacte(c, 'Secteur', i.industrie || i.vertical);
       }
+    }
+
+    /* La conformite des appareils vient apres les cartes de chiffres : elle
+       porte une liste, donc une carte pleine largeur, et une carte pleine
+       largeur placee au milieu couperait la grille en deux. */
+    if (p.appareils) {
+      const a = p.appareils;
+      const c = bloc('Conformité des appareils',
+        "Appareils Intune hors politique : chiffrement, OS, antivirus, code d'accès.",
+        !!a.liste?.length);
+      addMetrique(c, 'Non conformes', String(a.nonConformes), 'sur ' + a.total,
+                  part(a.nonConformes, a.total), a.nonConformes ? 'bad' : 'ok');
+      addMetrique(c, 'Conformes', String(a.conformes), 'sur ' + a.total, part(a.conformes, a.total), 'ok');
+      if (a.indetermines) addMetrique(c, 'Statut indéterminé', String(a.indetermines), null, part(a.indetermines, a.total), null);
+      if (a.liste?.length) addListeAppareils(c, a);
+      addLienLighthouse(c, 'Vue Conformité des appareils dans Lighthouse', 'DeviceCompliance.ReactView');
     }
 
     /* Ce que les portées actuelles ne couvrent pas. Sans cette mention, une
@@ -5535,10 +5701,12 @@ function buildPosturePanel(p, mfa) {
     if (mfa?.erreur === 'portee') refuse.push('mfa');
     const aExpliquer = [...new Set(refuse)].filter(k => table[k]);
     if (aExpliquer.length) {
-      addSectionTitle(b, 'Données non disponibles');
-      addSectionNote(b, "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent.");
-      aExpliquer.forEach(k => addInfoCompacte(b, table[k].quoi, table[k].portee));
+      const c = bloc('Données non disponibles',
+        "Autorisation Graph manquante sur l'inscription d'application. Les rôles GDAP, eux, suffisent.", true);
+      aExpliquer.forEach(k => addInfoCompacte(c, table[k].quoi, table[k].portee));
     }
+
+    b.appendChild(grille);
 
     /* Le rapport ferme le panneau : on lit, puis on agit. */
     b.appendChild(buildBoutonRapport(p, mfa));
