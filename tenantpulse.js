@@ -4801,30 +4801,82 @@ function renderHero(ms, domain, confidence) {
     return d;
   };
 
-  /* Fiche du client, en infobulle sur le nom du tenant. Elle occupait une tuile
+  /* Fiche du client, en bulle sur le nom du tenant. Elle occupait une tuile
      entiere du panneau Posture pour trois lignes qui n'en relevent pas :
      localisation, segment et secteur decrivent le client, pas l'etat de son
-     tenant. Rattachee au nom, elle est la ou on la cherche et ne coute plus
-     rien a la lecture du panneau. */
+     tenant. Rattachee au nom, elle est la ou on la cherche.
+
+     Une vraie bulle au clic, et non l'infobulle native `title` : celle-ci
+     n'apparait qu'au survol prolonge, ne se declenche pas au clic, et ne se lit
+     ni au clavier ni au lecteur d'ecran. */
   const mkFicheClient = () => {
     const i = currentState.graph?.posture?.identite;
     if (!i) return null;
     const lieu = [i.ville, i.region, i.pays].filter(Boolean).join(', ');
-    const secteur = i.industrie || i.vertical;
-    const lignes = [];
-    if (lieu)      lignes.push('Localisation : ' + lieu);
-    if (i.segment) lignes.push('Segment : ' + i.segment);
-    if (secteur)   lignes.push('Secteur : ' + secteur);
+    const lignes = [
+      ['Localisation', lieu],
+      ['Segment',      i.segment],
+      ['Secteur',      i.industrie || i.vertical]
+    ].filter(([, v]) => v);
     if (!lignes.length) return null;
-    const b = document.createElement('span');
-    b.className = 'hero-fiche-info';
-    b.tabIndex = 0;
-    b.title = ['FICHE DU CLIENT', ...lignes].join('\n');
-    /* L'infobulle native ne se lit pas au clavier ni au lecteur d'ecran : le
-       meme contenu est donc porte par aria-label. */
-    b.setAttribute('aria-label', 'Fiche du client. ' + lignes.join('. '));
-    b.appendChild(makeInfoIcon('white'));
-    return b;
+
+    const wrap = document.createElement('span');
+    wrap.className = 'hero-fiche';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'hero-fiche-btn';
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', 'Fiche du client');
+    btn.title = 'Fiche du client';
+    btn.appendChild(makeInfoIcon('white'));
+
+    const bulle = document.createElement('div');
+    bulle.className = 'hero-fiche-bulle';
+    bulle.setAttribute('role', 'group');
+    bulle.setAttribute('aria-label', 'Fiche du client');
+    const t = document.createElement('div');
+    t.className = 'hero-fiche-titre';
+    t.textContent = 'Fiche du client';
+    bulle.appendChild(t);
+    lignes.forEach(([lbl, val]) => {
+      const l = document.createElement('div'); l.className = 'hero-fiche-ligne';
+      const a = document.createElement('span'); a.className = 'hero-fiche-lbl'; a.textContent = lbl;
+      const b = document.createElement('span'); b.className = 'hero-fiche-val'; b.textContent = val;
+      l.appendChild(a); l.appendChild(b); bulle.appendChild(l);
+    });
+
+    const fermer = () => {
+      wrap.classList.remove('ouverte');
+      btn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', dehors, true);
+      document.removeEventListener('keydown', echap, true);
+    };
+    /* En capture, pour fermer avant qu'un autre gestionnaire n'arrete la
+       propagation. Le garde `isConnected` compte : le hero est reconstruit a la
+       fin de l'analyse complete, et sans lui ces deux ecouteurs survivraient a
+       un element detache, a chaque clic de la page, indefiniment. */
+    const dehors = e => {
+      if (!wrap.isConnected) { fermer(); return; }
+      if (!wrap.contains(e.target)) fermer();
+    };
+    const echap = e => {
+      if (e.key !== 'Escape') return;
+      fermer();
+      btn.focus();
+    };
+
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (wrap.classList.contains('ouverte')) { fermer(); return; }
+      wrap.classList.add('ouverte');
+      btn.setAttribute('aria-expanded', 'true');
+      document.addEventListener('click', dehors, true);
+      document.addEventListener('keydown', echap, true);
+    });
+
+    wrap.appendChild(btn); wrap.appendChild(bulle);
+    return wrap;
   };
 
   /* Nom du tenant : le seul identifiant lisible par un humain. */
@@ -5793,10 +5845,12 @@ function tuilePosture(grille, def) {
   sv.textContent = def.sousVal || '';
   tete.appendChild(sv);
 
-  /* Chevron calqué sur celui des tuiles du hero : même pastille, même place. */
+  /* Chevron calqué sur celui des tuiles du hero : même pastille, même place, et
+     le même glyphe. « ⌄ » (U+2304) a des métriques verticales erratiques selon
+     la police et se posait de travers dans la pastille ; « ▾ » est centré. */
   const chev = document.createElement('span');
   chev.className = 'posture-tuile-chevron';
-  chev.textContent = '⌄';
+  chev.textContent = '▾';
   chev.setAttribute('aria-hidden', 'true');
   tete.appendChild(chev);
 
