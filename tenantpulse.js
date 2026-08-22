@@ -3775,21 +3775,38 @@ function setPanelWidth(px) {
 /* La préférence est tenue en mémoire en plus du stockage : le redimensionnement
    de fenêtre la relit à chaque événement, et une lecture localStorage
    synchrone par frame de resize se paie. */
-let panelWPref = PANEL_W_DEF;
+let panelWPref = null;
 
 function savePanelWidth(w) {
   panelWPref = w;
   try { localStorage.setItem(PANEL_W_KEY, String(w)); } catch {}
 }
 
+/* Largeur par défaut : la moitié de ce qui reste une fois la barre latérale et
+   la poignée déduites, soit un panneau aussi large que la colonne centrale.
+   Calculée et non littérale, parce que « aussi large que » ne veut rien dire à
+   une taille de fenêtre fixée d'avance. Le bornage de setPanelWidth() s'y
+   applique ensuite comme à n'importe quelle valeur. */
+function panelWDefaut() {
+  const app = document.querySelector('.app');
+  const pris = (document.querySelector('.sidebar')?.offsetWidth || 0)
+             + (document.getElementById('panelResizer')?.offsetWidth || 0);
+  const dispo = (app?.clientWidth || window.innerWidth) - pris;
+  return dispo > 0 ? Math.round(dispo / 2) : PANEL_W_DEF;
+}
+
 /* Une valeur illisible ou hors bornes ne bloque pas l'ouverture du panneau :
-   on retombe sur la largeur d'origine plutôt que d'échouer. */
+   on retombe sur la moitié de la largeur disponible plutôt que d'échouer.
+
+   `panelWPref` reste à null tant que l'utilisateur n'a rien choisi : c'est ce
+   qui distingue « pas de préférence », auquel cas la largeur suit la fenêtre,
+   de « 380px choisis », qui doit être respecté quelle que soit la fenêtre. */
 function loadPanelWidth() {
   try {
     const brut = parseInt(localStorage.getItem(PANEL_W_KEY), 10);
     if (Number.isFinite(brut)) panelWPref = brut;
   } catch {}
-  return setPanelWidth(panelWPref);
+  return setPanelWidth(panelWPref ?? panelWDefaut());
 }
 
 /* La poignée n'a de sens que panneau ouvert : sinon elle proposerait de
@@ -3852,9 +3869,18 @@ function bindPanelResizer() {
      380px à la souris, et c'est la sortie de secours quand on s'est piégé
      avec un panneau trop large. */
   r.addEventListener('dblclick', () => {
-    savePanelWidth(setPanelWidth(PANEL_W_DEF));
+    reinitPanelWidth();
     syncPanelResizer();
   });
+
+  /* Retour a la parite avec le centre. La preference est effacee, pas
+     remplacee par la valeur du moment : la largeur doit reprendre son suivi de
+     la fenetre, ce qu'une valeur figee empecherait. */
+  function reinitPanelWidth() {
+    panelWPref = null;
+    try { localStorage.removeItem(PANEL_W_KEY); } catch {}
+    setPanelWidth(panelWDefaut());
+  }
 
   /* Clavier : la poignée est focalisable, elle doit donc être actionnable
      sans souris. Les flèches déplacent de 24px, Maj de 96px. */
@@ -3863,7 +3889,7 @@ function bindPanelResizer() {
     let d = 0;
     if (e.key === 'ArrowLeft')  d =  pas;
     else if (e.key === 'ArrowRight') d = -pas;
-    else if (e.key === 'Home') { savePanelWidth(setPanelWidth(PANEL_W_DEF)); syncPanelResizer(); e.preventDefault(); return; }
+    else if (e.key === 'Home') { reinitPanelWidth(); syncPanelResizer(); e.preventDefault(); return; }
     else return;
     e.preventDefault();
     savePanelWidth(setPanelWidth((parseInt(panel.style.getPropertyValue('--panel-w'), 10) || PANEL_W_DEF) + d));
@@ -3875,7 +3901,11 @@ function bindPanelResizer() {
      ultérieur retrouve alors la largeur choisie, au lieu de rester coincé à la
      valeur de repli imposée par la fenêtre la plus étroite de la session. */
   window.addEventListener('resize', () => {
-    setPanelWidth(panelWPref);
+    /* Sans préférence, la largeur suit la fenêtre et reste à parité avec le
+       centre. Avec, on réapplique le choix borné : un agrandissement ultérieur
+       retrouve alors la largeur voulue, au lieu de rester coincé à la valeur de
+       repli imposée par la fenêtre la plus étroite de la session. */
+    setPanelWidth(panelWPref ?? panelWDefaut());
     syncPanelResizer();
   });
 }
@@ -4784,10 +4814,13 @@ function buildScoreRing(score, bonus) {
   const r      = 22, circ = 2 * Math.PI * r, offset = circ - (score / 100) * circ;
   const color  = score < 40 ? '#dc2626' : score < 70 ? '#d97706' : '#16a34a';
   const lbl    = score >= 80 ? 'Excellent' : score >= 60 ? 'Bon' : score >= 40 ? 'Moyen' : 'Faible';
-  const lblClr = score < 40 ? '#dc2626' : score < 70 ? '#b45309' : '#15803d';
-  const bg     = score < 40 ? '#1A1010' : score < 70 ? '#12100C' : '#0C120C';
+  /* Le ton passe par une classe et non par un style pose en ligne : le fond
+     etait ecrit en dur en quasi-noir (#0C120C), ce qui se fondait en theme
+     sombre et posait un pave noir au milieu d'une page claire. Une teinte a
+     faible opacite, elle, se compose avec le fond du theme quel qu'il soit. */
+  const ton    = score < 40 ? 'bad' : score < 70 ? 'warn' : 'ok';
 
-  const el = document.createElement('div'); el.className = 'score-block'; el.style.background = bg; el.style.borderColor = color + '44';
+  const el = document.createElement('div'); el.className = 'score-block ' + ton;
 
   const NS = 'http://www.w3.org/2000/svg';
   const ring = document.createElement('div'); ring.className = 'score-ring';
@@ -4809,10 +4842,10 @@ function buildScoreRing(score, bonus) {
   ring.appendChild(svg); ring.appendChild(lbl_el);
 
   const info = document.createElement('div'); info.className = 'score-info';
-  const title = document.createElement('div'); title.className = 'score-title'; title.style.color = lblClr; title.textContent = 'Sécurité : ' + lbl;
+  const title = document.createElement('div'); title.className = 'score-title'; title.textContent = 'Sécurité : ' + lbl;
   const desc  = document.createElement('div'); desc.className  = 'score-desc';  desc.textContent  = 'MX · SPF · DMARC · DKIM · DNSSEC · MTA-STS · BIMI';
   info.appendChild(title); info.appendChild(desc);
-  if (bonus > 0) { const b2 = document.createElement('div'); b2.style.cssText = 'font-size:9.5px;font-weight:600;color:#15803d;margin-top:3px'; b2.textContent = `+${bonus} bonus durcissement (MTA-STS · DNSSEC · BIMI au-delà de 100)`; info.appendChild(b2); }
+  if (bonus > 0) { const b2 = document.createElement('div'); b2.className = 'score-bonus'; b2.textContent = `+${bonus} bonus durcissement (MTA-STS · DNSSEC · BIMI au-delà de 100)`; info.appendChild(b2); }
 
   el.appendChild(ring); el.appendChild(info);
   return el;
@@ -4937,8 +4970,16 @@ function renderHero(ms, domain, confidence) {
       l.appendChild(a); l.appendChild(b); bulle.appendChild(l);
     });
 
+    /* Tous les enfants du hero sont en `position:relative; z-index:1`. Le nom du
+       tenant cree donc un contexte d'empilement, et le z-index de la bulle n'y
+       joue qu'a l'interieur : elle ne peut pas passer au-dessus du GUID ni des
+       badges, qui sont des freres de meme rang peints apres elle. C'est le nom
+       lui-meme qu'il faut elever, et seulement le temps de l'ouverture. */
+    const nomEl = () => wrap.closest('.hero-tenant-name');
+
     const fermer = () => {
       wrap.classList.remove('ouverte');
+      nomEl()?.classList.remove('fiche-ouverte');
       btn.setAttribute('aria-expanded', 'false');
       document.removeEventListener('click', dehors, true);
       document.removeEventListener('keydown', echap, true);
@@ -4961,6 +5002,7 @@ function renderHero(ms, domain, confidence) {
       e.stopPropagation();
       if (wrap.classList.contains('ouverte')) { fermer(); return; }
       wrap.classList.add('ouverte');
+      nomEl()?.classList.add('fiche-ouverte');
       btn.setAttribute('aria-expanded', 'true');
       document.addEventListener('click', dehors, true);
       document.addEventListener('keydown', echap, true);
@@ -6154,149 +6196,173 @@ function addListeAppareils(b, a) {
   b.appendChild(bloc);
 }
 
-/* ── Panneau Posture : tuiles dépliables ─────────────────────────────────────
+/* ── Panneau Posture : bande critique, carrousel de tuiles, detail en dessous ─
    Le panneau montrait huit rubriques dépliées en permanence, soit une colonne
    de chiffres qu'il fallait parcourir pour trouver celui qu'on cherchait. Il
-   présente maintenant une bande de valeurs critiques en tête, puis des tuiles
-   compactes qui ne donnent que leur chiffre de tête. Cliquer déplie le détail.
+   présente maintenant une bande de valeurs critiques, puis les tuiles **sur une
+   seule ligne** qui défile, et le détail de la tuile choisie dans un bloc en
+   dessous.
 
-   Grille et non multi-colonnes, contrairement au reste : une tuile qui change
-   de hauteur ferait sauter tout le contenu d'une colonne à l'autre à chaque
-   dépliage. Toutes les tuiles fermées ayant la même hauteur, la grille ne
-   laisse pas les trous qui avaient motivé le multi-colonnes ailleurs. Une
-   tuile ouverte prend toute la largeur : son détail se lit en ligne.
+   Une tuile ouverte reste donc à sa place dans le carrousel : c'est ce qui
+   distingue ce modèle du dépliage en accordéon, où la tuile grandissait et
+   poussait les autres. On garde la vue d'ensemble en permanence et on change de
+   rubrique sans rien perdre de vue.
 
-   L'ordre est délibéré. Secure Score d'abord, c'est le verdict ; conformité
-   des appareils juste après, c'est ce qui appelle une action ; le reste
-   ensuite. Ce que les portées ne couvrent pas ferme la marche.             */
+   L'ordre est délibéré. Secure Score d'abord, c'est le verdict ; conformité des
+   appareils juste après, c'est ce qui appelle une action ; le reste ensuite. Ce
+   que les portées ne couvrent pas ferme la marche.                            */
 
 const POSTURE_TON_SEUIL = (v, bon, moyen) => v >= bon ? 'ok' : v >= moyen ? 'warn' : 'bad';
 
-/* Une tuile : en-tête cliquable portant le titre et le chiffre de tête, et un
-   corps construit à la demande. `remplir` reçoit le corps de la tuile. */
-function tuilePosture(grille, def) {
-  const t = document.createElement('section');
-  t.className = 'posture-tuile' + (def.ton ? ' ' + def.ton : '');
-  t.dataset.tuile = def.id;
+/* Carrousel : la piste, ses deux fleches, et le bloc de detail qu'il commande.
+   Retourne de quoi enregistrer les tuiles et les ouvrir de l'exterieur. */
+function carrouselPosture() {
+  const bloc = document.createElement('div');
+  bloc.className = 'posture-carrousel';
 
-  const tete = document.createElement('button');
-  tete.type = 'button';
-  tete.className = 'posture-tuile-tete';
-  tete.setAttribute('aria-expanded', 'false');
+  const zone = document.createElement('div'); zone.className = 'posture-piste-zone';
+  const piste = document.createElement('div'); piste.className = 'posture-piste';
+  piste.setAttribute('role', 'tablist');
+  piste.setAttribute('aria-label', 'Rubriques de posture');
 
-  const titre = document.createElement('span');
-  titre.className = 'posture-tuile-titre';
-  titre.textContent = def.titre;
+  const fleche = (sens, libelle) => {
+    const f = document.createElement('button');
+    f.type = 'button';
+    f.className = 'posture-fleche ' + sens;
+    f.textContent = sens === 'avant' ? '›' : '‹';
+    f.setAttribute('aria-label', libelle);
+    f.addEventListener('click', () => {
+      /* On defile d'environ une largeur visible, pas d'une tuile : sur un
+         panneau large ca ferait avancer d'un cran imperceptible. */
+      const pas = Math.max(160, zone.clientWidth * 0.8);
+      zone.scrollBy({ left: sens === 'avant' ? pas : -pas, behavior: 'smooth' });
+    });
+    return f;
+  };
+  const gauche = fleche('arriere', 'Rubriques précédentes');
+  const droite = fleche('avant', 'Rubriques suivantes');
 
-  const val = document.createElement('span');
-  val.className = 'posture-tuile-val';
-  val.textContent = def.valeur ?? '—';
+  zone.appendChild(piste);
+  bloc.appendChild(gauche); bloc.appendChild(zone); bloc.appendChild(droite);
 
-  tete.appendChild(titre);
-  tete.appendChild(val);
+  const detail = document.createElement('div');
+  detail.className = 'posture-detail';
+  detail.hidden = true;
 
-  /* Toujours posée, même vide : c'est elle qui réserve la ligne, et sans cette
-     ligne une tuile sans sous-valeur serait plus courte que ses voisines. Le
-     CSS seul n'y suffit pas, une hauteur minimale ne s'applique qu'à un
-     élément qui existe. */
-  const sv = document.createElement('span');
-  sv.className = 'posture-tuile-sousval';
-  sv.textContent = def.sousVal || '';
-  tete.appendChild(sv);
+  /* Les fleches disparaissent quand il n'y a rien a atteindre de ce cote : une
+     fleche inerte invite a un clic sans effet. */
+  const syncFleches = () => {
+    const debordement = zone.scrollWidth - zone.clientWidth;
+    const cache = debordement <= 2;
+    gauche.hidden = cache || zone.scrollLeft <= 2;
+    droite.hidden = cache || zone.scrollLeft >= debordement - 2;
+  };
+  zone.addEventListener('scroll', syncFleches, { passive: true });
+  /* La largeur du panneau change a la poignee : le debordement aussi. */
+  if (typeof ResizeObserver === 'function') new ResizeObserver(syncFleches).observe(zone);
 
-  /* Chevron calqué sur celui des tuiles du hero : même pastille, même place, et
-     le même glyphe. « ⌄ » (U+2304) a des métriques verticales erratiques selon
-     la police et se posait de travers dans la pastille ; « ▾ » est centré. */
-  const chev = document.createElement('span');
-  chev.className = 'posture-tuile-chevron';
-  chev.textContent = '▾';
-  chev.setAttribute('aria-hidden', 'true');
-  tete.appendChild(chev);
+  const tuiles = {};
+  let ouverte = null;
 
-  const corps = document.createElement('div');
-  corps.className = 'posture-tuile-corps';
-
-  let construit = false;
-  const basculer = ouvrir => {
-    const etat = ouvrir ?? !t.classList.contains('ouverte');
-    /* Le corps n'est construit qu'au premier dépliage : la liste d'appareils
-       porte jusqu'à 999 lignes, les bâtir toutes pour les cacher aussitôt
-       coûterait à chaque analyse ce dont personne ne se sert. */
-    if (etat && !construit) { def.remplir(corps); construit = true; }
-    t.classList.toggle('ouverte', etat);
-    tete.setAttribute('aria-expanded', etat ? 'true' : 'false');
-    return etat;
+  const ouvrir = id => {
+    const t = tuiles[id];
+    if (!t) return;
+    /* Un second clic sur la tuile ouverte referme le detail : c'est la sortie
+       attendue quand on a fini de lire. */
+    if (ouverte === id) { fermer(); return; }
+    ouverte = id;
+    Object.entries(tuiles).forEach(([k, v]) => {
+      const actif = k === id;
+      v.element.classList.toggle('active', actif);
+      v.element.setAttribute('aria-selected', actif ? 'true' : 'false');
+    });
+    detail.replaceChildren();
+    const tete = document.createElement('div'); tete.className = 'posture-detail-tete';
+    const titre = document.createElement('span'); titre.className = 'posture-detail-titre';
+    titre.textContent = t.def.titre;
+    const fermerBtn = document.createElement('button');
+    fermerBtn.type = 'button'; fermerBtn.className = 'posture-detail-fermer';
+    fermerBtn.textContent = '✕';
+    fermerBtn.setAttribute('aria-label', 'Fermer le détail');
+    fermerBtn.addEventListener('click', fermer);
+    tete.appendChild(titre); tete.appendChild(fermerBtn);
+    detail.appendChild(tete);
+    const corps = document.createElement('div'); corps.className = 'posture-detail-corps';
+    t.def.remplir(corps);
+    detail.appendChild(corps);
+    detail.hidden = false;
+    /* La tuile choisie peut etre hors champ quand on arrive par la bande
+       critique : on la ramene, sans deplacer la page. */
+    t.element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   };
 
-  tete.addEventListener('click', () => basculer());
-  t.appendChild(tete);
-  t.appendChild(corps);
-  grille.appendChild(t);
+  const fermer = () => {
+    ouverte = null;
+    Object.values(tuiles).forEach(v => {
+      v.element.classList.remove('active');
+      v.element.setAttribute('aria-selected', 'false');
+    });
+    detail.replaceChildren();
+    detail.hidden = true;
+  };
 
-  /* Rendu à l'appelant pour que la bande de valeurs critiques puisse ouvrir
-     une tuile depuis l'extérieur. */
-  return { element: t, ouvrir: () => basculer(true) };
+  const ajouter = def => {
+    const t = document.createElement('button');
+    t.type = 'button';
+    t.className = 'posture-tuile' + (def.ton ? ' ' + def.ton : '');
+    t.dataset.tuile = def.id;
+    t.setAttribute('role', 'tab');
+    t.setAttribute('aria-selected', 'false');
+
+    const titre = document.createElement('span'); titre.className = 'posture-tuile-titre';
+    titre.textContent = def.titre;
+    const val = document.createElement('span'); val.className = 'posture-tuile-val';
+    val.textContent = def.valeur ?? '—';
+    /* Toujours posee, meme vide : c'est elle qui reserve la ligne, et sans elle
+       une tuile sans sous-valeur serait plus courte que ses voisines. */
+    const sv = document.createElement('span'); sv.className = 'posture-tuile-sousval';
+    sv.textContent = def.sousVal || '';
+    const chev = document.createElement('span'); chev.className = 'posture-tuile-chevron';
+    chev.textContent = '▾'; chev.setAttribute('aria-hidden', 'true');
+
+    t.appendChild(titre); t.appendChild(val); t.appendChild(sv); t.appendChild(chev);
+    t.addEventListener('click', () => ouvrir(def.id));
+    piste.appendChild(t);
+    tuiles[def.id] = { element: t, def };
+    return tuiles[def.id];
+  };
+
+  return { bloc, detail, ajouter, ouvrir, syncFleches };
 }
 
 /* Bande de valeurs critiques. Elle ne répète pas les tuiles : elle sort le
-   chiffre que quelqu'un vient chercher, et sert de raccourci vers la tuile qui
-   le détaille. Une valeur sans tuile correspondante n'y figure pas. */
-function bandeCritique(defs, tuiles) {
+   chiffre que quelqu'un vient chercher, et sert de raccourci vers la rubrique
+   qui le détaille. Une valeur sans tuile correspondante n'y figure pas. */
+function bandeCritique(defs, carrousel) {
   const bande = document.createElement('div');
   bande.className = 'posture-critiques';
   let n = 0;
 
   /* `valeurCritique` prime quand elle existe : la tuile MFA affiche un taux de
-     couverture, la bande doit sortir le nombre de comptes decouverts. Ce n'est
-     pas la meme question, et ce n'est pas le meme chiffre. */
+     couverture, la bande doit sortir le nombre de comptes découverts. Ce n'est
+     pas la même question, et ce n'est pas le même chiffre. */
   defs.filter(d => d.critique && (d.valeurCritique ?? d.valeur) != null).forEach(d => {
     const c = document.createElement('button');
     c.type = 'button';
     c.className = 'posture-crit' + (d.ton ? ' ' + d.ton : '');
     c.title = 'Ouvrir : ' + d.titre;
 
-    const v = document.createElement('span');
-    v.className = 'posture-crit-val';
+    const v = document.createElement('span'); v.className = 'posture-crit-val';
     v.textContent = d.valeurCritique ?? d.valeur;
-    const l = document.createElement('span');
-    l.className = 'posture-crit-lbl';
+    const l = document.createElement('span'); l.className = 'posture-crit-lbl';
     l.textContent = d.critique;
     c.appendChild(v); c.appendChild(l);
-
-    c.addEventListener('click', () => {
-      const cible = tuiles[d.id];
-      if (!cible) return;
-      cible.ouvrir();
-      cible.element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      /* Un repère visuel bref : sur un panneau large, la tuile ouverte peut
-         être loin du chiffre qu'on vient de cliquer. */
-      cible.element.classList.add('vise');
-      setTimeout(() => cible.element.classList.remove('vise'), 1200);
-    });
+    c.addEventListener('click', () => carrousel.ouvrir(d.id));
 
     bande.appendChild(c); n++;
   });
 
   return n ? bande : null;
-}
-
-/* Volet santé du rapport exporté. Extrait ici parce qu'il était écrit deux fois
-   à l'identique, et surtout parce qu'il lisait `currentState.health` sans le
-   vérifier : quand l'analyse DNS échoue — filtrage DoH sur le poste, cas
-   courant en entreprise — checkHealth ne renseigne rien et l'export levait
-   « Cannot read properties of null (reading 'score') ». L'analyse complète
-   s'arrêtait alors sur une erreur brute, alors que tout le reste avait abouti.
-   Une santé absente vaut `null` dans le rapport : c'est une rubrique en moins,
-   pas une analyse perdue. */
-function rapportSante() {
-  const h = currentState.health;
-  if (!h) return null;
-  const lot = l => (l || []).map(c => ({ type: c.t, title: c.title, desc: c.desc }));
-  return {
-    score: h.score, bonus: h.bonus, dmarcIsQuarantine: h.dmarcIsQuarantine,
-    checks: lot(h.checks), m365: lot(h.m365),
-    dkim: { selector1: h.hasSel1, selector2: h.hasSel2, allResults: h.dkimResults }
-  };
 }
 
 function buildPosturePanel(p, mfa) {
@@ -6488,16 +6554,17 @@ function buildPosturePanel(p, mfa) {
       });
     }
 
-    const grille = document.createElement('div');
-    grille.className = 'posture-tuiles';
-    const tuiles = {};
-    defs.forEach(d => { tuiles[d.id] = tuilePosture(grille, d); });
+    const car = carrouselPosture();
+    defs.forEach(d => car.ajouter(d));
 
-    /* La bande vient avant la grille dans le document, mais après elle dans le
-       code : elle a besoin des tuiles pour pouvoir les ouvrir. */
-    const bande = bandeCritique(defs, tuiles);
+    /* La bande vient avant le carrousel dans le document, mais après lui dans
+       le code : elle a besoin des tuiles pour pouvoir les ouvrir. */
+    const bande = bandeCritique(defs, car);
     if (bande) b.appendChild(bande);
-    b.appendChild(grille);
+    b.appendChild(car.bloc);
+    b.appendChild(car.detail);
+    /* Le débordement ne se connaît qu'une fois la piste dans le document. */
+    requestAnimationFrame(car.syncFleches);
 
     /* Le rapport ferme le panneau : on lit, puis on agit. */
     b.appendChild(buildBoutonRapport(p, mfa));

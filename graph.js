@@ -51,6 +51,10 @@ const TP_GRAPH_SCOPES = [
   /* Accordee le 2026-08-21. Ouvre managedDeviceCompliances : decompte et liste
      nommee des appareils, et les vulnerabilites Defender. */
   'https://graph.microsoft.com/DeviceManagementManagedDevices.Read.All',
+  /* Accordee elle aussi. Ouvre delegatedAdminRelationships, donc la pastille
+     GDAP vive du hero. Une portee accordee dans Entra ne sert a rien tant
+     qu'elle n'est pas demandee ici : le jeton ne porte que cette liste. */
+  'https://graph.microsoft.com/DelegatedAdminRelationship.Read.All',
   'offline_access', 'openid', 'profile'
 ];
 

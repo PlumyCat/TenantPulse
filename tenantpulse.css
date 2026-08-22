@@ -1149,63 +1149,42 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 [data-theme="dark"] .posture-crit.warn .posture-crit-val{color:#fcd34d}
 [data-theme="dark"] .posture-crit.bad  .posture-crit-val{color:#fca5a5}
 
-/* Grille de tuiles. Grille et non multi-colonnes : une tuile qui se déplie
-   change de hauteur, et un conteneur multi-colonnes ferait alors sauter le
-   contenu d'une colonne à l'autre. Fermées, toutes les tuiles ont la même
-   hauteur, donc la grille ne laisse pas les trous qui avaient motivé le
-   multi-colonnes ailleurs dans les panneaux. */
-/* `dense` n'est pas cosmetique ici : une tuile depliee prend toute la largeur,
-   donc elle passe a la ligne et laisserait la fin de la rangee precedente vide.
-   Le placement dense y remonte les tuiles fermees suivantes. L'ordre visuel
-   bouge au depliage, ce qui est le prix a payer — et il est modique, les tuiles
-   portant chacune son titre. */
-.posture-tuiles{display:grid;grid-auto-flow:dense;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px;align-items:stretch}
-.posture-tuile{
-  /* Colonne flex pour que l'en-tete occupe toute la hauteur d'une tuile
-     etiree : sans ca, le chevron ancre en bas de l'en-tete flotterait au
-     milieu de la tuile. */
-  display:flex;flex-direction:column;
-  min-width:0;border-radius:var(--r-lg);position:relative;
+/* Carrousel de tuiles : une seule ligne qui defile, et le detail dans un bloc
+   en dessous. Une tuile ouverte reste ainsi a sa place, ce qui distingue ce
+   modele du depliage en accordeon ou elle grandissait et poussait les autres :
+   on garde la vue d'ensemble en changeant de rubrique. */
+.posture-carrousel{position:relative;display:flex;align-items:stretch;gap:4px}
+.posture-piste-zone{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-snap-type:x proximity;overscroll-behavior-x:contain}
+.posture-piste-zone::-webkit-scrollbar{display:none}
+.posture-piste{display:flex;gap:8px;padding:1px}
+/* Largeur fixe et non fluide : sur une ligne qui defile, des tuiles de largeur
+   variable rendraient le defilement imprevisible. */
+.posture-tuile{flex:0 0 152px;scroll-snap-align:start;
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+  padding:10px 11px 17px;border-radius:var(--r-lg);position:relative;text-align:left;
+  font-family:var(--font);color:var(--text);cursor:pointer;
   background:linear-gradient(180deg,var(--verre-1) 0%,var(--verre-2) 100%);
   -webkit-backdrop-filter:blur(10px) saturate(140%);backdrop-filter:blur(10px) saturate(140%);
   border:1px solid var(--verre-bord);
   box-shadow:0 1px 0 var(--verre-eclat) inset,0 3px 12px var(--verre-ombre);
-  transition:box-shadow .2s,border-color .2s
-}
-/* Bordure dégradée verre via mask, comme .hero-partner-btn. */
+  transition:box-shadow .2s,border-color .2s,transform .15s}
 .posture-tuile::before{
   content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
   background:linear-gradient(180deg,var(--verre-eclat) 0%,var(--verre-bord) 55%,transparent 100%);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor;mask-composite:exclude;opacity:.9;transition:opacity .2s
-}
-.posture-tuile:hover{box-shadow:0 1px 0 var(--verre-eclat) inset,0 6px 18px var(--verre-ombre)}
+  -webkit-mask-composite:xor;mask-composite:exclude;opacity:.9;transition:opacity .2s}
+.posture-tuile:hover{transform:translateY(-1px);box-shadow:0 1px 0 var(--verre-eclat) inset,0 6px 18px var(--verre-ombre)}
 .posture-tuile:hover::before{opacity:1}
-/* Une tuile dépliée prend toute la largeur : son détail se lit en ligne, pas
-   dans une piste de 148px. */
-.posture-tuile.ouverte{grid-column:1/-1}
-/* Repère bref après un clic depuis la bande critique : sur un panneau large,
-   la tuile ouverte peut être loin du chiffre qu'on vient de cliquer. */
-.posture-tuile.vise{border-color:var(--blue);box-shadow:0 0 0 2px rgba(75,63,190,.35),0 6px 18px var(--verre-ombre)}
+.posture-tuile:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+/* La tuile dont le detail est affiche : elle reste dans la piste, elle se
+   designe. */
+.posture-tuile.active{border-color:var(--blue);box-shadow:0 0 0 2px rgba(75,63,190,.35),0 6px 18px var(--verre-ombre)}
 
-/* Toutes les tuiles fermees ont exactement la meme hauteur, et c'est une regle
-   et non un hasard de contenu : deux lignes sont reservees au titre (certains
-   tiennent sur une, « Conformite des appareils » sur deux) et une a la
-   sous-valeur (toutes n'en ont pas). Sans ces reserves, la grille alignait des
-   boutons de trois hauteurs differentes. */
-.posture-tuile-tete{
-  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
-  width:100%;padding:10px 11px 17px;background:none;border:none;border-radius:inherit;
-  font-family:var(--font);text-align:left;cursor:pointer;color:var(--text);position:relative;flex:1
-}
-.posture-tuile-tete:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+/* Deux lignes reservees au titre et une a la sous-valeur : sans ces reserves,
+   la piste alignait des tuiles de trois hauteurs differentes. */
 .posture-tuile-titre{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--soft);line-height:1.3;
-  /* Deux lignes reservees, et deux au maximum : un titre plus long est coupe
-     plutot que de faire grandir sa tuile seule. */
   min-height:2.6em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .posture-tuile-val{font-size:19px;font-weight:700;line-height:1.15;color:var(--text);margin-top:3px}
-/* Reservee meme absente : sans elle, une tuile sans sous-valeur serait plus
-   courte de treize pixels que ses voisines. */
 .posture-tuile-sousval{font-size:10px;font-weight:500;color:var(--muted);line-height:1.3;min-height:1.3em}
 .posture-tuile.ok   .posture-tuile-val{color:#15803d}
 .posture-tuile.warn .posture-tuile-val{color:#b45309}
@@ -1213,39 +1192,45 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 [data-theme="dark"] .posture-tuile.ok   .posture-tuile-val{color:#86efac}
 [data-theme="dark"] .posture-tuile.warn .posture-tuile-val{color:#fcd34d}
 [data-theme="dark"] .posture-tuile.bad  .posture-tuile-val{color:#fca5a5}
-/* Ce qui manque n'est pas une mesure : la tuile le dit sans emprunter la
-   couleur d'un résultat. */
 .posture-tuile.manquant{border-color:#d97706}
 .posture-tuile.manquant .posture-tuile-val{color:#b45309}
 [data-theme="dark"] .posture-tuile.manquant .posture-tuile-val{color:#fcd34d}
 
-/* Chevron : même pastille et même place que sur les tuiles du hero. */
-.posture-tuile-chevron{
-  position:absolute;bottom:5px;left:50%;transform:translateX(-50%);
+/* Chevron : meme pastille et meme place que sur les tuiles du hero. 13px et non
+   11, le glyphe occupant une boite de 12px a 9px de police. */
+.posture-tuile-chevron{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);
   display:inline-flex;align-items:center;justify-content:center;width:34px;height:13px;
   border:1px solid var(--verre-bord);border-radius:var(--r-pill);background:var(--verre-2);
-  /* 13px et non 11 : a 9px de police le glyphe occupe une boite de 12px, il
-     depassait donc de sa pastille et se lisait comme un chevron pose de
-     travers. C'etait la la cause, le caractere n'y etait pour rien. */
   color:var(--muted);font-size:9px;font-weight:700;line-height:1;
-  transition:transform .2s,color .15s,background .15s
-}
-.posture-tuile-tete:hover .posture-tuile-chevron{color:var(--text);background:var(--verre-1)}
-.posture-tuile.ouverte .posture-tuile-chevron{transform:translateX(-50%) rotate(180deg)}
+  transition:transform .2s,color .15s,background .15s}
+.posture-tuile:hover .posture-tuile-chevron{color:var(--text);background:var(--verre-1)}
+.posture-tuile.active .posture-tuile-chevron{transform:translateX(-50%) rotate(180deg);color:var(--text)}
 
-.posture-tuile-corps{display:none;padding:0 11px 11px}
-.posture-tuile.ouverte .posture-tuile-corps{display:block;border-top:1px solid var(--verre-bord);padding-top:10px;margin-top:-4px}
-.posture-tuile-corps .panel-section-note{margin:0 0 9px}
-.posture-tuile-corps .metric:last-child{margin-bottom:0}
-/* Mêmes replis qu'ailleurs : un libellé long passe à la ligne plutôt que d'être
-   coupé, et la valeur cède sa ligne quand la place manque. */
-.posture-tuile-corps .metric-lbl{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3}
-.posture-tuile-corps .metric-head{flex-wrap:wrap;row-gap:1px}
+/* Fleches de defilement. Masquees quand il n'y a rien a atteindre : une fleche
+   inerte invite a un clic sans effet. */
+.posture-fleche{flex:0 0 20px;align-self:stretch;display:flex;align-items:center;justify-content:center;
+  background:var(--verre-2);border:1px solid var(--verre-bord);border-radius:var(--r-sm);
+  color:var(--soft);font-family:var(--font);font-size:15px;font-weight:700;line-height:1;cursor:pointer;
+  transition:background .15s,color .15s}
+.posture-fleche:hover{background:var(--verre-1);color:var(--text)}
+.posture-fleche:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
 
-@media(max-width:768px){
-  .posture-tuiles{grid-template-columns:repeat(auto-fill,minmax(128px,1fr))}
-  .posture-crit{flex-basis:80px}
-}
+/* Bloc de detail, sous la piste. */
+.posture-detail{margin-top:9px;border:1px solid var(--verre-bord);border-radius:var(--r-lg);
+  background:linear-gradient(180deg,var(--verre-1) 0%,var(--verre-2) 100%);
+  box-shadow:0 1px 0 var(--verre-eclat) inset,0 3px 12px var(--verre-ombre)}
+.posture-detail-tete{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:9px 11px 8px;border-bottom:1px solid var(--verre-bord)}
+.posture-detail-titre{font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.posture-detail-fermer{background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;line-height:1;padding:2px 5px;border-radius:var(--r-sm);transition:background .15s,color .15s}
+.posture-detail-fermer:hover{background:var(--verre-2);color:var(--text)}
+.posture-detail-corps{padding:10px 11px 11px}
+.posture-detail-corps .panel-section-note{margin:0 0 9px}
+.posture-detail-corps .metric:last-child{margin-bottom:0}
+/* Memes replis qu'ailleurs : un libelle long passe a la ligne plutot que d'etre
+   coupe, et la valeur cede sa ligne quand la place manque. */
+.posture-detail-corps .metric-lbl{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3}
+.posture-detail-corps .metric-head{flex-wrap:wrap;row-gap:1px}
 
 /* ── Recherche d'utilisateur : saisie en barre laterale ──────────────────────
    Le bloc reprend l'ossature des autres blocs depliables de la colonne
@@ -1530,6 +1515,22 @@ body.redimensionne *{cursor:col-resize!important}
 .host-sub{font-size:var(--text-xs);font-weight:400;color:var(--soft);margin-top:2px}
 
 .score-block{display:flex;align-items:center;gap:14px;padding:12px 13px;border-radius:var(--r-md);border:1.5px solid var(--border);margin-bottom:2px}
+/* Teintes a faible opacite : elles se composent avec le fond du theme, la ou un
+   fond ecrit en dur imposait un pave sombre en mode clair. */
+.score-block.ok  {background:rgba(22,163,74,.08); border-color:rgba(22,163,74,.38)}
+.score-block.warn{background:rgba(217,119,6,.09); border-color:rgba(217,119,6,.38)}
+.score-block.bad {background:rgba(220,38,38,.08); border-color:rgba(220,38,38,.38)}
+[data-theme="dark"] .score-block.ok  {background:rgba(22,163,74,.13)}
+[data-theme="dark"] .score-block.warn{background:rgba(217,119,6,.14)}
+[data-theme="dark"] .score-block.bad {background:rgba(220,38,38,.13)}
+.score-block.ok   .score-title{color:#15803d}
+.score-block.warn .score-title{color:#b45309}
+.score-block.bad  .score-title{color:#dc2626}
+[data-theme="dark"] .score-block.ok   .score-title{color:#86efac}
+[data-theme="dark"] .score-block.warn .score-title{color:#fcd34d}
+[data-theme="dark"] .score-block.bad  .score-title{color:#fca5a5}
+.score-bonus{font-size:9.5px;font-weight:600;color:#15803d;margin-top:3px}
+[data-theme="dark"] .score-bonus{color:#86efac}
 .score-ring{position:relative;width:52px;height:52px;flex-shrink:0}
 .score-ring svg{width:52px;height:52px;transform:rotate(-90deg)}
 .score-ring .trk{fill:none;stroke:var(--border);stroke-width:5}
@@ -1538,7 +1539,7 @@ body.redimensionne *{cursor:col-resize!important}
    manquait. Sans lui, un label trop large se replie sur deux lignes et vient
    chevaucher le trace de l'anneau — ce qui arrivait des que le score portait
    un bonus, et arriverait encore a 100%. */
-.score-ring .lbl{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:var(--text-sm);font-weight:500;color:#FFFFFF;white-space:nowrap;max-width:40px;text-align:center;line-height:1}
+.score-ring .lbl{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:var(--text-sm);font-weight:500;color:var(--text);white-space:nowrap;max-width:40px;text-align:center;line-height:1}
 .score-info{flex:1}
 .score-title{font-size:var(--text-base);font-weight:700;margin-bottom:2px}
 .score-desc{font-size:var(--text-xs);font-weight:400;color:var(--soft);line-height:1.4}
@@ -2577,6 +2578,11 @@ html:not([data-theme="dark"]) .result-card:hover{
   box-shadow:0 10px 28px rgba(0,0,0,.45);
   text-align:left;font-weight:400;text-shadow:none;letter-spacing:normal;cursor:default}
 .hero-fiche.ouverte .hero-fiche-bulle{display:block}
+/* Le nom du tenant s'eleve au-dessus de ses freres le temps de l'ouverture :
+   sans ca la bulle reste prisonniere du contexte d'empilement qu'il cree, et
+   passe sous le GUID et les badges. Rendu a son rang a la fermeture, pour ne
+   pas recouvrir durablement ce qui vient apres. */
+.hero-tenant-name.fiche-ouverte{z-index:20}
 .hero-fiche-titre{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5);margin-bottom:7px}
 .hero-fiche-ligne{display:flex;align-items:baseline;justify-content:space-between;gap:14px;font-size:11.5px;line-height:1.5}
 .hero-fiche-ligne+.hero-fiche-ligne{margin-top:3px}
