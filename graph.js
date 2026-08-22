@@ -897,6 +897,122 @@ function graphDumpPosture() { return TP_GRAPH.dernierePosture || null; }
    répond 403 et la liste d'appareils repose sur des noms de champs devinés. */
 function graphDumpAppareil() { return TP_GRAPH.dernierAppareil || null; }
 
+/* ── Relation GDAP avec un client ───────────────────────────────────────────
+   Lue en direct à chaque analyse, jamais stockée. C'est délibéré, et c'est ce
+   qui la distingue des tags : une relation GDAP **a une date de fin**, elle est
+   bornée dans le temps par construction. Un tag écrit une fois continuerait
+   d'affirmer « GDAP actif » des mois après l'expiration, et quelqu'un le lirait
+   avant de tenter une intervention. `direct` et `indirect` n'ont pas ce
+   problème, ils décrivent une relation commerciale stable et relèvent d'un
+   jugement humain : c'est pour eux que la table Classifications existe.
+
+   L'intérêt ne se limite pas à confirmer un tag. La relation porte sa date de
+   fin et ses rôles : une délégation qui expire dans trois semaines est ce qu'un
+   MSP veut voir remonter, et rien d'autre ne le lui dit.
+
+   Deux chemins, parce que le service accepte peut-être un filtre sur le client
+   et peut-être pas — non vérifié, l'entité n'ayant jamais été appelée ici. On
+   tente le filtre, et on retombe sur une liste paginée sinon. Le repli est
+   volontairement borné : sur un parc de plusieurs milliers de relations, tout
+   rapatrier pour en lire une seule serait absurde.                            */
+
+const TP_GDAP_ACTIFS  = ['active', 'activating'];
+const TP_GDAP_PAGES   = 6;      // repli : 6 pages au plus, ~1200 relations
+const TP_GDAP_EXPIRE_J = 45;    // en deçà, l'échéance est signalée
+
+/* Normalisation d'un **statut** : casse et separateurs indifferents. Ne pas
+   l'employer sur un GUID, elle en retirerait les tirets. */
+function gdapNorm(v) {
+  return typeof v === 'string' ? v.toLowerCase().replace(/[\s_-]/g, '') : null;
+}
+
+/* Comparaison de tenant : la casse seule varie, les tirets font partie du GUID. */
+function gdapMemeTenant(v, id) {
+  return typeof v === 'string' && v.toLowerCase() === id;
+}
+
+/* Une relation retenue pour ce tenant, la plus pertinente d'abord : une
+   relation active prime sur une relation terminée, et parmi les actives on
+   garde celle qui expire le plus tard. */
+function gdapMeilleure(rels) {
+  const rang = r => TP_GDAP_ACTIFS.includes(gdapNorm(r.status)) ? 0 : 1;
+  return rels.slice().sort((a, b) => (rang(a) - rang(b))
+    || String(b.endDateTime || '').localeCompare(String(a.endDateTime || '')))[0] || null;
+}
+
+function gdapLit(rel) {
+  if (!rel) return null;
+  const statut = gdapNorm(rel.status);
+  const fin = rel.endDateTime || null;
+  let jours = null;
+  if (fin) {
+    const d = new Date(fin);
+    if (!isNaN(d)) jours = Math.floor((d.getTime() - Date.now()) / 86400000);
+  }
+  return {
+    actif:   TP_GDAP_ACTIFS.includes(statut),
+    statut:  rel.status || null,
+    finLe:   fin,
+    /* Négatif = déjà expirée. Le service laisse parfois une relation en
+       « active » au-delà de sa date de fin, on ne se fie donc pas au seul
+       statut pour dire si elle vaut encore quelque chose. */
+    jours,
+    imminent: jours != null && jours >= 0 && jours <= TP_GDAP_EXPIRE_J,
+    perime:   jours != null && jours < 0,
+    roles:    Array.isArray(rel.accessDetails?.unifiedRoles) ? rel.accessDetails.unifiedRoles.length : null,
+    nom:      rel.displayName || null
+  };
+}
+
+/* Relation GDAP pour un tenant client. Retourne null si Graph n'est pas
+   connecté, si l'entité est refusée, ou si aucune relation n'existe : dans
+   tous ces cas l'interface n'affiche rien plutôt qu'une affirmation. */
+async function checkGdap(tenantId, signal) {
+  /* `TP_GRAPH.connected` et non graphConnecte() : cette derniere vit dans
+     tenantpulse.js, et graph.js doit rester chargeable seul. C'est l'idiome
+     employe par graphFindTenant() juste au-dessus. */
+  if (!TP_GRAPH.connected || !tenantId || !TP_GUID_RE.test(tenantId)) return null;
+  const id = tenantId.toLowerCase();
+
+  /* 1. Filtre côté service. Le chemin normal s'il est honoré : une requête,
+        une réponse courte. */
+  const filtre = await graphGet(
+    `/tenantRelationships/delegatedAdminRelationships`
+    + `?$filter=customer/tenantId eq '${id}'&$top=50`, signal);
+  if (filtre.ok && Array.isArray(filtre.data?.value)) {
+    TP_GRAPH.dernierGdap = filtre.data;
+    /* Le filtre a répondu, mais rien ne garantit qu'il a filtré : on revérifie
+       le tenant sur chaque ligne, comme partout ailleurs dans ce fichier. */
+    const miennes = filtre.data.value.filter(r => !r.customer?.tenantId || gdapMemeTenant(r.customer.tenantId, id));
+    return gdapLit(gdapMeilleure(miennes));
+  }
+  if (filtre.status === 403) return null;   // portée absente : rien à afficher
+
+  /* 2. Repli : le service n'accepte pas ce filtre. On pagine et on cherche,
+        borné, parce qu'une relation introuvable ne justifie pas de rapatrier
+        tout le parc. */
+  let url = '/tenantRelationships/delegatedAdminRelationships?$top=200';
+  const trouvees = [];
+  for (let page = 0; page < TP_GDAP_PAGES && url; page++) {
+    if (signal?.aborted) return null;
+    const r = await graphGet(url, signal);
+    if (!r.ok || !Array.isArray(r.data?.value)) return null;
+    TP_GRAPH.dernierGdap = r.data;
+    r.data.value.forEach(rel => {
+      if (gdapMemeTenant(rel.customer?.tenantId, id)) trouvees.push(rel);
+    });
+    if (trouvees.length) break;   // inutile de continuer, on a ce qu'on cherche
+    const suivant = r.data['@odata.nextLink'];
+    url = suivant ? suivant.replace(TP_GRAPH_BASE, '') : null;
+  }
+  return gdapLit(gdapMeilleure(trouvees));
+}
+
+/* Dernière réponse brute, pour relever la forme réelle. Même usage que
+   graphDumpAppareil() : les noms de propriétés viennent de la documentation
+   Graph, pas d'une réponse observée. */
+function graphDumpGdap() { return TP_GRAPH.dernierGdap || null; }
+
 /* ── Recherche d'utilisateur sur tout le parc ────────────────────────────────
    Repose sur `managedTenantOperations`, moteur de diffusion de Lighthouse : on
    lui confie une requête Graph modèle, il l'exécute **côté serveur** dans
@@ -1052,13 +1168,16 @@ async function checkGraph(domain, tenantIdConnu) {
   try {
     const tenant  = await graphFindTenant(domain, ctrl.signal);
     const cible   = tenant?.tenantId || tenantIdConnu;
-    /* MFA et posture visent le même tenant et ne dépendent pas l'un de l'autre. */
-    const [mfa, posture] = await Promise.all([
+    /* MFA, posture et GDAP visent le même tenant et ne dépendent pas les uns
+       des autres : en série, l'analyse coûterait la somme des latences pour un
+       résultat identique. */
+    const [mfa, posture, gdap] = await Promise.all([
       checkMfa(cible, ctrl.signal),
-      checkPosture(cible, ctrl.signal)
+      checkPosture(cible, ctrl.signal),
+      checkGdap(cible, ctrl.signal)
     ]);
-    if (!tenant && !mfa && !posture) return null;
-    return { tenant, mfa, posture };
+    if (!tenant && !mfa && !posture && !gdap) return null;
+    return { tenant, mfa, posture, gdap };
   } catch {
     return null;
   } finally {

@@ -1786,6 +1786,88 @@ function resolveTagMeta(type) {
 /* Interroge l'API et (re)dessine les badges d'un hero pour un tenant donné.
    zoneEl peut être fourni directement (cas du rendu initial où le hero n'est
    pas encore inséré dans le document → querySelector ne le trouverait pas). */
+/* ── Pastille GDAP vive ──────────────────────────────────────────────────────
+   Lue depuis Graph à chaque analyse, jamais écrite dans la table des tags. La
+   raison tient en une phrase : une relation GDAP a une date de fin, un tag
+   n'en a pas. Figée, la mention continuerait d'affirmer « GDAP actif » après
+   l'expiration, et quelqu'un la lirait avant de tenter une intervention.
+
+   D'où l'apparence : elle est posée parmi les badges mais se distingue d'eux,
+   parce qu'elle n'obéit pas aux mêmes règles. Un badge de tag se propose, se
+   valide et se retire ; celle-ci n'a ni bouton ni menu, elle constate.
+
+   Elle porte l'échéance, qui est le vrai apport : une délégation qui expire
+   dans trois semaines est ce qu'un MSP veut voir remonter, et rien d'autre ne
+   le lui dit.                                                                */
+
+function gdapDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d) ? null : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function makeGdapBadge(g) {
+  const b = document.createElement('span');
+  /* Trois états, trois lectures : en cours, qui expire bientôt, ou périmée. */
+  const ton = g.perime ? 'perime' : (g.imminent ? 'imminent' : (g.actif ? 'actif' : 'inactif'));
+  b.className = 'hero-badge hero-badge-gdap ' + ton;
+
+  const txt = document.createElement('span');
+  txt.textContent = g.perime ? 'GDAP expiré'
+                  : g.actif  ? 'GDAP actif'
+                  : 'GDAP ' + (g.statut || 'inconnu');
+  b.appendChild(txt);
+
+  if (g.jours != null && !g.perime && g.imminent) {
+    const j = document.createElement('span');
+    j.className = 'hero-badge-gdap-j';
+    j.textContent = g.jours === 0 ? "aujourd'hui" : g.jours + ' j';
+    b.appendChild(j);
+  }
+
+  /* Le détail complet en infobulle : l'échéance intéresse tout le monde, les
+     rôles seulement quand on cherche pourquoi une action échoue. */
+  const lignes = ['Relation GDAP lue en direct dans Microsoft Graph.'];
+  if (g.nom)   lignes.push('Relation : ' + g.nom);
+  if (g.statut) lignes.push('Statut : ' + g.statut);
+  const fin = gdapDate(g.finLe);
+  if (fin) lignes.push(g.perime ? 'Expirée le ' + fin : 'Expire le ' + fin
+    + (g.jours != null ? ' (' + g.jours + ' j)' : ''));
+  if (g.roles != null) lignes.push(g.roles + ' rôle(s) délégué(s)');
+  lignes.push('Jamais enregistrée : cette mention reflète toujours l’instant.');
+  b.title = lignes.join('\n');
+  b.setAttribute('aria-label', lignes.join('. '));
+  return b;
+}
+
+/* Contradiction entre le tag enregistré et la relation réelle. On ne corrige
+   rien tout seul : le tag relève de la modération, pas d'une lecture Graph.
+   On le signale, ce qui suffit à ce qu'un modérateur aille voir. */
+function makeGdapContradiction(g, tags) {
+  /* Sans lecture Graph, aucune contradiction ne peut être affirmée. */
+  if (!g) return null;
+  const pose = new Set((tags || []).map(t => t.type));
+  const reelActif = g.actif && !g.perime;
+
+  /* Deux cas, et deux seulement : le tag dit oui et Graph dit non, ou
+     l'inverse. Tout le reste est cohérent, ou muet. */
+  const desaccord = (pose.has('gdap_actif') && !reelActif)
+                 || (pose.has('gdap_non')   &&  reelActif);
+  if (!desaccord) return null;
+
+  const b = document.createElement('span');
+  b.className = 'hero-badge hero-badge-gdap-alerte';
+  b.appendChild(badgeIcon('assets/warning.png'));
+  const t = document.createElement('span');
+  t.textContent = 'Tag GDAP à revoir';
+  b.appendChild(t);
+  b.title = pose.has('gdap_actif')
+    ? 'Le tag « GDAP actif » est posé, mais aucune relation GDAP active ne remonte de Graph.'
+    : "Le tag « GDAP : non » est posé, alors qu’une relation GDAP active remonte de Graph.";
+  b.setAttribute('aria-label', b.title);
+  return b;
+}
+
 async function refreshHeroTags(tenantId, domain, zoneEl) {
   const zone = zoneEl || document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(tenantId) : tenantId) + '"]');
   if (!zone) return;
@@ -1842,6 +1924,14 @@ async function refreshHeroTags(tenantId, domain, zoneEl) {
   if (Array.isArray(data.removalCooldowns)) {
     data.removalCooldowns.forEach(c => { removalCooldown[c.type] = c.until; });
   }
+
+  // ── Relation GDAP, lue en direct et jamais enregistrée ──
+  // Posée avant les tags validés : c'est un fait vérifiable, les tags sont des
+  // jugements. L'absence de lecture Graph n'affiche rien, jamais un « non ».
+  const gdapVif = currentState.graph?.gdap || null;
+  if (gdapVif) badges.appendChild(makeGdapBadge(gdapVif));
+  const contra = makeGdapContradiction(gdapVif, data.approvedTags);
+  if (contra) badges.appendChild(contra);
 
   // ── Badges validés (plusieurs possibles) ──
   if (Array.isArray(data.approvedTags)) {

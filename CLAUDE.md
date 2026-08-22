@@ -244,6 +244,28 @@ totale du fichier.
 > acceptés. **Les rôles GDAP suffisent, seule la portée Graph manque.**
 
 > [!IMPORTANT]
+> **La relation GDAP se lit en direct, elle ne se tague pas.** `checkGdap()` interroge
+> `tenantRelationships/delegatedAdminRelationships` à chaque analyse et affiche une pastille
+> dans le héro. Elle n'est **jamais** écrite dans la table `Classifications`, et c'est
+> délibéré : une relation GDAP a une date de fin, un tag n'en a pas. Un `gdap_actif` écrit
+> une fois continuerait de l'affirmer des mois après l'expiration, et quelqu'un le lirait
+> avant de tenter une intervention. `direct` et `indirect` n'ont pas ce défaut, ils décrivent
+> une relation commerciale stable relevant d'un jugement humain : c'est pour eux que la table
+> existe. Ne pas « simplifier » en automatisant la pose du tag.
+>
+> Les tags `gdap_actif` / `gdap_non` restent en place et gérés par la modération. Quand ils
+> contredisent la lecture Graph, une pastille « Tag GDAP à revoir » le signale sans rien
+> corriger : la table reste à la main des modérateurs.
+>
+> Deux chemins dans `checkGdap()`, parce qu'il n'est pas vérifié que le service accepte un
+> filtre sur le tenant client : `$filter=customer/tenantId eq '<guid>'` d'abord, puis un
+> repli paginé et **borné** (six pages), une relation introuvable ne justifiant pas de
+> rapatrier tout le parc. Comme partout ailleurs dans ce fichier, le tenant est revérifié
+> ligne par ligne : un filtre qui répond n'est pas un filtre qui filtre. `graphDumpGdap()`
+> donne la dernière réponse brute — les noms de propriétés viennent de la documentation
+> Graph, pas d'une réponse observée.
+
+> [!IMPORTANT]
 > **Recherche d'utilisateur sur tout le parc : `managedTenantOperations`.** Relevé par HAR
 > du portail le 2026-08-21. C'est un **moteur de diffusion générique** : on lui confie une
 > requête Graph modèle, il l'exécute côté serveur dans chaque tenant géré et agrège les
