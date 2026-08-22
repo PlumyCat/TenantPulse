@@ -6196,6 +6196,25 @@ function addListeAppareils(b, a) {
   b.appendChild(bloc);
 }
 
+/* Volet santé du rapport exporté. Extrait ici parce qu'il était écrit deux fois
+   à l'identique, et surtout parce qu'il lisait `currentState.health` sans le
+   vérifier : quand l'analyse DNS échoue — filtrage DoH sur le poste, cas
+   courant en entreprise — checkHealth ne renseigne rien et l'export levait
+   « Cannot read properties of null (reading 'score') ». L'analyse complète
+   s'arrêtait alors sur une erreur brute, alors que tout le reste avait abouti.
+   Une santé absente vaut `null` dans le rapport : c'est une rubrique en moins,
+   pas une analyse perdue. */
+function rapportSante() {
+  const h = currentState.health;
+  if (!h) return null;
+  const lot = l => (l || []).map(c => ({ type: c.t, title: c.title, desc: c.desc }));
+  return {
+    score: h.score, bonus: h.bonus, dmarcIsQuarantine: h.dmarcIsQuarantine,
+    checks: lot(h.checks), m365: lot(h.m365),
+    dkim: { selector1: h.hasSel1, selector2: h.hasSel2, allResults: h.dkimResults }
+  };
+}
+
 /* ── Panneau Posture : bande critique, carrousel de tuiles, detail en dessous ─
    Le panneau montrait huit rubriques dépliées en permanence, soit une colonne
    de chiffres qu'il fallait parcourir pour trouver celui qu'on cherchait. Il
@@ -6291,9 +6310,24 @@ function carrouselPosture() {
     t.def.remplir(corps);
     detail.appendChild(corps);
     detail.hidden = false;
-    /* La tuile choisie peut etre hors champ quand on arrive par la bande
-       critique : on la ramene, sans deplacer la page. */
-    t.element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    /* La tuile choisie peut être hors champ quand on arrive par la bande
+       critique : on la ramène. À la main et non par scrollIntoView, qui agit
+       aussi sur l'axe vertical : il faisait remonter le panneau et emportait
+       la bande critique hors de vue dès que le détail était haut. */
+    ramenerDansLaPiste(t.element);
+  };
+
+  /* Défilement horizontal seul. On ne bouge que si la tuile dépasse d'un bord,
+     et on la pose à ce bord plutôt qu'au centre : recentrer ferait bouger la
+     piste à chaque clic, y compris quand la tuile était déjà lisible. */
+  const ramenerDansLaPiste = el => {
+    const z = zone.getBoundingClientRect(), r = el.getBoundingClientRect();
+    const marge = 8;
+    if (r.left < z.left + marge) {
+      zone.scrollBy({ left: r.left - z.left - marge, behavior: 'smooth' });
+    } else if (r.right > z.right - marge) {
+      zone.scrollBy({ left: r.right - z.right + marge, behavior: 'smooth' });
+    }
   };
 
   const fermer = () => {
@@ -6367,8 +6401,6 @@ function bandeCritique(defs, carrousel) {
 
 function buildPosturePanel(p, mfa) {
   return b => {
-    addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
-
     /* Chaque rubrique se décrit avant d'être construite : la bande de valeurs
        critiques a besoin des chiffres de tête, et les tuiles du reste. Décrire
        d'abord évite de parcourir deux fois la même donnée avec deux règles de
@@ -6566,8 +6598,11 @@ function buildPosturePanel(p, mfa) {
     /* Le débordement ne se connaît qu'une fois la piste dans le document. */
     requestAnimationFrame(car.syncFleches);
 
-    /* Le rapport ferme le panneau : on lit, puis on agit. */
+    /* Le rapport ferme le panneau : on lit, puis on agit. Le lien vers la fiche
+       Lighthouse le suit, pour la même raison : il quitte l'application, il n'a
+       rien à faire avant ce qu'on est venu lire. */
     b.appendChild(buildBoutonRapport(p, mfa));
+    addLienLighthouse(b, 'Ouvrir la fiche de ce client dans Lighthouse', null);
 
     const note = document.createElement('div'); note.className = 'panel-section-note'; note.style.paddingTop = '10px';
     note.textContent = "Lighthouse recalcule ces chiffres une fois par jour.";
