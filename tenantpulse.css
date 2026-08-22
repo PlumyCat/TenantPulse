@@ -1131,7 +1131,17 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
    ferait alors doubler le trait du cadre en fin de rangee. Le fond du
    conteneur transparait dans une gouttiere d'un pixel, ce qui donne un
    separateur juste partout, y compris entre deux rangees. */
-.posture-critiques{display:flex;flex-wrap:wrap;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;margin-bottom:2px}
+/* Collee en haut du panneau : elle porte les chiffres qu'on vient chercher et
+   commande le carrousel, or elle sortait du champ des qu'on descendait lire une
+   liste d'appareils. J'avais d'abord refuse de la figer, au motif qu'elle
+   mangerait la hauteur utile ; a 47px sur une rangee, l'argument ne tient pas.
+
+   La premiere ombre n'est pas un ornement : elle peint 14px de la couleur du
+   panneau au-dessus de la bande, pour masquer le contenu qui defilerait sinon
+   dans la marge haute, situee a l'interieur de la zone de defilement. */
+.posture-critiques{position:sticky;top:0;z-index:4;
+  box-shadow:0 -14px 0 var(--surface),0 6px 12px -9px rgba(0,0,0,.4);
+  display:flex;flex-wrap:wrap;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;margin-bottom:2px}
 .posture-crit{
   flex:1 1 108px;min-width:0;display:flex;flex-direction:column;gap:1px;
   padding:8px 11px 7px;background:var(--row);border:none;
