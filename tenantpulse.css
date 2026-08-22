@@ -1202,9 +1202,13 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
   display:inline-flex;align-items:center;justify-content:center;width:34px;height:13px;
   border:1px solid var(--verre-bord);border-radius:var(--r-pill);background:var(--verre-2);
   color:var(--muted);font-size:9px;font-weight:700;line-height:1;
-  transition:transform .2s,color .15s,background .15s}
+  transition:color .15s,background .15s}
 .posture-tuile:hover .posture-tuile-chevron{color:var(--text);background:var(--verre-1)}
-.posture-tuile.active .posture-tuile-chevron{transform:translateX(-50%) rotate(180deg);color:var(--text)}
+.posture-tuile.active .posture-tuile-chevron{color:var(--text)}
+/* Seul le glyphe pivote. La rotation portait sur la pastille, qui basculait
+   donc sur elle-meme : un ovale de 34px qui fait un demi-tour se voit. */
+.posture-tuile-chevron-glyphe{display:block;line-height:1;transition:transform .2s}
+.posture-tuile.active .posture-tuile-chevron-glyphe{transform:rotate(180deg)}
 
 /* Fleches de defilement. Masquees quand il n'y a rien a atteindre : une fleche
    inerte invite a un clic sans effet. */

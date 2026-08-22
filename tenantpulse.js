@@ -6356,8 +6356,14 @@ function carrouselPosture() {
        une tuile sans sous-valeur serait plus courte que ses voisines. */
     const sv = document.createElement('span'); sv.className = 'posture-tuile-sousval';
     sv.textContent = def.sousVal || '';
+    /* Le glyphe vit dans son propre element : la rotation portait sur la
+       pastille entiere, qui basculait sur elle-meme a chaque ouverture. Seul
+       le triangle doit tourner, le contenant reste en place. */
     const chev = document.createElement('span'); chev.className = 'posture-tuile-chevron';
-    chev.textContent = '▾'; chev.setAttribute('aria-hidden', 'true');
+    chev.setAttribute('aria-hidden', 'true');
+    const chevG = document.createElement('span'); chevG.className = 'posture-tuile-chevron-glyphe';
+    chevG.textContent = '▾';
+    chev.appendChild(chevG);
 
     t.appendChild(titre); t.appendChild(val); t.appendChild(sv); t.appendChild(chev);
     t.addEventListener('click', () => ouvrir(def.id));
