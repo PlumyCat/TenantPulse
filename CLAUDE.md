@@ -187,7 +187,8 @@ totale du fichier.
 > | Entité | Portée supplémentaire |
 > |---|---|
 > | `credentialUserRegistrationsSummaries` (MFA) | `Reports.Read.All` |
-> | `managedDeviceCompliances`, `windowsDeviceMalwareStates` | `DeviceManagementManagedDevices.Read.All` |
+> | `managedDeviceCompliances` | `DeviceManagementManagedDevices.Read.All` (vérifié : répond 200 depuis le 2026-08-21) |
+> | `windowsDeviceMalwareStates` | **inconnue.** Le bundle du portail citait `DeviceManagementManagedDevices.Read.All`, démenti par l'essai : l'entité répond 403 alors que la portée est accordée et présente dans le jeton. Ne pas s'y fier |
 > | `conditionalAccessPolicyCoverages` | `Policy.Read.All` |
 > | `managedTenantSecureScores`, `tenantExposureSummaries`, `managementTemplateCollectionTenantSummaries`, `tenantsDetailedInformation`, `managedTenantAdoptionReports`, `managedTenantAlerts`, `tenants`, `myRoles`, `auditEvents` | aucune |
 >

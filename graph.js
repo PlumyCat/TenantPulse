@@ -558,7 +558,8 @@ async function checkMfa(tenantId, signal) {
 
      credentialUserRegistrationsSummaries  →  Reports.Read.All
      managedDeviceCompliances              →  DeviceManagementManagedDevices.Read.All
-     windowsDeviceMalwareStates            →  DeviceManagementManagedDevices.Read.All
+     windowsDeviceMalwareStates            →  inconnue : le bundle citait la meme
+       portee, l'essai du 2026-08-22 la dement (403 alors qu'elle est accordee)
      conditionalAccessPolicyCoverages      →  Policy.Read.All
 
    D'où le parti pris de cette section : **chaque jeu est indépendant et
