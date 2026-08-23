@@ -1139,7 +1139,14 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
    La premiere ombre n'est pas un ornement : elle peint 14px de la couleur du
    panneau au-dessus de la bande, pour masquer le contenu qui defilerait sinon
    dans la marge haute, situee a l'interieur de la zone de defilement. */
-.posture-critiques{position:sticky;top:0;z-index:4;
+/* `flex-shrink:0` n'est pas une precaution : le panneau est une colonne flex,
+   et `overflow:hidden` ci-dessous ramene la taille minimale automatique de la
+   bande a zero. Des que le contenu deborde — a l'ouverture d'un detail, une
+   liste d'appareils suffit — l'algorithme flex ecrasait donc la bande a la
+   hauteur de ses seules bordures, deux pixels, et elle disparaissait. Les
+   autres blocs du panneau ne debordent pas d'eux-memes : leur hauteur
+   min-content les protege, pas la bande. */
+.posture-critiques{position:sticky;top:0;z-index:4;flex-shrink:0;
   box-shadow:0 -14px 0 var(--surface),0 6px 12px -9px rgba(0,0,0,.4);
   display:flex;flex-wrap:wrap;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;margin-bottom:2px}
 .posture-crit{
