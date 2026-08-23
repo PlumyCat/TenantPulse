@@ -6275,6 +6275,11 @@ function carrouselPosture() {
     const cache = debordement <= 2;
     gauche.hidden = cache || zone.scrollLeft <= 2;
     droite.hidden = cache || zone.scrollLeft >= debordement - 2;
+    /* Le fondu des bords suit exactement les fleches : une tuile n'est coupee
+       que du cote ou il reste quelque chose a atteindre. Meme condition, donc
+       meme calcul, plutot qu'un second seuil qui finirait par diverger. */
+    bloc.classList.toggle('fondu-g', !gauche.hidden);
+    bloc.classList.toggle('fondu-d', !droite.hidden);
   };
   zone.addEventListener('scroll', syncFleches, { passive: true });
   /* La largeur du panneau change a la poignee : le debordement aussi. */

@@ -1170,7 +1170,27 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
    en dessous. Une tuile ouverte reste ainsi a sa place, ce qui distingue ce
    modele du depliage en accordeon ou elle grandissait et poussait les autres :
    on garde la vue d'ensemble en changeant de rubrique. */
-.posture-carrousel{position:relative;display:flex;align-items:stretch;gap:4px}
+.posture-carrousel{--fleche-w:20px;--fleche-gap:4px;--fondu-w:34px;
+  position:relative;display:flex;align-items:stretch;gap:var(--fleche-gap)}
+/* Bords en fondu plutot qu'une coupe franche. Une tuile tranchee net au bord de
+   la piste se lit comme un defaut d'affichage ; la meme tuile qui s'efface dit
+   qu'il y a une suite, et c'est la fleche d'a cote qui dit comment y aller.
+
+   Un degrade pose en surimpression, et non un masque sur la zone : un masque en
+   ferait une racine de fond, les tuiles y perdraient leur backdrop-filter et
+   changeraient d'aspect des que le fondu s'allume. Le degrade part de la
+   couleur du panneau, qui est bien ce qu'il y a derriere la piste.
+
+   Le decalage lateral vaut la fleche plus la gouttiere : le fondu n'existe que
+   du cote ou la fleche est affichee, elle occupe donc toujours cette place. */
+.posture-carrousel::before,.posture-carrousel::after{
+  content:'';position:absolute;top:0;bottom:0;width:var(--fondu-w);z-index:3;pointer-events:none;display:none}
+.posture-carrousel::before{left:calc(var(--fleche-w) + var(--fleche-gap));
+  background:linear-gradient(90deg,var(--surface) 0%,transparent 100%)}
+.posture-carrousel::after{right:calc(var(--fleche-w) + var(--fleche-gap));
+  background:linear-gradient(270deg,var(--surface) 0%,transparent 100%)}
+.posture-carrousel.fondu-g::before{display:block}
+.posture-carrousel.fondu-d::after{display:block}
 .posture-piste-zone{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-snap-type:x proximity;overscroll-behavior-x:contain}
 .posture-piste-zone::-webkit-scrollbar{display:none}
 .posture-piste{display:flex;gap:8px;padding:1px}
@@ -1229,7 +1249,7 @@ html:not([data-theme="dark"]) .hero-admin-toggle{
 
 /* Fleches de defilement. Masquees quand il n'y a rien a atteindre : une fleche
    inerte invite a un clic sans effet. */
-.posture-fleche{flex:0 0 20px;align-self:stretch;display:flex;align-items:center;justify-content:center;
+.posture-fleche{flex:0 0 var(--fleche-w);align-self:stretch;display:flex;align-items:center;justify-content:center;
   background:var(--verre-2);border:1px solid var(--verre-bord);border-radius:var(--r-sm);
   color:var(--soft);font-family:var(--font);font-size:15px;font-weight:700;line-height:1;cursor:pointer;
   transition:background .15s,color .15s}
