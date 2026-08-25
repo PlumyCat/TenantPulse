@@ -1051,6 +1051,11 @@ function graphDumpGdap() { return TP_GRAPH.dernierGdap || null; }
 
 const TP_RECHERCHE_PLAFOND   = 200;   // lignes agrégées, tous termes confondus
 const TP_RECHERCHE_PAR_TENANT = 5;    // lignes par tenant, comme le portail
+/* Chaque terme pese environ 200 caracteres de clause `$search`, les sept champs
+   interroges etant repetes pour chacun. Au-dela d'une vingtaine, la clause
+   devient assez longue pour que le service la refuse : mieux vaut le dire et
+   decouper que d'envoyer une requete qui echouera. */
+const TP_RECHERCHE_TERMES_MAX = 20;
 const TP_RECHERCHE_SONDAGES  = 40;    // garde-fou : ~20 s à 500 ms
 const TP_RECHERCHE_CADENCE   = 500;
 
@@ -1075,14 +1080,28 @@ function decoupeTermes(brut) {
    `onProgres({tenantsOk, tenantsKo, lignes})` est appelé à chaque sondage.
    Retourne {lignes, tenantsOk, tenantsKo, tronque, termes} ou null. */
 async function chercheUtilisateurs(termes, signal, onProgres) {
-  const propres = (termes || []).map(nettoieTerme).filter(t => t.length >= 2);
-  if (!propres.length) return null;
+  const tous = (termes || []).map(nettoieTerme).filter(t => t.length >= 2);
+  if (!tous.length) return null;
+  /* Le surplus est signale, pas ignore en silence : une recherche qui ne porte
+     que sur les vingt premiers noms d'une liste de cinquante rendrait une
+     absence de resultat pour trente personnes qu'on n'a jamais cherchees. */
+  const propres = tous.slice(0, TP_RECHERCHE_TERMES_MAX);
+  const ignores = tous.length - propres.length;
 
   /* `$search` accepte des OR : plusieurs utilisateurs tiennent dans une seule
      opération, ce n'est pas une opération par ligne. On interroge à la fois le
      champ par défaut et displayName, comme le portail. */
+  /* Champs interroges. Le portail Lighthouse se contente du terme nu et de
+     `displayName`, ce qui suffit pour chercher un nom mais pas une adresse :
+     chercher « jean.dupont » sans le domaine ne trouvait rien.
+
+     `mailNickname` est le champ decisif — c'est exactement la partie locale
+     d'une adresse. `userPrincipalName` et `mail` rattrapent les tenants ou
+     l'alias differe de l'adresse, et le terme nu reste en tete parce qu'il
+     couvre les champs par defaut sans qu'on ait a les nommer. */
+  const CHAMPS = ['displayName', 'mailNickname', 'userPrincipalName', 'mail', 'givenName', 'surname'];
   const clause = propres
-    .map(t => `"${t}" OR "displayName:${t}"`)
+    .map(t => [`"${t}"`, ...CHAMPS.map(c => `"${c}:${t}"`)].join(' OR '))
     .join(' OR ');
   const gabarit = `@sys.normalize([ConsistencyLevel: eventual GET /v1.0/users`
                 + `?$top=${TP_RECHERCHE_PAR_TENANT}&$search=${clause}])`;
@@ -1108,7 +1127,7 @@ async function chercheUtilisateurs(termes, signal, onProgres) {
                              signal, { base: TP_GRAPH_BETA });
     if (!r.ok) return { erreur: r.status || 'réseau', lignes: [] };
     TP_GRAPH.derniereRecherche = r;
-    vu = lisRecherche(r.data, propres);
+    vu = { ...lisRecherche(r.data, propres), ignores };
     if (onProgres) onProgres(vu);
     if (vu.termine) return vu;
     await new Promise(res => setTimeout(res, TP_RECHERCHE_CADENCE));

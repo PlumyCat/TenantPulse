@@ -5555,6 +5555,12 @@ function ouvreResultatsUtilisateur(res) {
                     + 'Un compte peut donc exister sans figurer ici.';
       b.appendChild(a);
     }
+    if (res.ignores) {
+      const a = document.createElement('div'); a.className = 'dev-avis';
+      a.textContent = res.ignores + ' terme(s) au-delà des ' + TP_RECHERCHE_TERMES_MAX
+                    + " premiers n'ont pas été cherchés. Relancez avec le reste de la liste.";
+      b.appendChild(a);
+    }
     if (res.plafonne || res.tronque) {
       const a = document.createElement('div'); a.className = 'dev-avis';
       a.textContent = res.plafonne
@@ -5565,7 +5571,9 @@ function ouvreResultatsUtilisateur(res) {
 
     if (!res.lignes.length) {
       const v = document.createElement('div'); v.className = 'dev-vide';
-      v.textContent = 'Aucun compte ne correspond dans les tenants interrogés.';
+      v.textContent = 'Aucun compte ne correspond dans les tenants interrogés. '
+        + 'La recherche porte sur le nom, le prénom, l’alias, l’adresse et l’UPN, '
+        + 'et compare des débuts de mots : « dupont » trouve « jean.dupont », « upont » non.';
       b.appendChild(v);
       return;
     }
