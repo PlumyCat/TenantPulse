@@ -42,9 +42,8 @@ const TP_GRAPH_BASE      = 'https://graph.microsoft.com/v1.0';
    echouer l'echange, et graphClearSession() coupe alors la session de tous les
    utilisateurs connectes, y compris ce qui fonctionnait deja.
 
-   Restent a consentir, et donc absentes ci-dessous :
-     Reports.Read.All   -> couverture MFA (credentialUserRegistrationsSummaries)
-     User.Read.All      -> recherche d'utilisateur sur tout le parc            */
+   Etat au 2026-08-22 : les six portees ci-dessous sont accordees. Aucune n'est
+   en attente, donc aucune ne doit etre ajoutee sans un nouveau consentement.  */
 const TP_GRAPH_SCOPES = [
   'https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All',
   'https://graph.microsoft.com/ManagedTenants.Read.All',
@@ -55,6 +54,11 @@ const TP_GRAPH_SCOPES = [
      GDAP vive du hero. Une portee accordee dans Entra ne sert a rien tant
      qu'elle n'est pas demandee ici : le jeton ne porte que cette liste. */
   'https://graph.microsoft.com/DelegatedAdminRelationship.Read.All',
+  /* Accordees le 2026-08-22. Reports.Read.All ouvre la couverture MFA
+     (credentialUserRegistrationsSummaries), User.Read.All la recherche
+     d'utilisateur sur tout le parc via managedTenantOperations. */
+  'https://graph.microsoft.com/Reports.Read.All',
+  'https://graph.microsoft.com/User.Read.All',
   'offline_access', 'openid', 'profile'
 ];
 

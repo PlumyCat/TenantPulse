@@ -192,13 +192,16 @@ totale du fichier.
 > | `conditionalAccessPolicyCoverages` | `Policy.Read.All` |
 > | `managedTenantSecureScores`, `tenantExposureSummaries`, `managementTemplateCollectionTenantSummaries`, `tenantsDetailedInformation`, `managedTenantAdoptionReports`, `managedTenantAlerts`, `tenants`, `myRoles`, `auditEvents` | aucune |
 >
-> **État des consentements au 2026-08-21** : `CrossTenantInformation.ReadBasic.All`,
-> `ManagedTenants.Read.All`, `DelegatedAdminRelationship.Read.All` et
-> `DeviceManagementManagedDevices.Read.All` sont accordées. Restent à consentir
-> `Reports.Read.All` (couverture MFA) et `User.Read.All` (recherche d'utilisateur).
+> **État des consentements au 2026-08-22** : les six portées de `TP_GRAPH_SCOPES` sont
+> accordées — `CrossTenantInformation.ReadBasic.All`, `ManagedTenants.Read.All`,
+> `DeviceManagementManagedDevices.Read.All`, `DelegatedAdminRelationship.Read.All`,
+> `Reports.Read.All` et `User.Read.All`. Aucune n'est en attente.
+>
 > `TP_GRAPH_SCOPES` ne doit lister que les portées **déjà consenties** : la liste part
 > entière à chaque renouvellement de jeton, une portée non consentie fait échouer l'échange,
 > et `graphClearSession()` coupe alors la session de tous les utilisateurs connectés.
+> Corollaire appris à l'usage : une portée accordée dans Entra ne sert à rien tant qu'elle
+> n'est pas ajoutée ici, le jeton ne portant que cette liste.
 >
 > Contrôle négatif vérifié : les entités de la dernière ligne sont exactement celles qui
 > répondent 200 avec les portées actuelles. **Ne pas demander `ManagedTenants.ReadWrite.All`** :
