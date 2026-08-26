@@ -887,9 +887,19 @@ function bindEvents() {
     toggleCollapsible('privacyBody', 'privacyArrow');
   });
   document.getElementById('btnPanelClose').addEventListener('click', closePanel);
-  /* Assistant Copilot. Les deux nœuds existent toujours dans le DOM, seul le bouton
-     est masqué quand aucune URL n'est servie : pas de garde nécessaire ici. */
-  document.getElementById('copilotToggle').addEventListener('click', () => toggleCopilot());
+  /* Assistant Copilot. Les nœuds existent toujours dans le DOM, seule la zone est
+     masquée quand aucune URL n'est servie : pas de garde nécessaire ici.
+     Bulle repliée, le clic la ramène au lieu d'ouvrir le panneau : ouvrir une
+     fenêtre depuis un bouton à moitié hors écran serait déroutant. */
+  document.getElementById('copilotToggle').addEventListener('click', () => {
+    if (copilotEstReplie()) { setCopilotReplie(false); return; }
+    toggleCopilot();
+  });
+  document.getElementById('copilotRetract').addEventListener('click', () => {
+    const replie = !copilotEstReplie();
+    if (replie) toggleCopilot(false);  // on ne replie pas la bulle en laissant le panneau ouvert
+    setCopilotReplie(replie);
+  });
   document.getElementById('copilotClose').addEventListener('click', () => toggleCopilot(false));
   document.addEventListener('keydown', e => {
     const panel = document.getElementById('copilotPanel');
@@ -1415,11 +1425,37 @@ function safeCopilotUrl(raw) {
   return ALLOWED_COPILOT_HOSTS.has(u.hostname) ? u.href : null;
 }
 
-/* Bouton visible seulement si le déploiement expose une URL valide. */
+/* État replié de la bulle. Persisté : une bulle qui se redéploie à chaque
+   rechargement de page annulerait l'intérêt du repli. */
+const COPILOT_REPLIE_KEY = 'tenantpulse_copilot_replie_v1';
+function copilotEstReplie() {
+  try { return localStorage.getItem(COPILOT_REPLIE_KEY) === '1'; } catch { return false; }
+}
+function setCopilotReplie(val) {
+  try {
+    if (val) localStorage.setItem(COPILOT_REPLIE_KEY, '1');
+    else localStorage.removeItem(COPILOT_REPLIE_KEY);
+  } catch {}
+  syncCopilotReplie();
+}
+function syncCopilotReplie() {
+  const zone = document.getElementById('copilotBulleZone');
+  const btn  = document.getElementById('copilotRetract');
+  if (!zone) return;
+  const replie = copilotEstReplie();
+  zone.classList.toggle('est-replie', replie);
+  if (btn) {
+    btn.title = replie ? "Déplier l'assistant" : "Replier l'assistant";
+    btn.setAttribute('aria-label', btn.title);
+  }
+}
+
+/* Bulle visible seulement si le déploiement expose une URL valide. */
 function syncCopilotUI() {
-  const btn = document.getElementById('copilotToggle');
-  if (btn) btn.hidden = !TP_COPILOT.url;
-  if (!TP_COPILOT.url) toggleCopilot(false);
+  const zone = document.getElementById('copilotBulleZone');
+  if (zone) zone.hidden = !TP_COPILOT.url;
+  if (!TP_COPILOT.url) { toggleCopilot(false); return; }
+  syncCopilotReplie();
 }
 
 /* Ouvre ou ferme le panneau. L'iframe ne reçoit son src qu'à la première
@@ -1429,13 +1465,14 @@ function syncCopilotUI() {
 function toggleCopilot(force) {
   const panel = document.getElementById('copilotPanel');
   const btn   = document.getElementById('copilotToggle');
+  const zone  = document.getElementById('copilotBulleZone');
   if (!panel || !btn) return;
 
   const ouvrir = typeof force === 'boolean' ? force : panel.hidden;
   if (ouvrir && !TP_COPILOT.url) return;
 
   panel.hidden = !ouvrir;
-  btn.classList.toggle('is-open', ouvrir);
+  if (zone) zone.classList.toggle('est-ouvert', ouvrir);
   btn.setAttribute('aria-expanded', String(ouvrir));
 
   if (ouvrir && !TP_COPILOT.chargee) {

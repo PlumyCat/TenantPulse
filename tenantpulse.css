@@ -2264,12 +2264,40 @@ select.admin-input{cursor:pointer;color-scheme:light}
    les superposer masquerait l'un ou l'autre.
    Le contenu de l'iframe est cross-origin : il ne suit pas le thème clair/sombre
    de l'application. Le cadre, lui, le suit, pour limiter la couture visible. */
-.topbar-copilot{display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:var(--text-xs);font-weight:600;letter-spacing:.01em;white-space:nowrap;line-height:1;color:#fff;padding:4px 11px;border-radius:var(--r-pill);background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);cursor:pointer;transition:background .18s,border-color .18s}
-.topbar-copilot:hover{background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.55)}
-.topbar-copilot.is-open{background:rgba(255,255,255,.34);border-color:rgba(255,255,255,.7)}
-.topbar-copilot:focus-visible{outline:2px solid rgba(255,255,255,.8);outline-offset:2px}
+/* La bulle. Fond violet plein : le logo est blanc, un fond clair le ferait
+   disparaître en thème clair. La zone porte le repli pour que languette et
+   bulle glissent ensemble. */
+.copilot-bulle-zone{position:fixed;right:18px;bottom:52px;z-index:1150;display:flex;align-items:center;gap:4px;transition:transform .28s cubic-bezier(.4,0,.2,1)}
+.copilot-bulle-zone[hidden]{display:none}
+.copilot-bulle{width:54px;height:54px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:50%;background:linear-gradient(145deg,#5B4FD6,#3F34A8);box-shadow:0 6px 20px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.14) inset;cursor:pointer;transition:transform .18s,box-shadow .18s}
+.copilot-bulle:hover{transform:scale(1.06);box-shadow:0 8px 26px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.22) inset}
+.copilot-bulle:active{transform:scale(.97)}
+.copilot-bulle:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.copilot-bulle-ico{width:28px;height:28px;object-fit:contain;pointer-events:none}
+.copilot-bulle-zone.est-ouvert .copilot-bulle{background:linear-gradient(145deg,#3F34A8,#2C2478)}
 
-.copilot-panel{position:fixed;right:16px;bottom:56px;z-index:1200;display:flex;flex-direction:column;width:min(390px,calc(100vw - 32px));height:min(560px,calc(100vh - 140px));border-radius:var(--r-lg,14px);overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 18px 50px rgba(0,0,0,.28);animation:tpRise .22s ease}
+/* Languette de repli. Discrète au repos, elle n'apparaît qu'au survol de la zone
+   ou au clavier : un second bouton permanent à côté de la bulle ferait doublon. */
+.copilot-retract{width:16px;height:38px;flex-shrink:0;padding:0;border:none;border-radius:8px 0 0 8px;background:var(--row);border:1px solid var(--border);border-right:none;color:var(--soft);font-family:var(--font);font-size:11px;line-height:1;cursor:pointer;opacity:0;transition:opacity .18s,color .15s}
+.copilot-retract::before{content:'\203A'}
+.copilot-bulle-zone:hover .copilot-retract,
+.copilot-bulle-zone:focus-within .copilot-retract{opacity:1}
+.copilot-retract:hover{color:var(--text)}
+.copilot-retract:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:2px}
+
+/* Repliée : la zone glisse à droite, seule une tranche de bulle dépasse.
+   La languette reste visible et pointe vers la gauche pour inviter au retour. */
+.copilot-bulle-zone.est-replie{transform:translateX(calc(100% - 20px))}
+.copilot-bulle-zone.est-replie .copilot-retract{opacity:1}
+.copilot-bulle-zone.est-replie .copilot-retract::before{content:'\2039'}
+.copilot-bulle-zone.est-replie .copilot-bulle:hover{transform:none}
+
+@media(prefers-reduced-motion:reduce){
+  .copilot-bulle-zone{transition:none}
+  .copilot-bulle:hover{transform:none}
+}
+
+.copilot-panel{position:fixed;right:16px;bottom:120px;z-index:1200;display:flex;flex-direction:column;width:min(390px,calc(100vw - 32px));height:min(560px,calc(100vh - 140px));border-radius:var(--r-lg,14px);overflow:hidden;background:var(--surface);border:1px solid var(--border);box-shadow:0 18px 50px rgba(0,0,0,.28);animation:tpRise .22s ease}
 .copilot-panel[hidden]{display:none}
 .copilot-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--row);border-bottom:1px solid var(--border);flex-shrink:0}
 .copilot-title{font-size:var(--text-sm);font-weight:700;color:var(--text)}
@@ -2282,6 +2310,11 @@ select.admin-input{cursor:pointer;color-scheme:light}
 @media(max-width:640px){
   /* Sur mobile le panneau prend l'écran : un widget de 390 px y serait illisible. */
   .copilot-panel{right:8px;left:8px;bottom:8px;width:auto;height:min(70vh,520px)}
+  .copilot-bulle-zone{right:12px;bottom:48px}
+  .copilot-bulle{width:48px;height:48px}
+  .copilot-bulle-ico{width:24px;height:24px}
+  /* Pas de survol au doigt : la languette doit rester visible en permanence. */
+  .copilot-retract{opacity:1}
 }
 
 /* ── Responsive ── */

@@ -224,14 +224,6 @@
             title="Se connecter à Microsoft Graph" hidden>
       <img src="assets/Microsoft.png" class="topbar-ext-icon" alt="" width="12" height="12">Connecter Graph
     </button>
-    <!-- Assistant Copilot — alimenté par syncCopilotUI().
-         Invisible tant que /api/me ne sert pas d'URL d'incorporation : la
-         fonctionnalité est optionnelle de bout en bout, comme Graph et l'extension. -->
-    <button class="topbar-copilot" id="copilotToggle" type="button"
-            title="Ouvrir l'assistant TenantPulse" aria-expanded="false"
-            aria-controls="copilotPanel" hidden>
-      <img src="assets/information.png" class="topbar-ext-icon icon-adaptive-inv" alt="" width="12" height="12">Assistant
-    </button>
     <button class="topbar-admin" id="btnOpenAdmin" type="button" title="Onglet administration" hidden>
       <span class="topbar-admin-label">Administration</span>
       <span class="admin-badge admin-badge-req" id="adminBadgeReq" title="Demandes en attente" hidden>0</span>
@@ -711,6 +703,22 @@
   <button class="tp-banner-recall" id="tpBannerRecall" type="button"
           aria-label="Revoir le message d'information masqué" title="Revoir le message masqué" hidden>i</button>
 </footer>
+
+<!-- Assistant Copilot — bulle flottante.
+     Alimentée par syncCopilotUI() : invisible tant que /api/me ne sert pas d'URL
+     d'incorporation, la fonctionnalité étant optionnelle de bout en bout.
+     Repliée, la bulle glisse hors de l'écran et ne laisse qu'une languette : elle
+     occupe le coin bas droit en permanence, il faut pouvoir s'en débarrasser sans
+     la perdre. Un clic sur la bulle repliée la ramène, il n'ouvre pas le panneau. -->
+<div class="copilot-bulle-zone" id="copilotBulleZone" hidden>
+  <button class="copilot-retract" id="copilotRetract" type="button"
+          title="Replier l'assistant" aria-label="Replier l'assistant"></button>
+  <button class="copilot-bulle" id="copilotToggle" type="button"
+          title="Ouvrir l'assistant TenantPulse" aria-label="Ouvrir l'assistant TenantPulse"
+          aria-expanded="false" aria-controls="copilotPanel">
+    <img src="assets/AI.png" class="copilot-bulle-ico" alt="">
+  </button>
+</div>
 
 <!-- Assistant Copilot — panneau flottant.
      L'iframe reste sans src tant que le panneau n'a pas été ouvert une première fois :
