@@ -5,6 +5,11 @@ name: Azure Static Web Apps CI/CD
 # Le jeton de déploiement est stocké dans le secret repo AZURE_STATIC_WEB_APPS_API_TOKEN.
 
 on:
+  # Déclenchement manuel : bouton « Run workflow » dans l'onglet Actions.
+  # Ajouté après un push qui a bien mis à jour la référence sans créer
+  # d'exécution — sans ce filet, un déclencheur automatique défaillant
+  # laisse le déploiement bloqué sans aucun recours depuis l'interface.
+  workflow_dispatch:
   push:
     branches:
       - main
