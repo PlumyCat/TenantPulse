@@ -887,24 +887,6 @@ function bindEvents() {
     toggleCollapsible('privacyBody', 'privacyArrow');
   });
   document.getElementById('btnPanelClose').addEventListener('click', closePanel);
-  /* Assistant Copilot. Les nœuds existent toujours dans le DOM, seule la zone est
-     masquée quand aucune URL n'est servie : pas de garde nécessaire ici.
-     Bulle repliée, le clic la ramène au lieu d'ouvrir le panneau : ouvrir une
-     fenêtre depuis un bouton à moitié hors écran serait déroutant. */
-  document.getElementById('copilotToggle').addEventListener('click', () => {
-    if (copilotEstReplie()) { setCopilotReplie(false); return; }
-    toggleCopilot();
-  });
-  document.getElementById('copilotRetract').addEventListener('click', () => {
-    const replie = !copilotEstReplie();
-    if (replie) toggleCopilot(false);  // on ne replie pas la bulle en laissant le panneau ouvert
-    setCopilotReplie(replie);
-  });
-  document.getElementById('copilotClose').addEventListener('click', () => toggleCopilot(false));
-  document.addEventListener('keydown', e => {
-    const panel = document.getElementById('copilotPanel');
-    if (e.key === 'Escape' && panel && !panel.hidden) toggleCopilot(false);
-  });
   document.getElementById('btnOpenProfiles').addEventListener('click', openProfilesModal);
   document.getElementById('btnProfilesClose').addEventListener('click', closeProfilesModal);
   document.addEventListener('click', e => {
@@ -1403,84 +1385,6 @@ function watchExtensionMarker() {
    champ et lance l'analyse rapide. Utilisé par l'extension de navigateur pour passer
    la main à l'app (analyse approfondie). Le fragment — et non un paramètre de requête —
    pour que la valeur ne parte jamais dans les journaux serveur. */
-// ══════════════════════════════════════════════════════════════════════════
-//  ASSISTANT COPILOT — panneau flottant, iframe chargée à la demande
-//  L'URL d'incorporation vient de /api/me (paramètre d'application
-//  COPILOT_EMBED_URL) et n'est jamais versionnée : elle porte l'identifiant
-//  d'environnement Power Platform, donc le GUID du tenant.
-//  La voie « canevas personnalisé » de Copilot Studio charge un script depuis
-//  un CDN Microsoft : elle est incompatible avec script-src 'self'. L'iframe
-//  ne touche que frame-src, d'où ce choix.
-// ══════════════════════════════════════════════════════════════════════════
-const TP_COPILOT = { url: null, chargee: false };
-
-/* Défense en profondeur, calquée sur safeStoreUrl() : une URL servie par l'API
-   reste une entrée externe, et frame-src ne doit jamais être franchie par une
-   valeur qu'on n'a pas validée soi-même. */
-const ALLOWED_COPILOT_HOSTS = new Set(['copilotstudio.microsoft.com']);
-function safeCopilotUrl(raw) {
-  if (!raw) return null;
-  let u; try { u = new URL(raw); } catch { return null; }
-  if (u.protocol !== 'https:') return null;
-  return ALLOWED_COPILOT_HOSTS.has(u.hostname) ? u.href : null;
-}
-
-/* État replié de la bulle. Persisté : une bulle qui se redéploie à chaque
-   rechargement de page annulerait l'intérêt du repli. */
-const COPILOT_REPLIE_KEY = 'tenantpulse_copilot_replie_v1';
-function copilotEstReplie() {
-  try { return localStorage.getItem(COPILOT_REPLIE_KEY) === '1'; } catch { return false; }
-}
-function setCopilotReplie(val) {
-  try {
-    if (val) localStorage.setItem(COPILOT_REPLIE_KEY, '1');
-    else localStorage.removeItem(COPILOT_REPLIE_KEY);
-  } catch {}
-  syncCopilotReplie();
-}
-function syncCopilotReplie() {
-  const zone = document.getElementById('copilotBulleZone');
-  const btn  = document.getElementById('copilotRetract');
-  if (!zone) return;
-  const replie = copilotEstReplie();
-  zone.classList.toggle('est-replie', replie);
-  if (btn) {
-    btn.title = replie ? "Déplier l'assistant" : "Replier l'assistant";
-    btn.setAttribute('aria-label', btn.title);
-  }
-}
-
-/* Bulle visible seulement si le déploiement expose une URL valide. */
-function syncCopilotUI() {
-  const zone = document.getElementById('copilotBulleZone');
-  if (zone) zone.hidden = !TP_COPILOT.url;
-  if (!TP_COPILOT.url) { toggleCopilot(false); return; }
-  syncCopilotReplie();
-}
-
-/* Ouvre ou ferme le panneau. L'iframe ne reçoit son src qu'à la première
-   ouverture — même patron que #messagerieFrame dans switchAppTab() : sans ça,
-   un service tiers serait sollicité à chaque chargement de l'application, pour
-   tout le monde, y compris ceux qui n'ouvriront jamais l'assistant. */
-function toggleCopilot(force) {
-  const panel = document.getElementById('copilotPanel');
-  const btn   = document.getElementById('copilotToggle');
-  const zone  = document.getElementById('copilotBulleZone');
-  if (!panel || !btn) return;
-
-  const ouvrir = typeof force === 'boolean' ? force : panel.hidden;
-  if (ouvrir && !TP_COPILOT.url) return;
-
-  panel.hidden = !ouvrir;
-  if (zone) zone.classList.toggle('est-ouvert', ouvrir);
-  btn.setAttribute('aria-expanded', String(ouvrir));
-
-  if (ouvrir && !TP_COPILOT.chargee) {
-    const frame = document.getElementById('copilotFrame');
-    if (frame) { frame.src = TP_COPILOT.url; TP_COPILOT.chargee = true; }
-  }
-}
-
 function applyHashQuery() {
   const m = (location.hash || '').match(/^#q=(.+)$/);
   if (!m) return;
@@ -1573,9 +1477,6 @@ async function initAuth() {
       // fiche versionnée, qui reste le repli quand il n'est pas renseigné.
       TP_EXTENSION.url     = data.extensionUrl     || TP_EXTENSION_STORE_URL;
       TP_EXTENSION.urlEdge = data.extensionUrlEdge || null;
-      /* Assistant Copilot : validé ici, pas au moment de poser le src. Une URL
-         refusée revient à une absence de fonctionnalité, pas à une erreur. */
-      TP_COPILOT.url = safeCopilotUrl(data.copilotUrl);
       TP_DNS_RELAY = data.dnsRelay === true;
       /* Droit d'accès à Graph, décidé par le serveur. Appelé uniquement quand
          /api/me a répondu : en local l'API est absente, et couper Graph sur une
@@ -1590,7 +1491,6 @@ async function initAuth() {
   /* Hors du try, et sans retour anticipé : le bouton d'installation s'appuie sur la
      fiche versionnée, il ne doit donc pas disparaître parce que /api/me est en erreur. */
   syncExtensionUI();
-  syncCopilotUI();
   syncDnsRelayUI();
   if (typeof syncGraphUI === 'function') syncGraphUI();
   applyAuthToUI();

@@ -6,11 +6,9 @@ const { isDnsRelayEnabled, isGraphAllowed } = require("../shared/config");
  * GET /api/me
  * Retourne l'email, le nom, le rôle de l'utilisateur connecté,
  * ainsi que le contactEmail (premier admin) pour le lien de rapport de bug,
- * extensionUrl, la fiche de l'extension navigateur, graphClientId,
- * l'inscription d'application de la connexion Microsoft Graph, et copilotUrl,
- * l'URL d'incorporation de l'assistant Copilot Studio.
- * Réponse : { email, name, role, blocked, contactEmail, extensionUrl, graphClientId,
- *             copilotUrl }
+ * extensionUrl, la fiche de l'extension navigateur, et graphClientId,
+ * l'inscription d'application de la connexion Microsoft Graph.
+ * Réponse : { email, name, role, blocked, contactEmail, extensionUrl, graphClientId }
  */
 module.exports = async function (context, req) {
   try {
@@ -61,12 +59,6 @@ module.exports = async function (context, req) {
     try { graphAccess = await isGraphAllowed(auth); } catch { /* défaut : refusé */ }
     const graphClientId = graphAccess ? (process.env.GRAPH_CLIENT_ID || null) : null;
 
-    /* URL d'incorporation de l'assistant Copilot Studio. Servie depuis un paramètre
-       d'application et jamais versionnée : elle porte l'identifiant d'environnement
-       Power Platform, qui contient le GUID du tenant. Les règles de confidentialité
-       du dépôt interdisent de l'écrire en clair, exactement comme GRAPH_CLIENT_ID.
-       Absente → le frontend n'affiche aucun bouton et ne charge aucune iframe. */
-    const copilotUrl = process.env.COPILOT_EMBED_URL || null;
 
     /* État du relais DNS, servi ici pour éviter un aller-retour de plus au démarrage :
        le frontend doit le connaître avant la première analyse, et il appelle déjà /api/me. */
@@ -86,7 +78,6 @@ module.exports = async function (context, req) {
         extensionUrlEdge: extensionUrlEdge,
         graphClientId:    graphClientId,
         graphAccess:      graphAccess,
-        copilotUrl:       copilotUrl,
         dnsRelay:         dnsRelay
       })
     };

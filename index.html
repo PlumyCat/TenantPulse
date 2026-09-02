@@ -49,7 +49,7 @@
   object-src 'none';
   base-uri 'self';
   form-action 'none';
-  frame-src 'self' https://copilotstudio.microsoft.com;
+  frame-src 'self';
 ">
 <title>TenantPulse — v2.0</title>
 <link rel="icon" type="image/png" href="assets/TP.png" id="favicon">
@@ -704,38 +704,6 @@
           aria-label="Revoir le message d'information masqué" title="Revoir le message masqué" hidden>i</button>
 </footer>
 
-<!-- Assistant Copilot — bulle flottante.
-     Alimentée par syncCopilotUI() : invisible tant que /api/me ne sert pas d'URL
-     d'incorporation, la fonctionnalité étant optionnelle de bout en bout.
-     Repliée, la bulle glisse hors de l'écran et ne laisse qu'une languette : elle
-     occupe le coin bas droit en permanence, il faut pouvoir s'en débarrasser sans
-     la perdre. Un clic sur la bulle repliée la ramène, il n'ouvre pas le panneau. -->
-<div class="copilot-bulle-zone" id="copilotBulleZone" hidden>
-  <button class="copilot-retract" id="copilotRetract" type="button"
-          title="Replier l'assistant" aria-label="Replier l'assistant"></button>
-  <button class="copilot-bulle" id="copilotToggle" type="button"
-          title="Ouvrir l'assistant TenantPulse" aria-label="Ouvrir l'assistant TenantPulse"
-          aria-expanded="false" aria-controls="copilotPanel">
-    <img src="assets/AI.png" class="copilot-bulle-ico" alt="">
-  </button>
-</div>
-
-<!-- Assistant Copilot — panneau flottant.
-     L'iframe reste sans src tant que le panneau n'a pas été ouvert une première fois :
-     même patron que #messagerieFrame, pour ne pas charger un service tiers à chaque
-     ouverture de l'application. L'URL vient de /api/me, jamais du dépôt : elle porte
-     l'identifiant d'environnement, donc le GUID du tenant. -->
-<aside class="copilot-panel" id="copilotPanel" role="dialog" aria-modal="false"
-       aria-label="Assistant TenantPulse" hidden>
-  <div class="copilot-head">
-    <span class="copilot-title">Assistant TenantPulse</span>
-    <button class="copilot-close" id="copilotClose" type="button" aria-label="Fermer l'assistant">✕</button>
-  </div>
-  <div class="copilot-body">
-    <iframe class="copilot-frame" id="copilotFrame"
-            title="Assistant TenantPulse" loading="lazy"></iframe>
-  </div>
-</aside>
 
 <!--
   Le JS est externalisé dans tenantpulse.js — script-src 'self' est actif.
