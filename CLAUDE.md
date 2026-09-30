@@ -406,7 +406,7 @@ env vars). Auth context is injected by the SWA runtime as the `x-ms-client-princ
 | `Roles` | `email → {role, blocked}` |
 | `Classifications` | `tenantId + tagType → approved tag + approver` |
 | `Requests` | Pending tag proposals from users |
-| `Tags` | Six partitions cloisonnées dans une même table, pour ne pas imposer une table Azure de plus par ligne unique : `tag` (définitions de tags), `default` (balises par défaut), `banner`/`current` (bandeau d'information), `config`/`dnsrelay` (interrupteur du relais DNS), `config`/`graph` (accès à Microsoft Graph), `config`/`navlink` (bouton libre de la barre de navigation). Toute lecture doit filtrer sur sa partition |
+| `Tags` | Six partitions cloisonnées dans une même table, pour ne pas imposer une table Azure de plus par ligne unique : `tag` (définitions de tags), `default` (balises par défaut), `banner`/`current` (bandeau d'information), `config`/`dnsrelay` (interrupteur du relais DNS), `config`/`graph` (accès à Microsoft Graph), `navlink` (boutons libres de la barre de navigation, **une ligne par bouton**, `rowKey` = UUID). Toute lecture doit filtrer sur sa partition |
 | `Locks` | Per-tenant or global modification locks |
 
 **Role hierarchy** (ascending permissions):
@@ -430,9 +430,9 @@ moderation powers; managers and admins can assign it via `/api/roles`.
 | GET | `/api/banner` | any auth | Bandeau d'information courant ou `null`. L'expiration est évaluée **côté serveur** (l'horloge du poste n'est pas une référence) et la ligne périmée est supprimée au passage |
 | POST | `/api/banner` | admin | Publie/remplace le bandeau : `{message, color, icon, durationMinutes}`. `icon` ∈ `warning`\|`info`, durée ≤ 7 jours |
 | DELETE | `/api/banner` | admin | Retire le bandeau (idempotent) |
-| GET | `/api/navlink` | any auth | Bouton libre de la barre de navigation, ou `null`. Expiration évaluée **côté serveur**, ligne périmée supprimée au passage, et l'URL est **revalidée à la lecture** — une ligne écrite sous des règles antérieures ne ressort pas sans contrôle |
-| POST | `/api/navlink` | admin | Publie/remplace le bouton : `{label, url, expiresAt}`. `url` en **HTTPS obligatoire** (seul rempart contre `javascript:`/`data:`), `label` ≤ 32 caractères, `expiresAt` facultative (absente = permanent), future et à un an maximum |
-| DELETE | `/api/navlink` | admin | Retire le bouton (idempotent) |
+| GET | `/api/navlink` | any auth | `{navlinks: [...]}` — boutons libres de la barre de navigation. Expiration évaluée **côté serveur**, lignes périmées purgées au passage, et l'URL est **revalidée à la lecture** : une ligne écrite sous des règles antérieures ne ressort pas sans contrôle |
+| POST | `/api/navlink` | admin | Ajoute un bouton, ou en modifie un si `id` est fourni : `{id, label, url, color, expiresAt}`. `url` en **HTTPS obligatoire** (seul rempart contre `javascript:`/`data:`), `label` ≤ 32 caractères, `color` en `#RGB`/`#RRGGBB`, `expiresAt` facultative (absente = permanent), future et à un an maximum. **5 boutons maximum** : au-delà ils chassent les onglets de la barre |
+| DELETE | `/api/navlink` | admin | Retire un bouton : `{id}` (idempotent) |
 | GET | `/api/classification?tenantId=` | any auth | Approved tags + pending count + lock status |
 | GET | `/api/classification?all=1` | any auth | Read-only directory: all assigned tags across tenants |
 | DELETE | `/api/classification` | moderator | Remove an approved tag |

@@ -1409,7 +1409,7 @@ window.addEventListener('load', () => {
   syncCacheIndicator();
   initAuth();
   loadBanner();
-  loadNavLink();
+  loadNavLinks();
   bindAdminEvents();
   watchExtensionMarker();
   /* Avant applyHashQuery : au retour d'Entra le fragment porte le code
@@ -2551,11 +2551,14 @@ function renderBanner(b) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  BOUTON LIBRE DE LA BARRE DE NAVIGATION
-//  Publié par un admin (POST /api/navlink), visible de tous, avec une date de
-//  fin facultative évaluée côté serveur — l'horloge du poste n'est pas une
-//  référence, exactement comme pour le bandeau.
+//  BOUTONS LIBRES DE LA BARRE DE NAVIGATION
+//  Publiés par un admin (POST /api/navlink), visibles de tous, avec une couleur
+//  et une date de fin facultatives. L'expiration est évaluée côté serveur —
+//  l'horloge du poste n'est pas une référence, comme pour le bandeau.
 // ══════════════════════════════════════════════════════════════════════════
+const NAVLINK_COLOR_RE = /^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/;
+const NAVLINK_COULEUR_DEFAUT = '#4B3FBE';
+const NAVLINK_MAX = 5;
 
 /* Défense en profondeur, sur le modèle de safeStoreUrl() : l'API valide déjà le
    protocole, mais un href n'est jamais posé depuis une réponse réseau sans être
@@ -2567,102 +2570,196 @@ function safeNavLinkUrl(raw) {
   return u.protocol === 'https:' ? u.href : null;
 }
 
-/* Le libellé arrive d'une saisie admin : posé en textContent, jamais en innerHTML. */
-function renderNavLink(lien) {
-  const a = document.getElementById('navCustomLink');
-  if (!a) return;
+/* #abc → #aabbcc, pour n'avoir qu'une seule forme à décomposer ensuite. */
+function navLinkHexEtendu(hex) {
+  const h = (hex || '').trim();
+  if (!NAVLINK_COLOR_RE.test(h)) return null;
+  return h.length === 4 ? '#' + [...h.slice(1)].map(c => c + c).join('') : h;
+}
 
-  const href = lien ? safeNavLinkUrl(lien.url) : null;
-  if (!href || !lien.label) {
-    a.hidden = true;
-    a.removeAttribute('href');
-    a.textContent = '';
-    a.removeAttribute('title');
-    return;
-  }
+/* La couleur est libre, le texte ne l'est pas : sur un fond clair, du blanc devient
+   illisible. La luminance relative (recommandation WCAG) décide de la couleur du
+   libellé, plutôt que de laisser un admin publier un bouton qu'on ne peut pas lire. */
+function navLinkTexteSur(hex) {
+  const h = navLinkHexEtendu(hex);
+  if (!h) return '#fff';
+  const canal = v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * canal(parseInt(h.slice(1, 3), 16))
+          + 0.7152 * canal(parseInt(h.slice(3, 5), 16))
+          + 0.0722 * canal(parseInt(h.slice(5, 7), 16));
+  return L > 0.42 ? '#16161a' : '#fff';
+}
 
+/* Construit un bouton. Le libellé vient d'une saisie admin : posé en textContent,
+   jamais en innerHTML. La couleur passe par des propriétés personnalisées plutôt que
+   par des styles en dur, pour que le CSS garde la main sur la recette du verre. */
+function makeNavLink(lien) {
+  const href = safeNavLinkUrl(lien && lien.url);
+  if (!href || !lien.label) return null;
+
+  const a = document.createElement('a');
+  a.className = 'nav-custom-link';
   a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
   a.textContent = lien.label;
   /* L'infobulle donne la destination : un bouton au libellé libre ne dit pas où il
      mène, et l'utilisateur a le droit de le savoir avant de cliquer. */
   a.title = lien.label + ' — ' + href;
-  a.hidden = false;
+
+  const teinte = navLinkHexEtendu(lien.color) || NAVLINK_COULEUR_DEFAUT;
+  a.style.setProperty('--nav-link-teinte', teinte);
+  a.style.setProperty('--nav-link-texte', navLinkTexteSur(teinte));
+  return a;
 }
 
-async function loadNavLink() {
+function renderNavLinks(liens) {
+  const zone = document.getElementById('navCustomLinks');
+  if (!zone) return;
+
+  const boutons = (Array.isArray(liens) ? liens : [])
+    .map(makeNavLink)
+    .filter(Boolean)
+    .slice(0, NAVLINK_MAX);
+
+  zone.replaceChildren(...boutons);
+  zone.hidden = boutons.length === 0;
+}
+
+async function loadNavLinks() {
   try {
     const r = await fetch('/api/navlink', { headers: { 'Accept': 'application/json' } });
     if (!r.ok) return;
-    renderNavLink((await r.json()).navlink);
+    renderNavLinks((await r.json()).navlinks);
   } catch { /* pas d'API (dev local) — pas de bouton */ }
 }
 
-/* Panneau d'administration. Formulaire unique : publier écrase le bouton en place,
-   comme pour le bandeau. Une seule ligne en base, donc un seul bouton à la fois. */
+/* ── Panneau d'administration ──
+   La liste des boutons existants, puis un formulaire. Éditer un bouton recharge ses
+   valeurs dans le formulaire : sans ça, corriger une faute de frappe imposerait de
+   tout ressaisir puis de supprimer l'ancien. */
+let _navLinkEdition = null;   // id du bouton en cours de modification, null = création
+
 async function loadAdminNavLink() {
   const pane = document.getElementById('adminPaneNavLink');
   if (!pane) return;
   pane.replaceChildren();
 
-  let actuel = null;
+  let liens = [];
   try {
     const r = await fetch('/api/navlink', { headers: { 'Accept': 'application/json' } });
-    if (r.ok) actuel = (await r.json()).navlink;
+    if (r.ok) liens = (await r.json()).navlinks || [];
   } catch { /* hors ligne : on affiche quand même le formulaire */ }
 
+  const enEdition = _navLinkEdition ? liens.find(l => l.id === _navLinkEdition) : null;
+  if (_navLinkEdition && !enEdition) _navLinkEdition = null;
+
+  // ── Liste des boutons en place ──
+  const section = adminSection('Boutons en place (' + liens.length + '/' + NAVLINK_MAX + ')');
+  if (!liens.length) {
+    section.appendChild(adminEmpty('Aucun bouton dans la barre de navigation'));
+  } else {
+    liens.forEach(l => section.appendChild(buildNavLinkRow(l)));
+  }
+  pane.appendChild(section);
+
+  // ── Formulaire d'ajout ou de modification ──
   const form = document.createElement('div'); form.className = 'admin-tag-form';
   const title = document.createElement('div'); title.className = 'admin-section-title';
-  title.textContent = actuel ? 'Remplacer le bouton en place' : 'Ajouter un bouton';
+  title.textContent = enEdition ? 'Modifier « ' + enEdition.label + ' »' : 'Ajouter un bouton';
   form.appendChild(title);
 
-  if (actuel) {
-    const etat = document.createElement('div'); etat.className = 'admin-empty';
-    etat.textContent = '« ' + actuel.label + ' » → ' + actuel.url
-      + (actuel.expiresAt ? ' — disparaît le ' + formatEcheance(actuel.expiresAt) : ' — sans date de fin');
-    form.appendChild(etat);
+  if (!enEdition && liens.length >= NAVLINK_MAX) {
+    form.appendChild(adminEmpty('Maximum atteint : retirez un bouton pour en ajouter un autre.'));
+    pane.appendChild(form);
+    return;
   }
 
   const libelle = document.createElement('input');
   libelle.type = 'text'; libelle.className = 'admin-input';
   libelle.placeholder = 'Libellé du bouton (32 caractères max)';
   libelle.maxLength = 32;
-  if (actuel) libelle.value = actuel.label;
+  if (enEdition) libelle.value = enEdition.label;
 
   const url = document.createElement('input');
   url.type = 'url'; url.className = 'admin-input';
   url.placeholder = 'https://exemple.fr/la-page';
-  if (actuel) url.value = actuel.url;
+  if (enEdition) url.value = enEdition.url;
+
+  const couleur = document.createElement('input');
+  couleur.type = 'color'; couleur.className = 'admin-color';
+  couleur.value = navLinkHexEtendu(enEdition && enEdition.color) || NAVLINK_COULEUR_DEFAUT;
 
   const fin = document.createElement('input');
   fin.type = 'datetime-local'; fin.className = 'admin-input';
-  if (actuel && actuel.expiresAt) fin.value = versDatetimeLocal(actuel.expiresAt);
+  if (enEdition && enEdition.expiresAt) fin.value = versDatetimeLocal(enEdition.expiresAt);
 
   const aide = document.createElement('div'); aide.className = 'analysis-mode-hint';
   aide.textContent = "Adresse HTTPS obligatoire, le bouton s'ouvre dans un nouvel onglet. "
-    + "Date de fin facultative : laissée vide, le bouton reste jusqu'à ce qu'un admin le retire. "
-    + "Un seul bouton à la fois — publier remplace celui en place.";
+    + "La couleur teinte le bouton ; le libellé passe automatiquement en sombre sur une teinte claire. "
+    + "Date de fin facultative : laissée vide, le bouton reste jusqu'à ce qu'un admin le retire.";
 
-  const publier = document.createElement('button');
-  publier.type = 'button'; publier.className = 'admin-btn admin-btn-approve';
-  publier.textContent = actuel ? 'Remplacer' : 'Publier';
-  publier.addEventListener('click', () => publishNavLink({
+  const valider = document.createElement('button');
+  valider.type = 'button'; valider.className = 'admin-btn admin-btn-approve';
+  valider.textContent = enEdition ? 'Enregistrer' : 'Ajouter';
+  valider.addEventListener('click', () => publishNavLink({
+    id: enEdition ? enEdition.id : undefined,
     label: libelle.value.trim(),
     url: url.value.trim(),
+    color: couleur.value,
     expiresAt: fin.value ? new Date(fin.value).toISOString() : null
   }));
 
-  form.appendChild(libelle); form.appendChild(url); form.appendChild(fin);
-  form.appendChild(aide); form.appendChild(publier);
+  form.appendChild(libelle); form.appendChild(url); form.appendChild(couleur);
+  form.appendChild(fin); form.appendChild(aide); form.appendChild(valider);
 
-  if (actuel) {
-    const retirer = document.createElement('button');
-    retirer.type = 'button'; retirer.className = 'admin-btn admin-btn-small admin-btn-reject';
-    retirer.textContent = 'Retirer maintenant';
-    retirer.addEventListener('click', removeNavLink);
-    form.appendChild(retirer);
+  if (enEdition) {
+    const annuler = document.createElement('button');
+    annuler.type = 'button'; annuler.className = 'admin-btn admin-btn-small';
+    annuler.textContent = 'Annuler';
+    annuler.addEventListener('click', () => { _navLinkEdition = null; loadAdminNavLink(); });
+    form.appendChild(annuler);
   }
 
   pane.appendChild(form);
+}
+
+/* Une ligne de la liste : aperçu teinté, destination, échéance, et les deux actions. */
+function buildNavLinkRow(l) {
+  const row = document.createElement('div'); row.className = 'admin-assigned-row';
+
+  const infos = document.createElement('div'); infos.className = 'admin-known-id';
+
+  const apercu = document.createElement('span');
+  apercu.className = 'nav-custom-link nav-custom-link-apercu';
+  apercu.textContent = l.label;
+  const teinte = navLinkHexEtendu(l.color) || NAVLINK_COULEUR_DEFAUT;
+  apercu.style.setProperty('--nav-link-teinte', teinte);
+  apercu.style.setProperty('--nav-link-texte', navLinkTexteSur(teinte));
+  infos.appendChild(apercu);
+
+  const dest = document.createElement('div'); dest.className = 'admin-assigned-domain';
+  dest.textContent = l.url;
+  infos.appendChild(dest);
+
+  const note = document.createElement('div'); note.className = 'analysis-mode-hint';
+  note.textContent = l.expiresAt ? 'Disparaît le ' + formatEcheance(l.expiresAt) : 'Sans date de fin';
+  infos.appendChild(note);
+
+  row.appendChild(infos);
+
+  const modifier = document.createElement('button');
+  modifier.type = 'button'; modifier.className = 'admin-btn admin-btn-small';
+  modifier.textContent = 'Modifier';
+  modifier.addEventListener('click', () => { _navLinkEdition = l.id; loadAdminNavLink(); });
+
+  const retirer = document.createElement('button');
+  retirer.type = 'button'; retirer.className = 'admin-btn admin-btn-small admin-btn-reject';
+  retirer.textContent = 'Retirer';
+  retirer.addEventListener('click', () => removeNavLink(l.id));
+
+  row.appendChild(modifier); row.appendChild(retirer);
+  return row;
 }
 
 /* Date lisible pour l'état affiché à l'admin. */
@@ -2695,18 +2792,24 @@ async function publishNavLink(payload) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { heroTagFeedback(d.error || 'Publication refusée', true); return; }
-    heroTagFeedback('Bouton publié');
-    renderNavLink(d.navlink);
+    heroTagFeedback(payload.id ? 'Bouton modifié' : 'Bouton ajouté');
+    _navLinkEdition = null;
+    renderNavLinks(d.navlinks);
     loadAdminNavLink();
   } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
-async function removeNavLink() {
+async function removeNavLink(id) {
   try {
-    const r = await fetch('/api/navlink', { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
-    if (!r.ok) { heroTagFeedback('Suppression refusée', true); return; }
+    const r = await fetch('/api/navlink', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { heroTagFeedback(d.error || 'Suppression refusée', true); return; }
     heroTagFeedback('Bouton retiré');
-    renderNavLink(null);
+    if (_navLinkEdition === id) _navLinkEdition = null;
+    renderNavLinks(d.navlinks);
     loadAdminNavLink();
   } catch { heroTagFeedback('Erreur réseau', true); }
 }

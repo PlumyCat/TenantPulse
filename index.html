@@ -250,12 +250,12 @@
         <span class="app-tab-badge">dev</span>
       </button>
     </div>
+    <!-- Boutons libres, publiés par un admin depuis l'onglet Administration.
+         Dans .nav-left, à la suite des onglets : ils s'alignent donc à gauche.
+         Le conteneur est rempli par renderNavLinks() ; vide, il est masqué et la
+         barre retrouve exactement son allure d'origine. -->
+    <div class="nav-custom-links" id="navCustomLinks" hidden></div>
   </div>
-  <!-- Bouton libre, publié par un admin depuis l'onglet Administration.
-       Troisième enfant du <nav> en flex space-between : il occupe l'espace laissé
-       vide entre les onglets et les menus. Masqué, il disparaît de la mise en page
-       et la barre retrouve exactement son allure d'origine. -->
-  <a class="nav-custom-link" id="navCustomLink" target="_blank" rel="noopener noreferrer" hidden></a>
   <div class="nav-right">
     <button class="nav-drop-btn" id="btnOpenProfiles">
       <img src="assets/user.png" width="14" height="14" alt=""> Profils <span class="drop-arrow">▾</span>

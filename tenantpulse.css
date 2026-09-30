@@ -131,32 +131,48 @@ body.view-ml footer{display:none}
 }
 .favicon {width:22px;height:22px;object-fit:contain;border-radius:var(--r-xs);display:none;}
 .nav-dropdown{position:relative}
-/* ── Bouton libre publié par un admin ──
-   Même recette verre que .nav-drop-btn, mais volontairement plus sobre : il ne doit
-   pas concurrencer les onglets ni les menus, qui sont les commandes de l'application.
-   Le libellé est tronqué plutôt que de pousser la barre — il vient d'une saisie libre
-   et rien ne garantit sa longueur, même borné à 32 caractères côté serveur. */
+/* ── Boutons libres publiés par un admin ──
+   Dans .nav-left, à la suite des onglets : alignés à gauche. La teinte arrive par
+   --nav-link-teinte, posée en propriété personnalisée sur l'élément, et le libellé par
+   --nav-link-texte, calculé sur la luminance de la teinte — un fond clair avec du texte
+   blanc serait illisible, et la couleur est à la main d'un admin.
+   color-mix garde la recette du verre : on teinte le dégradé translucide, on ne le
+   remplace pas par un aplat. */
+.nav-custom-links{display:flex;align-items:center;gap:6px;margin-left:10px}
+.nav-custom-links[hidden]{display:none}
 .nav-custom-link{
-  background:linear-gradient(180deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.05) 100%);
+  --nav-link-teinte:#4B3FBE;
+  --nav-link-texte:#fff;
+  /* Repli en aplat : si color-mix n'est pas reconnu, la déclaration suivante est
+     invalide et abandonnée, et le bouton garde sa teinte au lieu de devenir
+     transparent. Une ligne pour ne pas dépendre du support d'une fonction récente. */
+  background:var(--nav-link-teinte);
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--nav-link-teinte) 55%, rgba(255,255,255,.4)) 0%,
+    color-mix(in srgb, var(--nav-link-teinte) 75%, rgba(255,255,255,.1)) 100%);
   backdrop-filter:blur(10px) saturate(160%);
   -webkit-backdrop-filter:blur(10px) saturate(160%);
   border:1px solid transparent;border-radius:var(--r-pill);
   padding:4px 13px;text-decoration:none;
-  font-size:var(--text-sm);font-weight:600;color:#fff;font-family:var(--font);letter-spacing:.01em;
+  font-size:var(--text-sm);font-weight:600;color:var(--nav-link-texte);
+  font-family:var(--font);letter-spacing:.01em;
   display:inline-flex;align-items:center;
-  max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  box-shadow:0 0 0 1px rgba(255,255,255,.18), 0 1px 0 rgba(255,255,255,.1) inset;
-  transition:background .2s,box-shadow .2s
+  max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  box-shadow:0 0 0 1px rgba(255,255,255,.22), 0 1px 0 rgba(255,255,255,.14) inset;
+  transition:filter .2s,box-shadow .2s
 }
-.nav-custom-link[hidden]{display:none}
 .nav-custom-link:hover{
-  background:linear-gradient(180deg, rgba(255,255,255,.3) 0%, rgba(255,255,255,.12) 100%);
-  box-shadow:0 0 0 1px rgba(255,255,255,.34), 0 1px 0 rgba(255,255,255,.16) inset
+  filter:brightness(1.15);
+  box-shadow:0 0 0 1px rgba(255,255,255,.4), 0 1px 0 rgba(255,255,255,.2) inset
 }
 .nav-custom-link:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
-/* Sous 900 px la barre est déjà serrée par les deux onglets : le bouton libre est la
-   commande la moins essentielle, c'est donc lui qui cède la place. */
-@media(max-width:900px){ .nav-custom-link{display:none} }
+
+/* Aperçu dans le panneau d'administration : même allure, hors de la barre violette. */
+.nav-custom-link-apercu{max-width:none;cursor:default;margin-bottom:4px}
+
+/* Sous 1100 px la barre est déjà serrée par les deux onglets : les boutons libres sont
+   la commande la moins essentielle, c'est donc eux qui cèdent la place. */
+@media(max-width:1100px){ .nav-custom-links{display:none} }
 
 .nav-drop-btn{
   background:linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.08) 100%);
