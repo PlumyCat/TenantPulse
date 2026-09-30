@@ -251,6 +251,11 @@
       </button>
     </div>
   </div>
+  <!-- Bouton libre, publié par un admin depuis l'onglet Administration.
+       Troisième enfant du <nav> en flex space-between : il occupe l'espace laissé
+       vide entre les onglets et les menus. Masqué, il disparaît de la mise en page
+       et la barre retrouve exactement son allure d'origine. -->
+  <a class="nav-custom-link" id="navCustomLink" target="_blank" rel="noopener noreferrer" hidden></a>
   <div class="nav-right">
     <button class="nav-drop-btn" id="btnOpenProfiles">
       <img src="assets/user.png" width="14" height="14" alt=""> Profils <span class="drop-arrow">▾</span>
@@ -507,6 +512,10 @@
         <img src="assets/information.png" class="admin-subtab-ico icon-adaptive" alt="">
         Bandeau
       </button>
+      <button class="admin-subtab" data-subtab="navlink" data-min-role="admin" role="tab" type="button" hidden>
+        <img src="assets/Redirect.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
+        Bouton de nav
+      </button>
       <button class="admin-subtab" data-subtab="relay" data-min-role="admin" role="tab" type="button" hidden>
         <img src="assets/Redirect.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
         Relais DNS
@@ -522,6 +531,7 @@
       <div class="admin-pane" id="adminPaneTags" hidden></div>
       <div class="admin-pane" id="adminPaneUsers" hidden></div>
       <div class="admin-pane" id="adminPaneBanner" hidden></div>
+      <div class="admin-pane" id="adminPaneNavLink" hidden></div>
       <div class="admin-pane" id="adminPaneRelay" hidden></div>
       <div class="admin-pane" id="adminPaneGraph" hidden></div>
     </div>

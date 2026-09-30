@@ -131,6 +131,33 @@ body.view-ml footer{display:none}
 }
 .favicon {width:22px;height:22px;object-fit:contain;border-radius:var(--r-xs);display:none;}
 .nav-dropdown{position:relative}
+/* ── Bouton libre publié par un admin ──
+   Même recette verre que .nav-drop-btn, mais volontairement plus sobre : il ne doit
+   pas concurrencer les onglets ni les menus, qui sont les commandes de l'application.
+   Le libellé est tronqué plutôt que de pousser la barre — il vient d'une saisie libre
+   et rien ne garantit sa longueur, même borné à 32 caractères côté serveur. */
+.nav-custom-link{
+  background:linear-gradient(180deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.05) 100%);
+  backdrop-filter:blur(10px) saturate(160%);
+  -webkit-backdrop-filter:blur(10px) saturate(160%);
+  border:1px solid transparent;border-radius:var(--r-pill);
+  padding:4px 13px;text-decoration:none;
+  font-size:var(--text-sm);font-weight:600;color:#fff;font-family:var(--font);letter-spacing:.01em;
+  display:inline-flex;align-items:center;
+  max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  box-shadow:0 0 0 1px rgba(255,255,255,.18), 0 1px 0 rgba(255,255,255,.1) inset;
+  transition:background .2s,box-shadow .2s
+}
+.nav-custom-link[hidden]{display:none}
+.nav-custom-link:hover{
+  background:linear-gradient(180deg, rgba(255,255,255,.3) 0%, rgba(255,255,255,.12) 100%);
+  box-shadow:0 0 0 1px rgba(255,255,255,.34), 0 1px 0 rgba(255,255,255,.16) inset
+}
+.nav-custom-link:focus-visible{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+/* Sous 900 px la barre est déjà serrée par les deux onglets : le bouton libre est la
+   commande la moins essentielle, c'est donc lui qui cède la place. */
+@media(max-width:900px){ .nav-custom-link{display:none} }
+
 .nav-drop-btn{
   background:linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.08) 100%);
   backdrop-filter:blur(10px) saturate(160%);

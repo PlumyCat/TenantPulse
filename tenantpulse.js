@@ -1409,6 +1409,7 @@ window.addEventListener('load', () => {
   syncCacheIndicator();
   initAuth();
   loadBanner();
+  loadNavLink();
   bindAdminEvents();
   watchExtensionMarker();
   /* Avant applyHashQuery : au retour d'Entra le fragment porte le code
@@ -2264,7 +2265,7 @@ function switchAdminSubtab(name) {
   document.querySelectorAll('.admin-subtab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.subtab === name);
   });
-  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers', banner: 'adminPaneBanner', relay: 'adminPaneRelay', graph: 'adminPaneGraph' };
+  const panes = { requests: 'adminPaneRequests', known: 'adminPaneKnown', tags: 'adminPaneTags', users: 'adminPaneUsers', banner: 'adminPaneBanner', navlink: 'adminPaneNavLink', relay: 'adminPaneRelay', graph: 'adminPaneGraph' };
   Object.entries(panes).forEach(([key, id]) => {
     const pane = document.getElementById(id);
     if (pane) pane.hidden = (key !== name);
@@ -2276,6 +2277,7 @@ function switchAdminSubtab(name) {
   else if (name === 'tags' && typeof loadAdminTags === 'function') loadAdminTags();
   else if (name === 'users' && typeof loadAdminUsers === 'function') loadAdminUsers();
   else if (name === 'banner' && typeof loadAdminBanner === 'function') loadAdminBanner();
+  else if (name === 'navlink' && typeof loadAdminNavLink === 'function') loadAdminNavLink();
   else if (name === 'relay' && typeof loadAdminRelay === 'function') loadAdminRelay();
   else if (name === 'graph' && typeof loadAdminGraph === 'function') loadAdminGraph();
   else adminPanePlaceholder(panes[name]);
@@ -2546,6 +2548,167 @@ function renderBanner(b) {
     bannerExpiryTimer = setTimeout(() => { el.hidden = true; bannerCourant = null; syncBannerRecall(); }, reste);
   }
   syncBannerRecall();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  BOUTON LIBRE DE LA BARRE DE NAVIGATION
+//  Publié par un admin (POST /api/navlink), visible de tous, avec une date de
+//  fin facultative évaluée côté serveur — l'horloge du poste n'est pas une
+//  référence, exactement comme pour le bandeau.
+// ══════════════════════════════════════════════════════════════════════════
+
+/* Défense en profondeur, sur le modèle de safeStoreUrl() : l'API valide déjà le
+   protocole, mais un href n'est jamais posé depuis une réponse réseau sans être
+   revérifié ici. « javascript: » et « data: » transforment un lien en exécution
+   de code, et c'est le seul contrôle qui compte à cet endroit. */
+function safeNavLinkUrl(raw) {
+  if (!raw) return null;
+  let u; try { u = new URL(raw); } catch { return null; }
+  return u.protocol === 'https:' ? u.href : null;
+}
+
+/* Le libellé arrive d'une saisie admin : posé en textContent, jamais en innerHTML. */
+function renderNavLink(lien) {
+  const a = document.getElementById('navCustomLink');
+  if (!a) return;
+
+  const href = lien ? safeNavLinkUrl(lien.url) : null;
+  if (!href || !lien.label) {
+    a.hidden = true;
+    a.removeAttribute('href');
+    a.textContent = '';
+    a.removeAttribute('title');
+    return;
+  }
+
+  a.href = href;
+  a.textContent = lien.label;
+  /* L'infobulle donne la destination : un bouton au libellé libre ne dit pas où il
+     mène, et l'utilisateur a le droit de le savoir avant de cliquer. */
+  a.title = lien.label + ' — ' + href;
+  a.hidden = false;
+}
+
+async function loadNavLink() {
+  try {
+    const r = await fetch('/api/navlink', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) return;
+    renderNavLink((await r.json()).navlink);
+  } catch { /* pas d'API (dev local) — pas de bouton */ }
+}
+
+/* Panneau d'administration. Formulaire unique : publier écrase le bouton en place,
+   comme pour le bandeau. Une seule ligne en base, donc un seul bouton à la fois. */
+async function loadAdminNavLink() {
+  const pane = document.getElementById('adminPaneNavLink');
+  if (!pane) return;
+  pane.replaceChildren();
+
+  let actuel = null;
+  try {
+    const r = await fetch('/api/navlink', { headers: { 'Accept': 'application/json' } });
+    if (r.ok) actuel = (await r.json()).navlink;
+  } catch { /* hors ligne : on affiche quand même le formulaire */ }
+
+  const form = document.createElement('div'); form.className = 'admin-tag-form';
+  const title = document.createElement('div'); title.className = 'admin-section-title';
+  title.textContent = actuel ? 'Remplacer le bouton en place' : 'Ajouter un bouton';
+  form.appendChild(title);
+
+  if (actuel) {
+    const etat = document.createElement('div'); etat.className = 'admin-empty';
+    etat.textContent = '« ' + actuel.label + ' » → ' + actuel.url
+      + (actuel.expiresAt ? ' — disparaît le ' + formatEcheance(actuel.expiresAt) : ' — sans date de fin');
+    form.appendChild(etat);
+  }
+
+  const libelle = document.createElement('input');
+  libelle.type = 'text'; libelle.className = 'admin-input';
+  libelle.placeholder = 'Libellé du bouton (32 caractères max)';
+  libelle.maxLength = 32;
+  if (actuel) libelle.value = actuel.label;
+
+  const url = document.createElement('input');
+  url.type = 'url'; url.className = 'admin-input';
+  url.placeholder = 'https://exemple.fr/la-page';
+  if (actuel) url.value = actuel.url;
+
+  const fin = document.createElement('input');
+  fin.type = 'datetime-local'; fin.className = 'admin-input';
+  if (actuel && actuel.expiresAt) fin.value = versDatetimeLocal(actuel.expiresAt);
+
+  const aide = document.createElement('div'); aide.className = 'analysis-mode-hint';
+  aide.textContent = "Adresse HTTPS obligatoire, le bouton s'ouvre dans un nouvel onglet. "
+    + "Date de fin facultative : laissée vide, le bouton reste jusqu'à ce qu'un admin le retire. "
+    + "Un seul bouton à la fois — publier remplace celui en place.";
+
+  const publier = document.createElement('button');
+  publier.type = 'button'; publier.className = 'admin-btn admin-btn-approve';
+  publier.textContent = actuel ? 'Remplacer' : 'Publier';
+  publier.addEventListener('click', () => publishNavLink({
+    label: libelle.value.trim(),
+    url: url.value.trim(),
+    expiresAt: fin.value ? new Date(fin.value).toISOString() : null
+  }));
+
+  form.appendChild(libelle); form.appendChild(url); form.appendChild(fin);
+  form.appendChild(aide); form.appendChild(publier);
+
+  if (actuel) {
+    const retirer = document.createElement('button');
+    retirer.type = 'button'; retirer.className = 'admin-btn admin-btn-small admin-btn-reject';
+    retirer.textContent = 'Retirer maintenant';
+    retirer.addEventListener('click', removeNavLink);
+    form.appendChild(retirer);
+  }
+
+  pane.appendChild(form);
+}
+
+/* Date lisible pour l'état affiché à l'admin. */
+function formatEcheance(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/* L'inverse : un <input datetime-local> attend une heure LOCALE sans fuseau, alors que
+   l'API stocke de l'ISO en UTC. Poser l'ISO tel quel décalerait le champ de l'écart au
+   méridien à chaque réouverture du formulaire. */
+function versDatetimeLocal(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+       + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+async function publishNavLink(payload) {
+  if (!payload.label) { heroTagFeedback('Le libellé est obligatoire', true); return; }
+  if (!safeNavLinkUrl(payload.url)) {
+    heroTagFeedback('Adresse invalide — une URL HTTPS complète est requise', true); return;
+  }
+  try {
+    const r = await fetch('/api/navlink', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { heroTagFeedback(d.error || 'Publication refusée', true); return; }
+    heroTagFeedback('Bouton publié');
+    renderNavLink(d.navlink);
+    loadAdminNavLink();
+  } catch { heroTagFeedback('Erreur réseau', true); }
+}
+
+async function removeNavLink() {
+  try {
+    const r = await fetch('/api/navlink', { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
+    if (!r.ok) { heroTagFeedback('Suppression refusée', true); return; }
+    heroTagFeedback('Bouton retiré');
+    renderNavLink(null);
+    loadAdminNavLink();
+  } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
 async function loadBanner() {
