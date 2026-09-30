@@ -132,13 +132,14 @@ body.view-ml footer{display:none}
 .favicon {width:22px;height:22px;object-fit:contain;border-radius:var(--r-xs);display:none;}
 .nav-dropdown{position:relative}
 /* ── Boutons libres publiés par un admin ──
-   Dans .nav-left, à la suite des onglets : alignés à gauche. La teinte arrive par
+   En tête de .nav-right, donc alignés à droite avant Profils. L'écart avec les menus
+   vient du gap de .nav-right, pas d'une marge ici. La teinte arrive par
    --nav-link-teinte, posée en propriété personnalisée sur l'élément, et le libellé par
    --nav-link-texte, calculé sur la luminance de la teinte — un fond clair avec du texte
    blanc serait illisible, et la couleur est à la main d'un admin.
    color-mix garde la recette du verre : on teinte le dégradé translucide, on ne le
    remplace pas par un aplat. */
-.nav-custom-links{display:flex;align-items:center;gap:6px;margin-left:10px}
+.nav-custom-links{display:flex;align-items:center;gap:6px}
 .nav-custom-links[hidden]{display:none}
 .nav-custom-link{
   --nav-link-teinte:#4B3FBE;
