@@ -1404,7 +1404,7 @@ window.addEventListener('load', () => {
   renderHistory();
   syncCacheIndicator();
   initAuth();
-  loadBanner();
+  loadBanner(); surveillerBanner();
   loadNavLinks();
   bindAdminEvents();
   watchExtensionMarker();
@@ -2509,6 +2509,9 @@ let bannerExpiryTimer = null;
 /* Dernier message reçu du serveur, conservé même une fois masqué : c'est lui que la
    pastille de rappel réaffiche. */
 let bannerCourant = null;
+// Relecture en cours de session (voir surveillerBanner) : délai et date de la dernière.
+const BANNER_RELECTURE_MS = 10 * 60 * 1000;
+let bannerLuA = 0;
 
 /* La pastille ne s'affiche que s'il existe un message et qu'il est masqué. */
 function syncBannerRecall() {
@@ -2552,8 +2555,13 @@ function renderBanner(b) {
   el.hidden = false;
 
   /* Le serveur fait foi sur l'expiration, mais on retire aussi le bandeau en cours de
-     session si l'échéance tombe avant le prochain chargement de page. */
-  const reste = b.expiresAt ? (new Date(b.expiresAt) - new Date()) : 0;
+     session si l'échéance tombe avant le prochain chargement de page. Le délai vient du
+     serveur (expiresInMs), converti une fois pour toutes en échéance locale : l'horloge
+     du poste n'entre pas en jeu, et la pastille de rappel, qui réaffiche le même objet,
+     ne relance pas un délai complet. Sans échéance (bandeau permanent), aucun minuteur. */
+  if (Number.isFinite(b.expiresInMs) && b.finLocale === undefined) b.finLocale = Date.now() + b.expiresInMs;
+  const reste = b.finLocale !== undefined ? b.finLocale - Date.now()
+    : (b.expiresAt ? (new Date(b.expiresAt) - new Date()) : 0);
   if (reste > 0 && reste < 2147483647) {
     // À l'échéance le message n'existe plus : pas de pastille de rappel pour un périmé.
     bannerExpiryTimer = setTimeout(() => { el.hidden = true; bannerCourant = null; syncBannerRecall(); }, reste);
@@ -2826,11 +2834,30 @@ async function removeNavLink(id) {
 }
 
 async function loadBanner() {
+  bannerLuA = Date.now();
   try {
     const r = await fetch('/api/banner', { headers: { 'Accept': 'application/json' } });
     if (!r.ok) return;
-    renderBanner((await r.json()).banner);
+    const b = (await r.json()).banner;
+    // Même publication que celle déjà connue : rien à redessiner (le message déplié le
+    // reste, et un message masqué par l'utilisateur ne revient pas).
+    if (b && bannerCourant && b.id === bannerCourant.id) return;
+    renderBanner(b);
   } catch { /* pas d'API (dev local) — pas de bandeau */ }
+}
+
+/* Relecture du bandeau pendant la session. Indispensable depuis qu'un bandeau peut rester
+   sans échéance : lu une seule fois au chargement, un bandeau retiré par l'admin restait
+   affiché dans les onglets déjà ouverts jusqu'à leur rechargement, et une nouvelle annonce
+   n'y apparaissait pas. Coût borné : au plus une lecture toutes les 10 minutes, et
+   seulement onglet visible ; au retour sur l'onglet, une lecture si la dernière est
+   plus ancienne. */
+function surveillerBanner() {
+  const relire = () => {
+    if (document.visibilityState === 'visible' && Date.now() - bannerLuA >= BANNER_RELECTURE_MS) loadBanner();
+  };
+  setInterval(relire, 60 * 1000);
+  document.addEventListener('visibilitychange', relire);
 }
 
 /* Le message défile, donc il n'est lisible en entier qu'au bout d'un cycle d'animation.
@@ -2873,9 +2900,13 @@ async function loadAdminBanner() {
 
   if (actuel) {
     const etat = document.createElement('div'); etat.className = 'admin-empty';
-    const fin = new Date(actuel.expiresAt);
-    etat.textContent = (BANNER_ICONS[actuel.icon] || '') + ' « ' + actuel.message + ' » — disparaît le '
-      + fin.toLocaleDateString('fr-FR') + ' à ' + fin.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    // Sans échéance, new Date(null) afficherait le 1er janvier 1970 : on le dit en clair.
+    let quand = 'affiché jusqu\'à son retrait';
+    if (actuel.expiresAt) {
+      const fin = new Date(actuel.expiresAt);
+      quand = 'disparaît le ' + fin.toLocaleDateString('fr-FR') + ' à ' + fin.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+    etat.textContent = (BANNER_ICONS[actuel.icon] || '') + ' « ' + actuel.message + ' » : ' + quand;
     form.appendChild(etat);
   }
 
@@ -2918,23 +2949,50 @@ async function loadAdminBanner() {
   duree.type = 'number'; duree.className = 'admin-input';
   duree.min = '1'; duree.max = '10080'; duree.value = '60';
   duree.placeholder = 'Durée avant disparition (minutes)';
+  duree.setAttribute('aria-label', 'Durée avant disparition, en minutes');
 
   const aide = document.createElement('div'); aide.className = 'analysis-mode-hint';
-  aide.textContent = 'Durée en minutes avant disparition automatique — 60 = 1 h, 1440 = 1 jour, 10080 = 7 jours (maximum). '
-    + 'Chaque utilisateur peut masquer le message de son côté ; une nouvelle publication réapparaît chez tout le monde.';
+  const RAPPEL_MASQUAGE = 'Chaque utilisateur peut masquer le message de son côté ; une nouvelle publication réapparaît chez tout le monde.';
+
+  /* Échéance : durée limitée, ou jusqu'au retrait. Même contrôle segmenté que l'icône.
+     Un bandeau en cours sans échéance rouvre le formulaire sur « Jusqu'à retrait ». */
+  const segFin = document.createElement('div');
+  segFin.className = 'analysis-mode-seg'; segFin.setAttribute('role', 'radiogroup');
+  segFin.setAttribute('aria-label', 'Échéance du bandeau');
+  let sansEcheance = !!(actuel && !actuel.expiresAt);
+  const marquerEcheance = permanent => {
+    sansEcheance = permanent;
+    segFin.querySelectorAll('.analysis-mode-opt').forEach(o => {
+      const actif = (o.dataset.fin === 'permanent') === permanent;
+      o.classList.toggle('active', actif);
+      o.setAttribute('aria-checked', actif ? 'true' : 'false');
+    });
+    duree.hidden = permanent;
+    aide.textContent = (permanent
+      ? 'Le bandeau reste affiché jusqu\'à ce que vous le retiriez (« Retirer maintenant ») ou le remplaciez. '
+        + 'Les onglets déjà ouverts le récupèrent, et le voient disparaître, en 10 minutes au plus. '
+      : 'Durée en minutes avant disparition automatique : 60 = 1 h, 1440 = 1 jour, 10080 = 7 jours (maximum). ')
+      + RAPPEL_MASQUAGE;
+  };
+  [['duree', 'Durée limitée'], ['permanent', 'Jusqu\'à retrait']].forEach(([cle, libelle]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'analysis-mode-opt'; b.textContent = libelle;
+    b.dataset.fin = cle;
+    b.setAttribute('role', 'radio');
+    b.addEventListener('click', () => marquerEcheance(cle === 'permanent'));
+    segFin.appendChild(b);
+  });
+  marquerEcheance(sansEcheance);
 
   const publier = document.createElement('button');
   publier.type = 'button'; publier.className = 'admin-btn admin-btn-approve';
   publier.textContent = actuel ? 'Remplacer' : 'Publier';
-  publier.addEventListener('click', () => publishBanner({
-    message: msg.value.trim(),
-    color: couleur.value,
-    icon: icone,
-    durationMinutes: parseInt(duree.value, 10)
-  }));
+  publier.addEventListener('click', () => publishBanner(sansEcheance
+    ? { message: msg.value.trim(), color: couleur.value, icon: icone, permanent: true }
+    : { message: msg.value.trim(), color: couleur.value, icon: icone, durationMinutes: parseInt(duree.value, 10) }));
 
   form.appendChild(msg); form.appendChild(couleur); form.appendChild(seg);
-  form.appendChild(duree); form.appendChild(aide); form.appendChild(publier);
+  form.appendChild(segFin); form.appendChild(duree); form.appendChild(aide); form.appendChild(publier);
 
   if (actuel) {
     const retirer = document.createElement('button');
@@ -2949,7 +3007,7 @@ async function loadAdminBanner() {
 
 async function publishBanner(payload) {
   if (!payload.message) { heroTagFeedback('Le message est obligatoire', true); return; }
-  if (!Number.isInteger(payload.durationMinutes) || payload.durationMinutes < 1) {
+  if (!payload.permanent && (!Number.isInteger(payload.durationMinutes) || payload.durationMinutes < 1)) {
     heroTagFeedback('Durée invalide (en minutes, 1 minimum)', true); return;
   }
   try {

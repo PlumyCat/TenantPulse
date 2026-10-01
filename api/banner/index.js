@@ -22,16 +22,22 @@ const json = (status, body) => ({
 
 /* Forme renvoyée au client. `id` change à chaque publication : c'est la clé sur laquelle
    le navigateur mémorise « j'ai masqué celui-là », pour qu'un nouveau message réapparaisse
-   même chez quelqu'un qui avait masqué le précédent. */
-function versClient(e) {
-  return {
+   même chez quelqu'un qui avait masqué le précédent.
+   `expiresAt` vaut null pour un bandeau sans échéance (affiché jusqu'à son retrait).
+   `expiresInMs` est le délai restant calculé ICI : le navigateur s'en sert pour retirer
+   le bandeau en cours de session, plutôt que de comparer `expiresAt` à l'horloge du poste,
+   qui n'est pas une référence. */
+function versClient(e, maintenant = Date.now()) {
+  const b = {
     id:        e.rowKey + ":" + e.publishedAt,
     message:   e.message,
     color:     e.color,
     icon:      e.icon,
     publishedAt: e.publishedAt,
-    expiresAt: e.expiresAt
+    expiresAt: e.expiresAt || null
   };
+  if (e.expiresAt) b.expiresInMs = Math.max(0, new Date(e.expiresAt).getTime() - maintenant);
+  return b;
 }
 
 /**
@@ -40,9 +46,11 @@ function versClient(e) {
  * Accessible : tout utilisateur connecté et non bloqué.
  *
  * POST /api/banner
- * Publie ou remplace le bandeau. Body : { message, color, icon, durationMinutes }
+ * Publie ou remplace le bandeau. Body : { message, color, icon, durationMinutes, permanent }
  * - icon : "warning" (⚠️) ou "info" (ℹ️)
- * - durationMinutes : délai avant disparition automatique
+ * - durationMinutes : délai avant disparition automatique (ignoré si permanent)
+ * - permanent : true = aucune échéance, le bandeau reste jusqu'à son retrait (DELETE)
+ *   ou son remplacement par une nouvelle publication
  * Accessible : admin uniquement.
  *
  * DELETE /api/banner
@@ -64,7 +72,11 @@ module.exports = async function (context, req) {
       /* Expiration évaluée côté serveur : l'horloge du poste client n'est pas une
          référence, et un bandeau périmé ne doit pas dépendre d'elle pour disparaître. */
       if (e.expiresAt && new Date(e.expiresAt) <= new Date()) {
-        try { await tagsClient.deleteEntity(PARTITION, ROW); } catch {}
+        /* Suppression CONDITIONNELLE (etag de la ligne lue) : si un admin publie un nouveau
+           bandeau entre cette lecture et la suppression, une suppression inconditionnelle
+           effacerait le nouveau. La ligne ayant changé, l'etag ne correspond plus, la
+           suppression échoue sans dommage et le prochain GET servira le nouveau bandeau. */
+        try { await tagsClient.deleteEntity(PARTITION, ROW, { etag: e.etag }); } catch {}
         context.res = json(200, { banner: null });
         return;
       }
@@ -80,7 +92,7 @@ module.exports = async function (context, req) {
         return;
       }
 
-      const { message, color, icon, durationMinutes } = req.body || {};
+      const { message, color, icon, durationMinutes, permanent } = req.body || {};
 
       const msg = typeof message === "string" ? message.trim() : "";
       if (!msg) { context.res = json(400, { error: "message est obligatoire" }); return; }
@@ -96,29 +108,34 @@ module.exports = async function (context, req) {
         context.res = json(400, { error: "icon invalide", allowed: ICONES });
         return;
       }
-      if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > DUREE_MAX_MIN) {
+      if (permanent !== undefined && typeof permanent !== "boolean") {
+        context.res = json(400, { error: "permanent invalide (booléen attendu)" });
+        return;
+      }
+      const sansEcheance = permanent === true;
+      if (!sansEcheance && (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > DUREE_MAX_MIN)) {
         context.res = json(400, { error: `durationMinutes invalide (entier entre 1 et ${DUREE_MAX_MIN})` });
         return;
       }
 
       const maintenant = new Date();
-      const expiresAt = new Date(maintenant.getTime() + durationMinutes * 60000).toISOString();
-
-      await tagsClient.upsertEntity({
+      const entite = {
         partitionKey: PARTITION,
         rowKey:       ROW,
         message:      msg,
         color,
         icon,
         publishedAt:  maintenant.toISOString(),
-        expiresAt,
         publishedBy:  auth.email
-      }, "Replace");
+      };
+      // Bandeau sans échéance : pas de propriété expiresAt du tout. Le mode « Replace »
+      // est indispensable ici : il efface l'échéance d'un bandeau précédent, que « Merge »
+      // conserverait, et le nouveau bandeau « permanent » disparaîtrait à l'ancienne date.
+      if (!sansEcheance) entite.expiresAt = new Date(maintenant.getTime() + durationMinutes * 60000).toISOString();
 
-      context.res = json(200, {
-        success: true,
-        banner: versClient({ rowKey: ROW, message: msg, color, icon, publishedAt: maintenant.toISOString(), expiresAt })
-      });
+      await tagsClient.upsertEntity(entite, "Replace");
+
+      context.res = json(200, { success: true, banner: versClient(entite, maintenant.getTime()) });
       return;
     }
 
