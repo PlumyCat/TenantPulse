@@ -989,7 +989,6 @@ function analyse() {
 
   // Liste d'anomalies "rétro-compat" pour les rapports texte
   const anomalies = signals.filter(s => s.weight < 0).map(s => s.label);
-  const explanations = [...new Set(signals.filter(s => s.weight < 0).map(s => s.explanation))];
 
   /* Rapports textes (pour copie presse-papiers) */
   const client = `Bonjour,

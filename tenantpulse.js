@@ -419,9 +419,6 @@ function orderedRedirectButtons(profile) {
   const pc = REDIRECT_BUTTONS.find(b => b.key === 'partnerCenter');
   return pc ? [pc, ...rest] : rest;
 }
-function isButtonEnabled(key) {
-  return loadProfile()[key] !== false;
-}
 
 
 function toggleDropSection(btn) {
@@ -510,7 +507,6 @@ const HISTORY_OPT_KEY = 'tenantIdHistory_enabled';
 const HISTORY_MAX_KEY = 'tenantIdHistory_max';
 const HISTORY_RETENTION_KEY = 'tenantIdHistory_retentionMs';
 const HISTORY_MAX_DEFAULT = 20;
-const HISTORY_RETENTION_DEFAULT_MS = 24 * 3600 * 1000; // 24h
 const HISTORY_MAX_HARD_LIMIT = 40;
 
 // Slider mapping for retention (index → label + ms). ms=0 → unlimited.
