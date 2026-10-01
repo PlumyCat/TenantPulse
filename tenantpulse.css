@@ -1691,7 +1691,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .powered{font-size:var(--text-sm);font-weight:500;color:var(--soft)}
 .powered span{color:var(--blue);font-weight:500}
 
-.msa-check-block{margin-top:20px;border-top:1px solid var(--border);padding-top:20px}
+.msa-check-block{margin-top:12px}
 .collapsible-btn{width:100%;background:var(--row);border:1.5px solid var(--border);border-radius:var(--r-md);padding:9px 13px;font-family:var(--font);font-size:var(--text-sm);font-weight:500;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;text-align:left}
 .collapsible-btn:hover{border-color:var(--blue);background:var(--acc-hover)}
 [data-theme="dark"] .collapsible-btn:hover{border-color:#5b52cc}
@@ -1719,11 +1719,18 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .history-empty{font-size:var(--text-xs);font-weight:400;color:var(--muted);text-align:center;padding:10px 0;font-style:italic}
 .history-enable-link{color:var(--blue);text-decoration:underline;cursor:pointer;font-style:normal;font-weight:600}
 .history-enable-link:hover{filter:brightness(1.15)}
-.history-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r-md);border:1.5px solid var(--border);background:var(--row);margin-bottom:5px;cursor:pointer;transition:all .15s;position:relative}
-.history-item:hover{border-color:#c7d2fe;background:var(--acc-hover)}
-.history-item-domain{font-size:var(--text-sm);font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.history-item-guid{font-size:var(--text-xs);font-weight:400;color:var(--muted);font-family:'Courier New',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
-.history-item-copy{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);color:var(--soft);font-size:var(--text-xs);font-weight:500;font-family:var(--font);padding:2px 6px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+/* Un seul bloc, des lignes separees par un filet : plus dense qu'une carte par entree. */
+/* Hauteur de ligne fixe, derivee des tailles de police : c'est elle qui permet de
+   borner la liste a six lignes exactement, a toute largeur de fenetre. */
+.history-card{--history-row-h:calc((var(--text-sm) + var(--text-xs)) * 1.4 + 11px)}
+.history-item{display:flex;align-items:center;gap:8px;box-sizing:border-box;height:var(--history-row-h);padding:5px 10px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;position:relative}
+.history-item:last-child{border-bottom:0}
+.history-item:hover{background:var(--acc-hover)}
+.history-item-text{flex:1;min-width:0}
+.history-item-icon img{display:inline-block;vertical-align:middle;flex-shrink:0}
+.history-item-domain{font-size:var(--text-sm);line-height:1.4;font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-item-guid{font-size:var(--text-xs);line-height:1.4;font-weight:400;color:var(--muted);font-family:'Courier New',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+.history-item-copy{background:transparent;border:1.5px solid transparent;border-radius:var(--r-sm);color:var(--soft);font-size:var(--text-xs);font-weight:500;font-family:var(--font);padding:2px 6px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
 /* Hover history-copy : --black invisible en dark mode → --text */
 .history-item-copy:hover{border-color:var(--text);color:var(--text)}
 .history-item-copy.copied{border-color:#16a34a;color:#16a34a}
@@ -1734,17 +1741,31 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .history-admin-count[hidden]{display:none}
 .history-item-icon{font-size:var(--text-base);flex-shrink:0;display:flex;align-items:center;width:16px}
 /* Liste d'historique défilante : évite le rognage de .collapsible-body (max-height) quand il y a beaucoup d'entrées */
-#historyList{max-height:50vh;overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.18) transparent}
+/* Le bloc grandit jusqu'a six tenants, puis defile. La gouttiere est reservee d'avance
+   (scrollbar-gutter) : l'apparition de la barre ne decale pas les lignes. */
+#historyList{max-height:calc(var(--history-row-h) * 6 + 1px);overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;border-top:1px solid var(--border);scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.12) transparent}
+#historyList:hover{scrollbar-color:rgba(0,0,0,.28) transparent}
 #historyList::-webkit-scrollbar{width:6px}
 #historyList::-webkit-scrollbar-track{background:transparent}
 #historyList::-webkit-scrollbar-thumb{background:rgba(0,0,0,.22);border-radius:var(--r-xs)}
-[data-theme="dark"] #historyList{scrollbar-color:rgba(255,255,255,.2) transparent}
+[data-theme="dark"] #historyList{scrollbar-color:rgba(255,255,255,.12) transparent}
+[data-theme="dark"] #historyList:hover{scrollbar-color:rgba(255,255,255,.28) transparent}
 [data-theme="dark"] #historyList::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2)}
-.btn-clear-history{width:100%;margin-top:4px;padding:6px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r-md);font-family:var(--font);font-size:var(--text-xs);font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s}
-.btn-clear-history:hover{border-color:#fecdd3;color:#dc2626}
-[data-theme="dark"] .btn-clear-history:hover{border-color:#7f1d1d;color:#fca5a5}
+.btn-clear-history{width:100%;margin:0;padding:6px;background:transparent;border:0;border-top:1px solid var(--border);border-radius:0;font-family:var(--font);font-size:var(--text-xs);font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s}
+.btn-clear-history:hover{color:#dc2626;background:var(--acc-hover)}
+[data-theme="dark"] .btn-clear-history:hover{color:#fca5a5}
+/* Historique : en-tete, liste et bouton d'effacement dans un seul cadre. C'est la carte
+   qui porte bordure et fond, ses enfants n'ont plus que des filets de separation. */
+.history-card{border:1.5px solid var(--border);border-radius:var(--r-md);background:var(--row);overflow:hidden;transition:border-color .15s}
+.history-card:hover{border-color:var(--blue)}
+[data-theme="dark"] .history-card:hover{border-color:#5b52cc}
+.history-card .collapsible-btn{border:0;border-radius:0;background:transparent}
+.history-card .collapsible-btn:hover{border-color:transparent;transform:none}
+.history-card .collapsible-body.open{margin-top:0}
+/* overflow:hidden rognerait un contour exterieur : on le rentre dans le cadre. */
+.history-card .collapsible-btn:focus-visible,.history-card .btn-clear-history:focus-visible{outline-offset:-2px}
 
-.privacy-block{margin-top:20px;border-top:1px solid var(--border);padding-top:10px}.privacy-body{display:flex;flex-direction:column;gap:8px;padding-top:2px}
+.privacy-block{margin-top:12px}.privacy-body{display:flex;flex-direction:column;gap:8px;padding-top:2px}
 .privacy-intro{font-size:var(--text-xs);font-weight:400;color:var(--soft);line-height:1.55}
 .privacy-section-lbl{font-size:var(--text-xs);font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-top:2px;margin-bottom:3px}
 .privacy-api-list{display:flex;flex-direction:column;gap:3px}
@@ -1795,7 +1816,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
   .nav-brand{padding:4px 8px 4px 0;font-size:.8rem;margin-right:6px}
   .nav-brand-icon{width:17px;height:17px}
   .nav-drop-btn{padding:4px 9px 4px 10px;font-size:11px}
-  .cache-indicator{padding:5px 9px;font-size:10px;gap:5px;line-height:1}
+  .topbar-right .cache-indicator{padding:5px 9px;font-size:10px;gap:5px;line-height:1}
   /* Swap text long → short */
   .nav-drop-btn-label-long{display:none}
   .nav-drop-btn-label-short{display:inline}
@@ -1885,7 +1906,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 
 /* Très petits écrans (≤ 480px) — masquage cache + texte logo compact */
 @media(max-width:480px){
-  .cache-indicator{display:none}
+  .topbar-right .cache-indicator{display:none}
 }
 
 /* Très petits écrans (≤ 380px) — encore plus compact */
@@ -1914,6 +1935,20 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:10px
 .cache-indicator.state-active   .cache-dot{background:#86efac;animation:cachePulse 2s ease-in-out infinite}
 .cache-indicator.state-inactive .cache-dot{background:rgba(255,255,255,.3);animation:none}
 .cache-indicator.state-clearing .cache-dot{background:#fca5a5;animation:cacheSpin .6s linear infinite}
+/* Variante accolee au titre de l'historique : fond clair ou sombre selon le theme,
+   la version de base etant taillee pour la barre du haut. */
+.cache-indicator--inline{margin-left:8px;margin-right:auto;padding:3px 8px;font-size:11px;gap:5px;color:var(--muted);border-color:var(--border)}
+.cache-indicator--inline + .history-admin-count{margin-left:0}
+.cache-indicator--inline.state-active{color:#15803d;border-color:#bbf7d0}
+.cache-indicator--inline.state-active .cache-dot{background:#22c55e}
+.cache-indicator--inline.state-inactive{color:var(--muted);border-color:var(--border)}
+.cache-indicator--inline.state-inactive .cache-dot{background:var(--muted)}
+.cache-indicator--inline.state-clearing{color:#dc2626;border-color:#fecdd3}
+.cache-indicator--inline.state-clearing .cache-dot{background:#ef4444}
+[data-theme="dark"] .cache-indicator--inline.state-active{color:#86efac;border-color:rgba(134,239,172,.35)}
+[data-theme="dark"] .cache-indicator--inline.state-active .cache-dot{background:#86efac}
+[data-theme="dark"] .cache-indicator--inline.state-clearing{color:#fca5a5;border-color:rgba(252,165,165,.35)}
+[data-theme="dark"] .cache-indicator--inline.state-clearing .cache-dot{background:#fca5a5}
 @keyframes cachePulse{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes cacheSpin{0%{opacity:1}50%{opacity:.2}100%{opacity:1}}
 .cache-clear-bar{position:fixed;top:0;left:0;width:100%;height:3px;z-index:9999;pointer-events:none;background:transparent}

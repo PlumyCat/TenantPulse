@@ -192,10 +192,6 @@
   <div class="topbar-right">
     <!-- Indicateurs d'état, remontés de la barre de navigation : ils sont stylés en blanc
          translucide, donc taillés pour un fond sombre. -->
-    <div class="cache-indicator state-inactive" id="cacheIndicator">
-      <span class="cache-dot"></span>
-      <span id="cacheIndicatorLabel">Cache inactif</span>
-    </div>
     <div class="nav-badge">v2.0</div>
     <!-- Relais DNS actif : les résolutions passent par le serveur au lieu du navigateur.
          Alimenté par syncDnsRelayUI(). Placé avec l'état de l'extension, les deux étant
@@ -300,10 +296,10 @@
         </button>
         <div class="drop-section-body">
           <div class="cache-legend">
-            <div class="cache-legend-row"><span class="cache-legend-dot active"></span><span class="cache-legend-label"><strong>X entrée(s) en cache</strong> — historique activé et données présentes</span></div>
-            <div class="cache-legend-row"><span class="cache-legend-dot inactive"></span><span class="cache-legend-label"><strong>Cache vide</strong> — activé, aucune entrée</span></div>
-            <div class="cache-legend-row"><span class="cache-legend-dot inactive"></span><span class="cache-legend-label"><strong>Cache désactivé</strong> — désactivé, données encore présentes</span></div>
-            <div class="cache-legend-row"><span class="cache-legend-dot inactive"></span><span class="cache-legend-label"><strong>Cache inactif</strong> — désactivé et aucune donnée</span></div>
+            <div class="cache-legend-row"><span class="cache-legend-dot active"></span><span class="cache-legend-label"><strong>X tenant(s)</strong> — historique activé et données présentes</span></div>
+            <div class="cache-legend-row"><span class="cache-legend-dot inactive"></span><span class="cache-legend-label"><strong>Vide</strong> — activé, aucune entrée</span></div>
+            <div class="cache-legend-row"><span class="cache-legend-dot inactive"></span><span class="cache-legend-label"><strong>Désactivé</strong> — désactivé, données encore présentes</span></div>
+            <div class="cache-legend-row"><span class="cache-legend-dot inactive"></span><span class="cache-legend-label"><strong>Inactif</strong> — désactivé et aucune donnée</span></div>
             <div class="cache-legend-row"><span class="cache-legend-dot clearing"></span><span class="cache-legend-label"><strong>Suppression…</strong> — vidage en cours</span></div>
           </div>
         </div>
@@ -439,7 +435,7 @@
           <li><strong>Régler la conservation</strong>&nbsp;: <button class="guide-path" type="button" data-guide-action="profiles">Profils → Rétention de l'historique</button> : nombre maximum de tenants et durée de conservation.</li>
           <li><strong>Nettoyage automatique</strong>&nbsp;: les entrées trop anciennes sont purgées à l'ouverture de l'app, à chaque analyse enregistrée, et quand vous changez la durée. Rien n'est nettoyé tant que l'application est fermée.</li>
         </ul>
-        <p>L'<strong>indicateur de cache</strong> dans la barre du haut montre l'état (actif, vide, désactivé, inactif). Vous consultez et effacez l'historique via le bloc <strong>«&nbsp;Historique des Tenant ID&nbsp;»</strong> dans la colonne de gauche.</p>
+        <p>Vous consultez et effacez l'historique via le bloc <strong>«&nbsp;Historique&nbsp;»</strong> de la colonne de gauche. L'<strong>indicateur de cache</strong>, accolé à son titre, en montre l'état (nombre de tenants, vide, désactivé, inactif).</p>
       </div>
 
       <div class="guide-section">
@@ -578,14 +574,21 @@
       <div class="err-box" id="errBox"></div>
 
       <div class="msa-check-block">
+        <div class="history-card">
         <button class="collapsible-btn" id="btnHistoryToggle">
-          <span><img src="assets/history.png" class="icon-adaptive" alt=""> Historique des Tenant ID</span>
+          <span><img src="assets/history.png" class="icon-adaptive" alt=""> Historique</span>
+          <!-- Etat du cache, accole au titre : il decrit ce bloc, pas l'application. -->
+          <span class="cache-indicator cache-indicator--inline state-inactive" id="cacheIndicator">
+            <span class="cache-dot"></span>
+            <span id="cacheIndicatorLabel">Inactif</span>
+          </span>
           <span class="history-admin-count" id="historyAdminCount" title="Comptes admin créés" hidden></span>
           <span class="coll-arrow" id="historyArrow">▾</span>
         </button>
         <div class="collapsible-body" id="historyBody">
           <div id="historyList"><div class="history-empty">Aucune analyse effectuée</div></div>
           <button class="btn-clear-history" id="btnClearHistory">Effacer l'historique</button>
+        </div>
         </div>
       </div>
 

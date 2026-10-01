@@ -670,7 +670,7 @@ function clearHistory() {
   const fill = document.getElementById('cacheClearFill');
   const ind  = document.getElementById('cacheIndicator');
   const lbl  = document.getElementById('cacheIndicatorLabel');
-  ind.className = 'cache-indicator state-clearing';
+  ind.className = 'cache-indicator cache-indicator--inline state-clearing';
   lbl.textContent = 'Suppression…';
   fill.style.transition = 'none'; fill.style.width = '0%';
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -689,17 +689,17 @@ function syncCacheIndicator() {
   const items   = loadHistory();
   const hasData = items.length > 0;
   if (!enabled && !hasData) {
-    ind.className = 'cache-indicator state-inactive';
-    lbl.textContent = 'Cache inactif';
+    ind.className = 'cache-indicator cache-indicator--inline state-inactive';
+    lbl.textContent = 'Inactif';
   } else if (!enabled && hasData) {
-    ind.className = 'cache-indicator state-inactive';
-    lbl.textContent = 'Cache désactivé';
+    ind.className = 'cache-indicator cache-indicator--inline state-inactive';
+    lbl.textContent = 'Désactivé';
   } else if (enabled && hasData) {
-    ind.className = 'cache-indicator state-active';
-    lbl.textContent = items.length + ' entrée' + (items.length > 1 ? 's' : '') + ' en cache';
+    ind.className = 'cache-indicator cache-indicator--inline state-active';
+    lbl.textContent = items.length + ' tenant' + (items.length > 1 ? 's' : '');
   } else {
-    ind.className = 'cache-indicator state-inactive';
-    lbl.textContent = 'Cache vide';
+    ind.className = 'cache-indicator cache-indicator--inline state-inactive';
+    lbl.textContent = 'Vide';
   }
 }
 function relativeTime(ts) {
@@ -748,10 +748,10 @@ function renderHistory() {
     row.addEventListener('click', () => loadFromHistory(item.domain));
 
     const iconSpan = document.createElement('span'); iconSpan.className = 'history-item-icon';
-    const iconImg = document.createElement('img'); iconImg.src = 'assets/Microsoft.png'; iconImg.width = 14; iconImg.height = 14; iconImg.alt = 'Microsoft'; iconImg.style.cssText = 'display:inline-block;vertical-align:middle;flex-shrink:0;';
+    const iconImg = document.createElement('img'); iconImg.src = 'assets/Microsoft.png'; iconImg.width = 14; iconImg.height = 14; iconImg.alt = 'Microsoft';
     iconSpan.appendChild(iconImg);
 
-    const textWrap = document.createElement('div'); textWrap.style.cssText = 'flex:1;min-width:0';
+    const textWrap = document.createElement('div'); textWrap.className = 'history-item-text';
     const domainEl = document.createElement('div'); domainEl.className = 'history-item-domain'; domainEl.textContent = item.domain;
     const guidEl   = document.createElement('div'); guidEl.className   = 'history-item-guid';   guidEl.textContent   = shortGuid;
     textWrap.appendChild(domainEl); textWrap.appendChild(guidEl);
