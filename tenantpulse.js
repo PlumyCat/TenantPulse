@@ -4270,9 +4270,26 @@ function showSteps(ids) {
   ids.forEach(id => { const el = document.getElementById('step-' + id); if (el) el.style.display = 'flex'; });
   afficherProgression();
 }
+/* Annulation au niveau de l'étape. Seules M365 et Hébergeur enregistraient un
+   contrôleur (fetchJsonC) : pour DNS, Sécurité, Services et Graph, « Annuler » ne
+   changeait que le libellé, et l'analyse attendait quand même toutes les réponses.
+   lancerEtape() met désormais chaque étape en course contre ce signal : annulée, elle
+   rend null aussitôt et l'analyse poursuit sans elle. Les requêtes déjà parties
+   s'achèvent en arrière-plan, sans effet : elles sont partagées par le cache DNS avec
+   d'autres étapes, les couper ici priverait celles-ci de leur réponse. */
+const stepAnnulations = {};
+function etapeAnnulable(key, travail) {
+  const ctrl = new AbortController();
+  stepAnnulations[key] = ctrl;
+  const annulee = new Promise(res => ctrl.signal.addEventListener('abort', () => res(null), { once: true }));
+  return Promise.race([Promise.resolve().then(travail), annulee])
+    .finally(() => { if (stepAnnulations[key] === ctrl) delete stepAnnulations[key]; });
+}
 function cancelStep(key) {
   const ctrl = stepControllers[key];
   if (ctrl) { ctrl.abort(); delete stepControllers[key]; }
+  const etape = stepAnnulations[key];
+  if (etape) { etape.abort(); delete stepAnnulations[key]; }
   setStep('step-' + key, 'timeout');
 }
 async function retryStep(key) {
@@ -4298,16 +4315,13 @@ async function retryStep(key) {
         host: cs.host,
         otherServices: cs.others,
         tenantConfidence: confidence,
-        health: cs.health ? {
-          score: cs.health.score,
-          dmarcIsQuarantine: cs.health.dmarcIsQuarantine,
-          checks: cs.health.checks.map(c => ({ type: c.t, title: c.title, desc: c.desc })),
-          dkim: { selector1: cs.health.hasSel1, selector2: cs.health.hasSel2, allResults: cs.health.dkimResults }
-        } : lastReport.health,
+        // Même forme que le rapport d'une analyse complète (bonus, m365 compris).
+        health: rapportSante() || lastReport.health,
       });
       // Historique : si le tenantId est (re)trouvé suite au retry, l'enregistrer
       if (cs.ms?.tenantId && cs.ms.tenantValid) addToHistory(cs.domain, cs.ms.tenantId);
     }
+    majCarteEtape(key);
   } catch { setStep('step-' + key, 'timeout'); }
   finally { unlockButtons(); }
 }
@@ -7264,7 +7278,7 @@ async function runGraphStep(domain) {
    final, sauf si l'utilisateur l'a annulée entre-temps (« Annulé » doit rester). */
 async function lancerEtape(key, travail, reussie) {
   setStep('step-' + key, 'active');
-  const r = await travail();
+  const r = await etapeAnnulable(key, travail);
   if (!document.getElementById('step-' + key).className.includes('timeout')) {
     setStep('step-' + key, reussie(r) ? 'done' : 'fail');
   }
@@ -7288,6 +7302,88 @@ function etapesAnalyse(domain) {
     others: async () => { currentState.others = await lancerEtape('others', () => checkOtherTenants(domain, currentState.dns || {}), r => !!r); },
     host:   async () => { currentState.host   = await lancerEtape('host',   () => checkHost(domain), r => !!r); },
   };
+}
+
+/* ── Cartes de résultats ──
+   Une fonction par carte, lue dans currentState, partagée par les trois parcours
+   d'analyse et par « Relancer » : elles étaient recopiées dans chacun. Chacune rend
+   null quand elle n'a rien à montrer (étape vide ou annulée). */
+function carteMs() {
+  if (!currentState.ms?.tenantValid) return null;
+  const rows = msRows(currentState.ms);
+  return makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) });
+}
+function carteGoogle() {
+  if (!currentState.goog) return null;
+  return makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) });
+}
+function carteDns() {
+  const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
+  if (!dnsRowCount) return null;
+  return makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) });
+}
+function carteSante(domain) {
+  if (!currentState.health) return null;
+  return makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) });
+}
+function carteHote(domain) {
+  if (!currentState.host) return null;
+  const logo = hostLogo(currentState.host.hostName);
+  return makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', 'Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) });
+}
+// Analyse rapide : fournisseurs de messagerie lus dans le DNS.
+function blocFournisseurs() {
+  if (!currentState.dns?.detectedProviders?.length) return null;
+  const pb = document.createElement('div'); pb.className = 'pills-block';
+  const pl = document.createElement('div'); pl.className = 'pills-label'; pl.textContent = 'Providers e-mail détectés (DNS)';
+  const pr = document.createElement('div'); pr.className = 'pills-row';
+  currentState.dns.detectedProviders.forEach(name => { const p = document.createElement('div'); p.className = 'pill on'; p.textContent = '✓ ' + name; pr.appendChild(p); });
+  pb.appendChild(pl); pb.appendChild(pr);
+  return pb;
+}
+// Analyse complète : il remplace le bloc des fournisseurs.
+function blocAutresServices() {
+  const pb = document.createElement('div'); pb.className = 'pills-block';
+  const pl = document.createElement('div'); pl.className = 'pills-label'; pl.textContent = 'Autres services détectés';
+  const pr = document.createElement('div'); pr.className = 'pills-row collapsed';
+  [...(currentState.others || [])].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).forEach(t => {
+    const p = document.createElement('div'); p.className = 'pill ' + (t.on ? 'on' : 'off');
+    if (t.imgSrc) { const img = document.createElement('img'); img.className='svc-logo'; img.src=t.imgSrc; img.alt=t.name; img.loading='lazy'; p.appendChild(img); p.appendChild(document.createTextNode(' ')); }
+    p.appendChild(document.createTextNode(t.name + (t.on ? ' ✓' : '')));
+    pr.appendChild(p);
+  });
+  const tg = document.createElement('button'); tg.type='button'; tg.className='pills-toggle'; tg.textContent='Afficher tout';
+  tg.addEventListener('click', () => { const c = pr.classList.toggle('collapsed'); tg.textContent = c ? 'Afficher tout' : 'Réduire'; });
+  pl.appendChild(tg);
+  pb.appendChild(pl); pb.appendChild(pr);
+  return pb;
+}
+/* Remplace une carte par sa nouvelle version, l'ajoute si elle manquait, la retire si
+   elle n'a plus rien à montrer. reorderResults() rétablit ensuite l'ordre canonique. */
+function poserCarte(center, ancienne, nouvelle) {
+  if (ancienne && nouvelle) ancienne.replaceWith(nouvelle);
+  else if (ancienne) ancienne.remove();
+  else if (nouvelle) center.appendChild(nouvelle);
+}
+/* Après « Relancer », la carte de l'étape reflète le nouveau résultat. Indispensable
+   depuis que « Annuler » annule vraiment : une étape annulée puis relancée n'aurait
+   sinon mis à jour que le rapport copié, sans rien afficher. Sans résultats à l'écran,
+   rien à faire : l'analyse encore en cours les posera elle-même. */
+function majCarteEtape(key) {
+  const center = document.getElementById('centerCol');
+  const hero = center.querySelector('.tenant-hero');
+  if (!hero) return;
+  const d = currentState.domain, q = s => center.querySelector(s);
+  if (key === 'ms') {
+    hero.replaceWith(renderHero(currentState.ms, d, computeConfidence(currentState.ms)));
+    poserCarte(center, q('#card-ms'), carteMs());
+  }
+  else if (key === 'dns')    poserCarte(center, q('#card-dns'), carteDns());
+  else if (key === 'health') poserCarte(center, q('#card-health'), carteSante(d));
+  else if (key === 'host')   poserCarte(center, q('#card-host'), carteHote(d));
+  else if (key === 'others') poserCarte(center, q('.pills-block'), blocAutresServices());
+  else if (key === 'graph')  poserCarte(center, q('#card-posture'), makePostureCard());
+  reorderResults(center);
 }
 
 async function checkFast() {
@@ -7314,22 +7410,7 @@ async function checkFast() {
     exportBtn.classList.add('visible'); // rapport (partiel) copiable dès l'analyse rapide
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));
-    if (currentState.dns?.detectedProviders?.length) {
-      const pb = document.createElement('div'); pb.className = 'pills-block';
-      const pl = document.createElement('div'); pl.className = 'pills-label'; pl.textContent = 'Providers e-mail détectés (DNS)';
-      const pr = document.createElement('div'); pr.className = 'pills-row';
-      currentState.dns.detectedProviders.forEach(name => { const p = document.createElement('div'); p.className = 'pill on'; p.textContent = '✓ ' + name; pr.appendChild(p); });
-      pb.appendChild(pl); pb.appendChild(pr); center.appendChild(pb);
-    }
-    if (currentState.ms?.tenantValid) {
-      const rows = msRows(currentState.ms);
-      center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
-    }
-    const posteCard = makePostureCard();
-    if (posteCard) center.appendChild(posteCard);
-    if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
-    const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
-    if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
+    [blocFournisseurs(), carteMs(), makePostureCard(), carteGoogle(), carteDns()].forEach(el => { if (el) center.appendChild(el); });
     const ctaBtn = document.createElement('button'); ctaBtn.className = 'btn-trigger-full'; ctaBtn.id = 'btnTriggerFull';
     // Construire le contenu initial et attacher le listener via le helper partagé
     resetCtaBtn(ctaBtn, raw, domain);
@@ -7387,29 +7468,10 @@ async function runFullFromState(raw, domain, ctaBtn) {
     lastReport = { domain, analysedAt: new Date().toISOString(), input: raw, microsoft: currentState.ms, google: currentState.goog, dns: currentState.dns, health: rapportSante(), otherServices: currentState.others, host: currentState.host, graph: currentState.graph, tenantConfidence: confidence, fullDone: true };
     exportBtn.classList.add('visible');
 
-    const newPb = document.createElement('div'); newPb.className = 'pills-block';
-    const pl = document.createElement('div'); pl.className = 'pills-label'; pl.textContent = 'Autres services détectés';
-    const pr = document.createElement('div'); pr.className = 'pills-row collapsed';
-    [...(currentState.others || [])].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).forEach(t => {
-      const p = document.createElement('div'); p.className = 'pill ' + (t.on ? 'on' : 'off');
-      if (t.imgSrc) { const img = document.createElement('img'); img.className='svc-logo'; img.src=t.imgSrc; img.alt=t.name; img.loading='lazy'; p.appendChild(img); p.appendChild(document.createTextNode(' ')); }
-      p.appendChild(document.createTextNode(t.name + (t.on ? ' ✓' : '')));
-      pr.appendChild(p);
-    });
-    const tg = document.createElement('button'); tg.type='button'; tg.className='pills-toggle'; tg.textContent='Afficher tout';
-    tg.addEventListener('click', () => { const c = pr.classList.toggle('collapsed'); tg.textContent = c ? 'Afficher tout' : 'Réduire'; });
-    pl.appendChild(tg);
-    newPb.appendChild(pl); newPb.appendChild(pr);
-    const oldPills = center.querySelector('.pills-block');
-    if (oldPills) center.replaceChild(newPb, oldPills); else center.insertBefore(newPb, center.querySelector('.result-card') || ctaBtn);
-
-    if (currentState.host) {
-      const logo = hostLogo(currentState.host.hostName);
-      center.insertBefore(makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', 'Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) }), ctaBtn);
-    }
-    if (currentState.health) {
-      center.insertBefore(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) }), ctaBtn);
-    }
+    // Le bloc des autres services remplace celui des fournisseurs de l'analyse rapide.
+    poserCarte(center, center.querySelector('.pills-block'), blocAutresServices());
+    poserCarte(center, center.querySelector('#card-host'), carteHote(domain));
+    poserCarte(center, center.querySelector('#card-health'), carteSante(domain));
     reorderResults(center);
     ctaBtn.classList.remove('running'); ctaBtn.classList.add('done'); ctaBtn.replaceChildren(); const doneImg = document.createElement('img'); doneImg.src='assets/checked.png'; doneImg.className='icon-adaptive'; doneImg.alt=''; ctaBtn.appendChild(doneImg); ctaBtn.appendChild(document.createTextNode(' Analyse complète effectuée'));
   } catch (err) {
@@ -7450,35 +7512,8 @@ async function checkFull() {
     exportBtn.classList.add('visible');
     if (currentState.ms?.tenantId && currentState.ms.tenantValid) addToHistory(domain, currentState.ms.tenantId);
     center.appendChild(renderHero(currentState.ms, domain, confidence));
-
-    const pb = document.createElement('div'); pb.className = 'pills-block';
-    const pl = document.createElement('div'); pl.className = 'pills-label'; pl.textContent = 'Autres services détectés';
-    const pr = document.createElement('div'); pr.className = 'pills-row collapsed';
-    [...currentState.others].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).forEach(t => {
-      const p = document.createElement('div'); p.className = 'pill ' + (t.on ? 'on' : 'off');
-      if (t.imgSrc) { const img = document.createElement('img'); img.className='svc-logo'; img.src=t.imgSrc; img.alt=t.name; img.loading='lazy'; p.appendChild(img); p.appendChild(document.createTextNode(' ')); }
-      p.appendChild(document.createTextNode(t.name + (t.on ? ' ✓' : '')));
-      pr.appendChild(p);
-    });
-    const tg = document.createElement('button'); tg.type='button'; tg.className='pills-toggle'; tg.textContent='Afficher tout';
-    tg.addEventListener('click', () => { const c = pr.classList.toggle('collapsed'); tg.textContent = c ? 'Afficher tout' : 'Réduire'; });
-    pl.appendChild(tg);
-    pb.appendChild(pl); pb.appendChild(pr); center.appendChild(pb);
-
-    if (currentState.ms?.tenantValid) {
-      const rows = msRows(currentState.ms);
-      center.appendChild(makeCard({ id:'ms', iconEl:makeImgIcon('assets/Microsoft.png','Microsoft',22), iconBg:'ms-clr', title:'Microsoft 365 / Entra ID', sub:'Endpoints & informations tenant', badge: rows.length + ' champs', badgeCls:'ms-b', selCls:'selected', onClick: () => openPanel('ms', 'Microsoft 365 / Entra ID', buildMsPanel(currentState.ms)) }));
-    }
-    const posteCardFull = makePostureCard();
-    if (posteCardFull) center.appendChild(posteCardFull);
-    if (currentState.goog) center.appendChild(makeCard({ id:'google', iconEl:makeGoogleSvgIcon(), iconBg:'gg-clr', title:'Google Workspace', sub:'OpenID Connect & MX Records', badge:'5 champs', badgeCls:'gg-b', selCls:'sel-google', onClick: () => openPanel('google', panelTitle('assets/google.png', 'icon-plain', 'Google Workspace'), buildGooglePanel(currentState.goog)) }));
-    if (currentState.host) {
-      const logo = hostLogo(currentState.host.hostName);
-      center.appendChild(makeCard({ id:'host', iconEl:logo.el, iconBg:'hs-clr', title:'Hébergeur & Registrar', sub:'WHOIS / RDAP — ' + (currentState.host.hostName || 'Inconnu'), badge: currentState.host.hostName || 'Inconnu', badgeCls:'hs-b', selCls:'sel-host', onClick: () => openPanel('host', 'Hébergeur & Registrar', buildHostPanel(currentState.host, domain)) }));
-    }
-    const dnsRowCount = [currentState.dns?.mx?.length, currentState.dns?.spf, currentState.dns?.detectedProviders?.length, currentState.dns?.txt?.length].filter(Boolean).length;
-    if (dnsRowCount) center.appendChild(makeCard({ id:'dns', iconEl:makeImgIcon('assets/DNS.png','DNS',20), iconBg:'dn-clr', title:'Enregistrements DNS', sub:'MX · SPF · TXT', badge: dnsRowCount + ' entrées', badgeCls:'dn-b', selCls:'sel-dns', onClick: () => openPanel('dns', panelTitle('assets/DNS.png', 'icon-plain', 'Enregistrements DNS'), buildDnsPanel(currentState.dns)) }));
-    center.appendChild(makeCard({ id:'health', iconEl:makeImgIcon('assets/Santé.png','Santé',20), iconBg:'hl-clr', title:'Santé du domaine', sub: healthSubLbl(currentState.health), badge: healthScoreLbl(currentState.health), badgeCls:'hl-b', selCls:'sel-health', onClick: () => openPanel('health', panelTitle('assets/Santé.png', 'icon-plain', 'Santé du domaine'), buildHealthPanel(currentState.health, domain)) }));
+    [blocAutresServices(), carteMs(), makePostureCard(), carteGoogle(), carteHote(domain), carteDns(), carteSante(domain)]
+      .forEach(el => { if (el) center.appendChild(el); });
     reorderResults(center);
   } catch (err) { document.getElementById('progList').style.display = 'none'; showError('Erreur : ' + err.message); }
   finally { unlockButtons(); setFullLoading(false); }
