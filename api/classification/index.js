@@ -73,28 +73,44 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // 1. Tags validés
-    const approvedTags = [];
-    const approvedQuery = classificationsClient.listEntities({
-      queryOptions: { filter: `PartitionKey eq '${esc(tenantId)}'` }
-    });
-    for await (const e of approvedQuery) {
-      approvedTags.push({
-        type:       e.rowKey,
-        approvedBy: e.approvedBy || "",
-        approvedAt: e.approvedAt || "",
-        comment:    e.comment || ""
-      });
-    }
-
-    // 2. Demandes en attente — agrégées par type, pourcentage par groupe
-    const pendingEntities = [];
-    const pendingQuery = requestsClient.listEntities({
-      queryOptions: {
-        filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and status eq 'pending'`
+    /* Les quatre lectures sont indépendantes : elles partent ensemble. Ce point d'entrée
+       est appelé à chaque analyse, et il les enchaînait bout à bout. */
+    const lire = async (requete) => { const out = []; for await (const e of requete) out.push(e); return out; };
+    const verrouille = async () => {
+      try { await locksClient.getEntity("lock", tenantId); return true; }
+      catch {
+        try { await locksClient.getEntity("lock", "global"); return true; } catch { return false; }
       }
-    });
-    for await (const e of pendingQuery) pendingEntities.push(e);
+    };
+    const [approvedEntities, pendingEntities, rejectedEntities, locked] = await Promise.all([
+      // 1. Tags validés
+      lire(classificationsClient.listEntities({
+        queryOptions: { filter: `PartitionKey eq '${esc(tenantId)}'` }
+      })),
+      // 2. Demandes en attente
+      lire(requestsClient.listEntities({
+        queryOptions: {
+          filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and status eq 'pending'`
+        }
+      })),
+      // 3. Demandes de suppression refusées (délai de carence)
+      lire(requestsClient.listEntities({
+        queryOptions: {
+          filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and action eq 'remove' and status eq 'rejected'`
+        }
+      })),
+      // 4. Verrou du tenant, ou verrou global
+      verrouille()
+    ]);
+
+    const approvedTags = approvedEntities.map(e => ({
+      type:       e.rowKey,
+      approvedBy: e.approvedBy || "",
+      approvedAt: e.approvedAt || "",
+      comment:    e.comment || ""
+    }));
+
+    // Demandes en attente — agrégées par type, pourcentage par groupe
 
     const countByType = {};
     const totalByGroup = {};
@@ -127,26 +143,12 @@ module.exports = async function (context, req) {
     const REMOVAL_REJECT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
     const nowMs = Date.now();
     const cooldownByType = {};
-    const rejectedQuery = requestsClient.listEntities({
-      queryOptions: {
-        filter: `PartitionKey eq 'request' and tenantId eq '${esc(tenantId)}' and action eq 'remove' and status eq 'rejected'`
-      }
-    });
-    for await (const e of rejectedQuery) {
+    for (const e of rejectedEntities) {
       if (!e.reviewedAt) continue;
       const until = new Date(e.reviewedAt).getTime() + REMOVAL_REJECT_COOLDOWN_MS;
       if (until > nowMs && until > (cooldownByType[e.type] || 0)) cooldownByType[e.type] = until;
     }
     const removalCooldowns = Object.entries(cooldownByType).map(([type, until]) => ({ type, until: new Date(until).toISOString() }));
-
-    // 3. Verrou
-    let locked = false;
-    try {
-      await locksClient.getEntity("lock", tenantId);
-      locked = true;
-    } catch {
-      try { await locksClient.getEntity("lock", "global"); locked = true; } catch { locked = false; }
-    }
 
     // Tags custom visibles par tous (lecture seule) — pas de filtrage ici.
     // La proposition/création de tags custom reste réservée aux managers/admins.
