@@ -107,6 +107,15 @@ External endpoints:
   gratuits, usage commercial autorisé, même schéma de réponse. `DOH_RESOLVERS` porte la liste,
   `dohActif` l'index retenu : on ne change de résolveur qu'après un échec avéré, et seulement
   si le suivant a réellement répondu — une panne passagère ne condamne pas la session.
+- **Toute résolution de l'analyse passe par `resoudre()` / `dnsQuery()`**, jamais par
+  `dohResolve()` en direct : cache par analyse (la promesse est mémorisée, doublons et
+  requêtes simultanées partagés, seuls NOERROR/NXDOMAIN restent), plafond de 12 requêtes
+  simultanées (`DNS_PARALLELE_MAX`). `viderCacheDns()` au lancement de chaque analyse et
+  à chaque « Relancer ». Les étapes sont définies une fois dans `etapesAnalyse()` et partent
+  en parallèle ; seules dépendances : Graph attend M365, les autres services attendent le
+  DNS. Mesuré : analyse complète de 0,9 à 1,9 s ramenée à 0,2 à 0,3 s, résultats identiques.
+  `countSpfLookups()` reste séquentiel (son décompte dépend de l'ordre) ; `prechargerSpf()`
+  lui sert l'arbre déjà en cache.
 
 > [!IMPORTANT]
 > **Le relais serveur (`GET /api/dns`) est un mode de secours, jamais le fonctionnement

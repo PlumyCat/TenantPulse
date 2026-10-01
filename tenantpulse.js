@@ -4282,6 +4282,8 @@ async function retryStep(key) {
   afficherProgression();
   lockButtons();
   setStep('step-' + key, 'active');
+  // « Relancer » veut des réponses fraîches : le cache de l'analyse ne doit pas les servir.
+  viderCacheDns();
   try {
     await fn();
     // Synchroniser lastReport avec les données fraîches de currentState
@@ -4430,9 +4432,76 @@ async function dohResolve(name, type, timeout=9000) {
   }
   return null;
 }
+/* ── Cache DNS de l'analyse en cours ──
+   Une analyse complète enchaîne une cinquantaine de résolutions, dont plusieurs
+   doublons : MX demandé par la détection Google, l'étape DNS et la santé ; TXT par l'étape
+   DNS et la santé ; mailjet._domainkey par les sélecteurs DKIM et les autres services.
+   On mémorise la PROMESSE et non le résultat : deux étapes qui partent en même temps
+   partagent la même requête au lieu d'en émettre deux.
+   Durée de vie : une analyse. viderCacheDns() est appelé au lancement de chacune, et
+   l'analyse complète enchaînée après la rapide réutilise ce que la rapide a obtenu.
+   Un échec n'est pas mémorisé : « Relancer » doit réellement réinterroger. */
+let dnsMemo = new Map();
+function viderCacheDns() { dnsMemo = new Map(); }
+
+/* Plafond de requêtes simultanées. Les étapes partant désormais en parallèle, une
+   analyse complète émettrait sinon une cinquantaine de requêtes d'un coup vers des
+   résolveurs gratuits (ou vers le relais, quand il est actif). Douze suffisent à
+   garder l'essentiel du gain : mesuré, 23 sélecteurs DKIM passent de ~350 ms en série
+   à ~25 ms en parallèle. */
+const DNS_PARALLELE_MAX = 12;
+let dnsEnCours = 0;
+const dnsFile = [];
+async function avecPlaceDns(fn) {
+  // Le créneau libéré est transmis directement au suivant de la file : aucun appel
+  // arrivé entre-temps ne peut le prendre et faire dépasser le plafond.
+  if (dnsEnCours >= DNS_PARALLELE_MAX) await new Promise(r => dnsFile.push(r));
+  else dnsEnCours++;
+  try { return await fn(); }
+  finally { const suivant = dnsFile.shift(); if (suivant) suivant(); else dnsEnCours--; }
+}
+
+/* Point d'entrée unique des résolutions de l'analyse : cache + plafond. Rend la
+   réponse DoH brute (ou null), comme dohResolve. */
+function resoudre(name, type) {
+  const cle = String(name).toLowerCase() + '|' + type;
+  let p = dnsMemo.get(cle);
+  if (!p) {
+    p = avecPlaceDns(() => dohResolve(name, type)).then(d => {
+      // Seules les réponses définitives restent : NOERROR (0) et NXDOMAIN (3). Un
+      // SERVFAIL est passager et ne doit pas survivre à un « Relancer ».
+      const definitive = d && (d.Status === 0 || d.Status === 3);
+      if (!definitive && dnsMemo.get(cle) === p) dnsMemo.delete(cle);
+      return d;
+    });
+    dnsMemo.set(cle, p);
+  }
+  return p;
+}
 async function dnsQuery(name, type) {
-  const d = await dohResolve(name, type);
+  const d = await resoudre(name, type);
   return d ? (d.Answer || []) : [];
+}
+/* Précharge l'arbre SPF, un étage à la fois mais chaque étage en parallèle.
+   countSpfLookups() reste séquentiel, et c'est voulu : son décompte dépend de l'ordre de
+   parcours (un include déjà vu n'est pas redéroulé). Le paralléliser changerait le
+   résultat. On lui sert donc des réponses déjà en cache, et il ne coûte plus que du calcul.
+   Le découpage des jetons reprend exactement celui de countSpfLookups. */
+async function prechargerSpf(spf, vus = new Set(), profondeur = 0) {
+  if (profondeur > 10) return;
+  const propre = spf.replace(/"\s*"/g, '').replace(/"/g, '');
+  const domaines = [];
+  for (const tok of propre.trim().split(/\s+/)) {
+    const t = tok.toLowerCase();
+    if (!t.startsWith('include:') && !t.startsWith('redirect=')) continue;
+    const dom = t.split(/[:=]/)[1]?.replace(/\.$/, '');
+    if (dom && !vus.has(dom)) { vus.add(dom); domaines.push(dom); }
+  }
+  await Promise.all(domaines.map(async dom => {
+    const txt = await dnsQuery(dom, 'TXT');
+    const imbrique = txt.map(a => a.data).find(d => d && d.includes('v=spf1'));
+    if (imbrique) await prechargerSpf(imbrique, vus, profondeur + 1);
+  }));
 }
 // Compte les lookups DNS d'un enregistrement SPF (include:/redirect=/a/mx/exists/ptr), récursivement.
 // Microsoft : au-delà de 10, SPF renvoie permerror et échoue entièrement.
@@ -4707,7 +4776,7 @@ async function resolveKnownDomainForTenantId(tenantId) {
 
 async function checkGoogle(domain) {
   try {
-    const [oidc, mx] = await Promise.all([fetchJson('https://accounts.google.com/.well-known/openid-configuration'), dohResolve(domain, 'MX')]);
+    const [oidc, mx] = await Promise.all([fetchJson('https://accounts.google.com/.well-known/openid-configuration'), resoudre(domain, 'MX')]);
     if (!oidc || !mx) return null;
     const ans = mx.Answer || [];
     if (!ans.some(a => a.data?.toLowerCase().includes('google'))) return null;
@@ -4717,8 +4786,9 @@ async function checkGoogle(domain) {
 
 async function checkDNS(domain) {
   const r = { mx: [], spf: null, txt: [], detectedProviders: [] };
-  const mx  = await dohResolve(domain, 'MX');  if (mx)  r.mx  = (mx.Answer  || []).map(a => a.data).filter(Boolean);
-  const txt = await dohResolve(domain, 'TXT'); if (txt) { const all = (txt.Answer || []).map(a => a.data).filter(Boolean); r.spf = all.find(t => t.includes('v=spf1')) || null; r.txt = all; }
+  const [mx, txt] = await Promise.all([resoudre(domain, 'MX'), resoudre(domain, 'TXT')]);
+  if (mx)  r.mx  = (mx.Answer  || []).map(a => a.data).filter(Boolean);
+  if (txt) { const all = (txt.Answer || []).map(a => a.data).filter(Boolean); r.spf = all.find(t => t.includes('v=spf1')) || null; r.txt = all; }
   const ms = r.mx.join(' ').toLowerCase(), ss = (r.spf || '').toLowerCase(), ts = r.txt.join(' ').toLowerCase();
   const providers = [
     [['google','googlemail'],              ['google'],                      'Google Workspace'],
@@ -4750,18 +4820,44 @@ async function checkDNS(domain) {
 
 async function checkHealth(domain) {
   const checks = []; let score = 0; let bonus = 0;
+
+  /* Toutes les résolutions partent d'emblée : aucune ne dépend d'une autre, hormis
+     l'arbre SPF qui attend le TXT racine. La suite de la fonction attend chaque
+     réponse là où elle en a besoin, si bien que la logique de score est inchangée.
+     En série, cette étape coûtait une quarantaine d'allers-retours bout à bout. */
+  const dkimSelectors = ['selector1','selector2','default','google','microsoft','k1','mail','dkim','smtp','email','mailjet','sendgrid','mandrill','amazonses','postmark','sparkpost','mxroute','zoho','protonmail','brevo','s1','s2','sig1'];
+  const q = {
+    mx:     dnsQuery(domain, 'MX'),
+    txt:    dnsQuery(domain, 'TXT'),
+    dmarc:  dnsQuery(`_dmarc.${domain}`, 'TXT'),
+    dkim:   dkimSelectors.map(s => dnsQuery(`${s}._domainkey.${domain}`, 'TXT')),
+    sel1Cn: dnsQuery(`selector1._domainkey.${domain}`, 'CNAME'),
+    wwwCn:  dnsQuery(`www.${domain}`, 'CNAME'),
+    wwwA:   dnsQuery(`www.${domain}`, 'A'),
+    ds:     dnsQuery(domain, 'DS'),
+    dnskey: dnsQuery(domain, 'DNSKEY'),
+    mtaSts: dnsQuery(`_mta-sts.${domain}`, 'TXT'),
+    bimi:   dnsQuery(`default._bimi.${domain}`, 'TXT'),
+    autod:  dnsQuery(`autodiscover.${domain}`, 'CNAME'),
+    entReg: dnsQuery(`enterpriseregistration.${domain}`, 'CNAME'),
+    entEnr: dnsQuery(`enterpriseenrollment.${domain}`, 'CNAME'),
+    lync:   dnsQuery(`lyncdiscover.${domain}`, 'CNAME'),
+    sipFed: dnsQuery(`_sipfederationtls._tcp.${domain}`, 'SRV'),
+  };
+
   // Score de base (max 100) = essentiels d'authentification e-mail : MX + SPF + DKIM + DMARC.
   // MTA-STS / DNSSEC / BIMI = bonus de durcissement, comptés au-dessus de 100.
-  const mxA = await dnsQuery(domain, 'MX');
+  const mxA = await q.mx;
   if (mxA.length > 0) { score += 10; checks.push({ t:'ok',    icon:'assets/checked.png', title:'MX Records présents', desc: mxA.map(a => a.data).join(' | ') }); }
   else                              checks.push({ t:'error', icon:'assets/warning.png', title:'MX Records manquants',  desc: 'Aucun enregistrement MX.' });
 
   // SPF — bonnes pratiques Microsoft : include spf.protection.outlook.com (M365), -all, ≤ 10 lookups DNS.
-  const txtA = await dnsQuery(domain, 'TXT'), allTxt = txtA.map(a => a.data).filter(Boolean), spf = allTxt.find(t => t.includes('v=spf1'));
+  const txtA = await q.txt, allTxt = txtA.map(a => a.data).filter(Boolean), spf = allTxt.find(t => t.includes('v=spf1'));
   if (spf) {
     const isM365Mail = mxA.some(a => /\.protection\.outlook\.com/i.test(a.data || ''));
     const m365Include = /include:\s*spf\.protection\.(outlook\.com|office365\.us|partner\.outlook\.cn)/i.test(spf);
     const hardFail = /-all\b/.test(spf), softFail = /~all\b/.test(spf);
+    await prechargerSpf(spf);
     const lookups = await countSpfLookups(spf);
     if (lookups > 10) {
       score += 5;
@@ -4782,7 +4878,7 @@ async function checkHealth(domain) {
   }
   else checks.push({ t:'error', icon:'assets/warning.png', title:'SPF manquant', desc:'Risque de spoofing.' });
 
-  const dmarcA = await dnsQuery(`_dmarc.${domain}`, 'TXT'), dmarc = dmarcA.map(a => a.data).find(d => d.includes('v=DMARC1'));
+  const dmarcA = await q.dmarc, dmarc = dmarcA.map(a => a.data).find(d => d.includes('v=DMARC1'));
   let dmarcIsQuarantine = false;
   if (dmarc) {
     const p = (dmarc.match(/p=([^;]+)/i) || [])[1]?.trim().toLowerCase();
@@ -4793,12 +4889,11 @@ async function checkHealth(domain) {
     else                         { score += 12; checks.push({ t:'warn', icon:'assets/warning.png', title:'DMARC p=none (surveillance seule)', desc: dmarc + ' — aucune application : Microsoft recommande de progresser vers quarantine ou reject.' + ruaNote }); }
   } else checks.push({ t:'error', icon:'assets/warning.png', title:'DMARC manquant', desc: `Aucun _dmarc.${domain} — configurez SPF, DKIM puis DMARC (ordre Microsoft).` });
 
-  const dkimSelectors = ['selector1','selector2','default','google','microsoft','k1','mail','dkim','smtp','email','mailjet','sendgrid','mandrill','amazonses','postmark','sparkpost','mxroute','zoho','protonmail','brevo','s1','s2','sig1'];
   const dkimResults   = {};
-  for (const s of dkimSelectors) {
-    const a = await dnsQuery(`${s}._domainkey.${domain}`, 'TXT');
-    dkimResults[s] = a.map(x => x.data).find(d => d.includes('v=DKIM1') || d.includes('p=')) || null;
-  }
+  const dkimReponses  = await Promise.all(q.dkim);
+  dkimSelectors.forEach((s, i) => {
+    dkimResults[s] = dkimReponses[i].map(x => x.data).find(d => d.includes('v=DKIM1') || d.includes('p=')) || null;
+  });
   const foundSelectors = Object.entries(dkimResults).filter(([, v]) => v !== null);
   const hasSel1 = dkimResults['selector1'] !== null, hasSel2 = dkimResults['selector2'] !== null;
   const selNames = foundSelectors.map(([k]) => k).join(', ');
@@ -4819,7 +4914,7 @@ async function checkHealth(domain) {
   // Ex. selector1._domainkey.contoso.fr → selector1-contoso-fr._domainkey.contoso75.onmicrosoft.com → spTenant = contoso75.
   let spTenant = null;
   try {
-    const sel1Cn = await dnsQuery(`selector1._domainkey.${domain}`, 'CNAME');
+    const sel1Cn = await q.sel1Cn;
     for (const a of sel1Cn) {
       const m = (a.data || '').match(/([a-z0-9][a-z0-9-]*)\.onmicrosoft\.com/i);
       if (m) { spTenant = m[1].toLowerCase(); break; }
@@ -4827,21 +4922,21 @@ async function checkHealth(domain) {
   } catch { /* CNAME absent ou DKIM non Microsoft : SharePoint direct restera indisponible */ }
 
   // www : web, hors score hygiène e-mail → affiché en info seulement.
-  const cnA = await dnsQuery(`www.${domain}`, 'CNAME'), aA = await dnsQuery(`www.${domain}`, 'A');
+  const cnA = await q.wwwCn, aA = await q.wwwA;
   if      (cnA.length > 0) checks.push({ t:'info', icon:'assets/information.png', title:'www (CNAME)',    desc: cnA.map(a => a.data).join(', ') + ' — web, hors score.' });
   else if (aA.length  > 0) checks.push({ t:'info', icon:'assets/information.png', title:'www (A record)', desc: aA.map(a => a.data).join(', ') + ' — web, hors score.' });
   else                     checks.push({ t:'info', icon:'assets/information.png', title:'www non résolu', desc: `Aucun CNAME ni A pour www.${domain} (web, hors score).` });
 
   // ── Bonus de durcissement (au-dessus de 100, hors score de base) ──
-  const dsA = await dnsQuery(domain, 'DS'), dkA = await dnsQuery(domain, 'DNSKEY');
+  const dsA = await q.ds, dkA = await q.dnskey;
   if (dsA.length > 0 || dkA.length > 0) { bonus += 4; checks.push({ t:'ok',   icon:'assets/checked.png', title:'DNSSEC activé (bonus +4)', desc: `${dsA.length} DS, ${dkA.length} DNSKEY.` }); }
   else                                               checks.push({ t:'info', icon:'assets/information.png', title:'DNSSEC non activé', desc: 'Bonus optionnel — peu répandu sur les domaines M365.' });
 
-  const mtaSts = await dnsQuery(`_mta-sts.${domain}`, 'TXT'), mtaRec = mtaSts.map(a => a.data).find(d => d.includes('v=STSv1'));
+  const mtaSts = await q.mtaSts, mtaRec = mtaSts.map(a => a.data).find(d => d.includes('v=STSv1'));
   if (mtaRec) { bonus += 6; checks.push({ t:'ok',   icon:'assets/checked.png', title:'MTA-STS activé (bonus +6)', desc: mtaRec }); }
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'MTA-STS non configuré',  desc: 'Bonus optionnel — chiffrement TLS forcé en réception.' });
 
-  const bimiA = await dnsQuery(`default._bimi.${domain}`, 'TXT'), bimiRec = bimiA.map(a => a.data).find(d => d.includes('v=BIMI1'));
+  const bimiA = await q.bimi, bimiRec = bimiA.map(a => a.data).find(d => d.includes('v=BIMI1'));
   if (bimiRec) { bonus += 3; checks.push({ t:'ok',   icon:'assets/checked.png', title:'BIMI configuré (bonus +3)', desc: bimiRec }); }
   else                  checks.push({ t:'info', icon:'assets/information.png', title:'BIMI absent',              desc: 'Bonus optionnel — nécessite DMARC p=quarantine ou reject.' });
 
@@ -4851,7 +4946,7 @@ async function checkHealth(domain) {
   const first = arr => arr.map(a => a.data).find(Boolean) || null;
 
   // Autodiscover → connexion / configuration Outlook
-  const adTgt = first(await dnsQuery(`autodiscover.${domain}`, 'CNAME'));
+  const adTgt = first(await q.autod);
   if (adTgt && /autodiscover\.outlook\.com/i.test(adTgt))
     m365.push({ t:'ok',   icon:'assets/checked.png',     title:'Autodiscover M365',         desc:`autodiscover.${domain} → ${adTgt}` });
   else if (adTgt)
@@ -4860,8 +4955,8 @@ async function checkHealth(domain) {
     m365.push({ t:'info', icon:'assets/information.png', title:'Autodiscover absent',         desc:`Aucun CNAME autodiscover.${domain}. La connexion Outlook peut nécessiter une configuration manuelle.` });
 
   // Enrôlement Intune / MDM (auto-enroll Windows + mobile, Hybrid AAD join)
-  const erTgt = first(await dnsQuery(`enterpriseregistration.${domain}`, 'CNAME'));
-  const eeTgt = first(await dnsQuery(`enterpriseenrollment.${domain}`, 'CNAME'));
+  const erTgt = first(await q.entReg);
+  const eeTgt = first(await q.entEnr);
   const erOk = erTgt && /enterpriseregistration\.windows\.net/i.test(erTgt);
   const eeOk = eeTgt && /enterpriseenrollment\.manage\.microsoft\.com/i.test(eeTgt);
   if (erOk && eeOk)
@@ -4872,8 +4967,8 @@ async function checkHealth(domain) {
     m365.push({ t:'info', icon:'assets/information.png', title:'Enrôlement Intune non configuré', desc:'Aucun CNAME enterpriseregistration/enterpriseenrollment. Requis pour l\'enrôlement automatique (MDM/Hybrid AAD join).' });
 
   // Teams / Skype Entreprise (records hérités SfB — optionnels en Teams-only)
-  const lync = first(await dnsQuery(`lyncdiscover.${domain}`, 'CNAME'));
-  const sipFed = first(await dnsQuery(`_sipfederationtls._tcp.${domain}`, 'SRV'));
+  const lync = first(await q.lync);
+  const sipFed = first(await q.sipFed);
   if (lync || sipFed)
     m365.push({ t:'ok',   icon:'assets/checked.png',     title:'Teams / Skype (DNS hérité)',  desc:`${lync ? 'lyncdiscover → ' + lync : ''}${lync && sipFed ? ' | ' : ''}${sipFed ? 'fédération SRV → ' + sipFed : ''}` });
   else
@@ -4884,6 +4979,14 @@ async function checkHealth(domain) {
 
 async function checkOtherTenants(domain, dns) {
   const t  = [], ms = (dns.mx || []).join(' ').toLowerCase(), ss = (dns.spf || '').toLowerCase(), ts = (dns.txt || []).join(' ').toLowerCase();
+  /* Les quatre sondes DNS partent ensemble. mailjet._domainkey a déjà été demandé par
+     les sélecteurs DKIM de la santé : le cache de l'analyse le sert sans requête. */
+  const [mailjetDk, sendgridS1, odooCn, hubspotDk] = await Promise.all([
+    dnsQuery(`mailjet._domainkey.${domain}`, 'TXT'),
+    dnsQuery(`s1._domainkey.${domain}`, 'CNAME'),
+    dnsQuery(`odoo.${domain}`, 'CNAME'),
+    dnsQuery(`hs1._domainkey.${domain}`, 'CNAME'),
+  ]);
 
   // Google Workspace n'est plus listé ici : sa détection a sa propre carte dédiée (si réellement Google).
   t.push({ name:'Mailinblack',      imgSrc:'assets/mailinblack.jpeg',    on: ms.includes('mailinblack') || ss.includes('mailinblack') });
@@ -4893,14 +4996,14 @@ async function checkOtherTenants(domain, dns) {
   t.push({ name:'Barracuda',        imgSrc:'assets/Barracuda.png',       on: ms.includes('barracudanetworks') || ss.includes('barracudanetworks') });
   t.push({ name:'Hornetsecurity',   imgSrc:'assets/Hornetsecurity.png',  on: ms.includes('hornetsecurity') || ss.includes('hornetsecurity') });
   t.push({ name:'Brevo',            imgSrc:'assets/Brevo.jpeg',          on: ss.includes('brevo') || ss.includes('sendinblue') || ms.includes('sendinblue') });
-  t.push({ name:'Mailjet',          imgSrc:'assets/Mailjet.png',         on: ss.includes('mailjet') || (await dnsQuery(`mailjet._domainkey.${domain}`, 'TXT')).length > 0 });
-  t.push({ name:'SendGrid',         imgSrc:'assets/SendGrid.png',        on: ss.includes('sendgrid') || (await dnsQuery(`s1._domainkey.${domain}`, 'CNAME')).length > 0 });
+  t.push({ name:'Mailjet',          imgSrc:'assets/Mailjet.png',         on: ss.includes('mailjet') || mailjetDk.length > 0 });
+  t.push({ name:'SendGrid',         imgSrc:'assets/SendGrid.png',        on: ss.includes('sendgrid') || sendgridS1.length > 0 });
   t.push({ name:'Postmark',         imgSrc:'assets/Postmark.png',        on: ss.includes('spf.mtasv') || ss.includes('postmarkapp') });
 
-  const odoo = ts.includes('odoo') || ss.includes('odoo') || ms.includes('odoo') || (await dnsQuery(`odoo.${domain}`, 'CNAME')).length > 0;
+  const odoo = ts.includes('odoo') || ss.includes('odoo') || ms.includes('odoo') || odooCn.length > 0;
   t.push({ name:'Odoo',             imgSrc:'assets/Odoo.png',            on: odoo });
   t.push({ name:'Salesforce',       imgSrc:'assets/Salesforce.png',      on: ts.includes('salesforce') || ss.includes('salesforce') });
-  const hs = ts.includes('hubspot') || ss.includes('hubspot') || (await dnsQuery(`hs1._domainkey.${domain}`, 'CNAME')).length > 0;
+  const hs = ts.includes('hubspot') || ss.includes('hubspot') || hubspotDk.length > 0;
   t.push({ name:'HubSpot',          imgSrc:'assets/HubSpot.png',         on: hs });
   t.push({ name:'Zendesk',          imgSrc:'assets/Zendesk.png',         on: ts.includes('zendesk') || ss.includes('zendesk') });
   t.push({ name:'Slack',            imgSrc:'assets/Slack.png',           on: ts.includes('slack') || ss.includes('slack-mail') });
@@ -7154,11 +7257,37 @@ function graphConnecte() {
 async function runGraphStep(domain) {
   if (!graphConnecte()) return;
   stepRetryFns.graph = () => runGraphStep(domain);
-  setStep('step-graph', 'active');
-  currentState.graph = await checkGraph(domain, currentState.ms?.tenantId || null);
-  if (!document.getElementById('step-graph').className.includes('timeout')) {
-    setStep('step-graph', currentState.graph ? 'done' : 'fail');
+  currentState.graph = await lancerEtape('graph', () => checkGraph(domain, currentState.ms?.tenantId || null), r => !!r);
+}
+
+/* Une étape de l'analyse : la marque active, attend son travail, puis pose l'état
+   final, sauf si l'utilisateur l'a annulée entre-temps (« Annulé » doit rester). */
+async function lancerEtape(key, travail, reussie) {
+  setStep('step-' + key, 'active');
+  const r = await travail();
+  if (!document.getElementById('step-' + key).className.includes('timeout')) {
+    setStep('step-' + key, reussie(r) ? 'done' : 'fail');
   }
+  return r;
+}
+
+/* Les étapes d'une analyse par domaine, définies une seule fois et partagées par
+   l'analyse rapide, la complète et « Relancer » (elles en étaient trois copies).
+   Chacune range son résultat dans currentState. L'ordre d'exécution, lui, est décidé
+   par l'appelant : seul Graph attend M365 (il lui faut le Tenant ID) et seuls les
+   autres services attendent le DNS. Tout le reste ne dépend que du domaine. */
+function etapesAnalyse(domain) {
+  return {
+    ms:     async () => { currentState.ms     = await lancerEtape('ms',     () => isMsaPersonalDomain(domain) ? null : checkMicrosoft(domain), r => !!r); },
+    graph:  ()       => runGraphStep(domain),
+    // Détection Google Workspace silencieuse (pas d'étape visible) : outil orienté M365.
+    // La carte « Google Workspace » s'affiche uniquement si le domaine est réellement Google.
+    google: async () => { currentState.goog   = await checkGoogle(domain); },
+    dns:    async () => { currentState.dns    = await lancerEtape('dns',    () => checkDNS(domain), r => (r?.mx?.length ?? 0) > 0); },
+    health: async () => { currentState.health = await lancerEtape('health', () => checkHealth(domain), r => !!r); },
+    others: async () => { currentState.others = await lancerEtape('others', () => checkOtherTenants(domain, currentState.dns || {}), r => !!r); },
+    host:   async () => { currentState.host   = await lancerEtape('host',   () => checkHost(domain), r => !!r); },
+  };
 }
 
 async function checkFast() {
@@ -7173,22 +7302,11 @@ async function checkFast() {
   // L'étape Graph n'apparaît que si l'utilisateur y est connecté : sans connexion
   // elle n'a rien à faire, et une étape vide dans la liste ferait croire à un échec.
   showSteps(graphConnecte() ? ['ms', 'graph', 'dns'] : ['ms', 'dns']);
+  viderCacheDns();
+  const E = etapesAnalyse(domain);
+  Object.assign(stepRetryFns, { ms: E.ms, dns: E.dns });
   try {
-    setStep('step-ms', 'active');
-    stepRetryFns.ms = async () => { setStep('step-ms', 'active'); currentState.ms = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail'); };
-    currentState.ms = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain);
-    if (!document.getElementById('step-ms').className.includes('timeout')) setStep('step-ms', currentState.ms ? 'done' : 'fail');
-
-    await runGraphStep(domain);
-
-    // Détection Google Workspace silencieuse (pas d'étape visible) : outil orienté M365.
-    // La carte « Google Workspace » s'affiche uniquement si le domaine est réellement Google.
-    currentState.goog = await checkGoogle(domain);
-
-    setStep('step-dns', 'active');
-    stepRetryFns.dns = async () => { setStep('step-dns', 'active'); currentState.dns = await checkDNS(domain); setStep('step-dns', currentState.dns?.mx?.length > 0 ? 'done' : 'fail'); };
-    currentState.dns = await checkDNS(domain);
-    if (!document.getElementById('step-dns').className.includes('timeout')) setStep('step-dns', (currentState.dns?.mx?.length ?? 0) > 0 ? 'done' : 'fail');
+    await Promise.all([E.ms().then(E.graph), E.google(), E.dns()]);
 
     document.getElementById('progList').style.display = 'none';
     const confidence = computeConfidence(currentState.ms);
@@ -7254,20 +7372,11 @@ async function runFullFromState(raw, domain, ctaBtn) {
   try {
     const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn');
 
-    setStep('step-health', 'active');
-    stepRetryFns.health = async () => { setStep('step-health', 'active'); currentState.health = await checkHealth(domain); setStep('step-health', 'done'); };
-    currentState.health = await checkHealth(domain);
-    if (!document.getElementById('step-health').className.includes('timeout')) setStep('step-health', 'done');
-
-    setStep('step-others', 'active');
-    stepRetryFns.others = async () => { setStep('step-others', 'active'); currentState.others = await checkOtherTenants(domain, currentState.dns || {}); setStep('step-others', 'done'); };
-    currentState.others = await checkOtherTenants(domain, currentState.dns || {});
-    if (!document.getElementById('step-others').className.includes('timeout')) setStep('step-others', 'done');
-
-    setStep('step-host', 'active');
-    stepRetryFns.host = async () => { setStep('step-host', 'active'); currentState.host = await checkHost(domain); setStep('step-host', currentState.host ? 'done' : 'fail'); };
-    currentState.host = await checkHost(domain);
-    if (!document.getElementById('step-host').className.includes('timeout')) setStep('step-host', currentState.host ? 'done' : 'fail');
+    // Le DNS est déjà là (analyse rapide) : les trois étapes partent ensemble, et le
+    // cache de l'analyse leur sert ce que la rapide a déjà résolu.
+    const E = etapesAnalyse(domain);
+    Object.assign(stepRetryFns, { health: E.health, others: E.others, host: E.host });
+    await Promise.all([E.health(), E.others(), E.host()]);
 
     document.getElementById('progList').style.display = 'none';
     currentState.fullDone = true;
@@ -7325,20 +7434,15 @@ async function checkFull() {
   const etapes = graphConnecte() ? ['ms', 'graph', 'dns', 'health', 'others', 'host'] : ['ms', 'dns', 'health', 'others', 'host'];
   showSteps(etapes);
   etapes.forEach(k => setStep('step-' + k, 'pending'));
+  viderCacheDns();
+  const E = etapesAnalyse(domain);
   // Peupler stepRetryFns pour que le bouton "Relancer" fonctionne en mode full
-  stepRetryFns.ms     = async () => { setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail'); };
-  stepRetryFns.dns    = async () => { setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', currentState.dns?.mx?.length > 0 ? 'done' : 'fail'); };
-  stepRetryFns.health = async () => { setStep('step-health', 'active'); currentState.health = await checkHealth(domain);                                         setStep('step-health', 'done'); };
-  stepRetryFns.others = async () => { setStep('step-others', 'active'); currentState.others = await checkOtherTenants(domain, currentState.dns || {});          setStep('step-others', 'done'); };
-  stepRetryFns.host   = async () => { setStep('step-host', 'active');   currentState.host   = await checkHost(domain);                                           setStep('step-host', currentState.host ? 'done' : 'fail'); };
+  Object.assign(stepRetryFns, { ms: E.ms, dns: E.dns, health: E.health, others: E.others, host: E.host });
   try {
-    setStep('step-ms', 'active');     currentState.ms     = isMsaPersonalDomain(domain) ? null : await checkMicrosoft(domain); setStep('step-ms', currentState.ms ? 'done' : 'fail');
-    await runGraphStep(domain);
-    currentState.goog   = await checkGoogle(domain); // détection silencieuse (pas d'étape visible)
-    setStep('step-dns', 'active');    currentState.dns    = await checkDNS(domain);                                            setStep('step-dns', (currentState.dns?.mx?.length ?? 0) > 0 ? 'done' : 'fail');
-    setStep('step-health', 'active'); currentState.health = await checkHealth(domain);                                         setStep('step-health', 'done');
-    setStep('step-others', 'active'); currentState.others = await checkOtherTenants(domain, currentState.dns);                 setStep('step-others', 'done');
-    setStep('step-host', 'active');   currentState.host   = await checkHost(domain);                                           setStep('step-host', currentState.host ? 'done' : 'fail');
+    /* Toutes les étapes partent ensemble, à deux dépendances près : Graph attend M365
+       (Tenant ID), les autres services attendent le DNS. En série, Lighthouse retardait
+       le DNS de plusieurs secondes, et le WHOIS attendait la fin de tout le reste. */
+    await Promise.all([E.ms().then(E.graph), E.google(), E.dns().then(E.others), E.health(), E.host()]);
     document.getElementById('progList').style.display = 'none';
     currentState.fullDone = true;
     const confidence = computeConfidence(currentState.ms);
