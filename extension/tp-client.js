@@ -53,6 +53,46 @@ const MESSAGES_AUTH = {
   bloque:  "Votre compte est bloqué dans TenantPulse. Contactez l'équipe support.",
 };
 
+/* ── Purge des données locales quand l'attestation ne vaut plus ──
+   Verrouiller l'interface ne suffisait pas : l'annuaire des classifications, l'historique
+   recopié et les domaines corrigés restaient dans chrome.storage.local indéfiniment, donc
+   sur la machine d'un compte révoqué ou bloqué. Le verrou empêchait les nouvelles
+   recherches, pas la conservation de ce qui avait déjà été recopié.
+
+   L'attestation elle-même est CONSERVÉE : sans elle, la popup ne saurait plus dire
+   pourquoi elle est verrouillée (« expirée » et « bloquée » appellent deux gestes
+   différents) et retomberait sur le message générique « jamais activée ». */
+const CLES_PURGEABLES = [
+  'tp_tags_v1',        // annuaire des classifications (identifiants de tenants)
+  'tp_tags_diag_v1',   // journal de la dernière recopie
+  'tp_d365_map_v1',    // domaines clients corrigés à la main
+  'tp_d365_diag_v1',   // signe de vie du panneau Dynamics
+  'tp_popup_v1',       // dernière recherche saisie (un domaine client)
+];
+
+function purgerDonneesLocales() {
+  return new Promise(resolve => {
+    try {
+      chrome.storage.local.remove(CLES_PURGEABLES, () => {
+        void chrome.runtime.lastError;
+        /* Le miroir n'est pas supprimé mais vidé de sa charge : l'attestation reste,
+           tout le reste part. Une suppression pure ferait repartir la popup sur
+           « extension jamais activée ». */
+        chrome.storage.local.get(MIRROR_KEY, (res) => {
+          const snap = res && res[MIRROR_KEY];
+          if (chrome.runtime.lastError || !snap) { resolve(); return; }
+          chrome.storage.local.set({
+            [MIRROR_KEY]: {
+              profile: null, history: [], historyEnabled: false, adminAccounts: {},
+              auth: snap.auth || null, syncedAt: snap.syncedAt || null,
+            },
+          }, () => { void chrome.runtime.lastError; resolve(); });
+        });
+      });
+    } catch { resolve(); }
+  });
+}
+
 /* Attestation seule, lue dans le miroir. La popup, elle, lit le miroir complet
    (profil et historique) et appelle authState() sur ce qu'elle a déjà en main. */
 function readAuthFromMirror() {

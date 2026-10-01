@@ -26,13 +26,13 @@ l'application TenantPulse.
 | `tp-badges.js` | Badges de classification, partagés par la popup et le panneau (lecture seule) |
 | `background.js` | Service worker : routeur des résolutions, enregistrement des scripts Dynamics, icône |
 | `sync.js` | Script de contenu : miroir du profil + attestation d'appartenance |
-| `d365/ctx-main.js` | Monde `MAIN` : lit l'enregistrement affiché via les API client de Dynamics |
+| `d365/ctx-main.js` | Monde `MAIN` : lit l'enregistrement affiché via les API client de Dynamics. Démarre inerte, armé par le monde isolé |
 | `d365/ctx.js` | Monde isolé : domaine du client (Dataverse) puis Tenant ID |
-| `d365/panel.js` / `panel.css` | Le panneau : Shadow DOM, ancrage sur la section, repli |
+| `d365/panel.js` / `panel.css` | Le panneau : Shadow DOM, ancrage sur la section, repli, déplacement à la main en mode tiroir |
 | `assets/` | Sous-ensemble des icônes de `../assets` |
 | `build.mjs` | Génère les paquets de distribution |
 | `local-config.example.json` | Modèle de la configuration locale à créer |
-| `STORE.md` | Textes de publication en magasin — **voie non retenue**, conservés en repli |
+| `STORE.md` | Textes de publication en magasin (fiche, confidentialité, notes de certification) |
 
 Deux fichiers sont **générés et hors dépôt** (voir `.gitignore`) :
 
@@ -134,6 +134,20 @@ attestation, et se retrouve avec une extension qui ne fait rien.
 
 Une panne réseau ou une session expirée ne détruit pas une attestation encore valide : elle est
 conservée telle quelle et expire d'elle-même.
+
+**Le verrou efface, il ne se contente pas de bloquer.** Verrouiller l'interface laissait sur la
+machine tout ce qui avait déjà été recopié — au premier chef l'annuaire des classifications, qui
+porte les identifiants de tous les tenants classés par l'organisation. Dès que l'attestation ne
+vaut plus, `purgerDonneesLocales()` (`tp-client.js`) supprime annuaire, historique, profil,
+domaines corrigés et dernière recherche ; `sync.js` cesse d'alimenter le miroir et `refreshTags()`
+ne recopie plus rien. Seule l'attestation subsiste — sans elle, la popup ne saurait plus dire
+*pourquoi* elle est verrouillée. La purge est déclenchée des deux côtés : à l'ouverture de la
+popup, et sur l'origine de l'application.
+
+Côté serveur, `GET /api/classification`, `GET /api/tags` et `GET /api/lock` refusent désormais un
+compte bloqué (403). Ils ne testaient que l'authentification : les écritures étaient fermées par
+la hiérarchie de rôles — `blocked` n'y figure pas — mais les lectures, dont l'annuaire complet
+(`?all=1`), restaient ouvertes.
 
 ### 2. Diffusion restreinte
 
@@ -331,15 +345,21 @@ invisibles depuis un monde isolé. Il ne fait que publier l'identité de l'enreg
 
 1. **origine exacte** — le `matches` d'un script de contenu ne peut être qu'un joker, et
    `*.dynamics.com` couvre toutes les organisations du monde. `d365-origin.js` (généré hors dépôt
-   depuis `d365Origin`) restreint l'exécution réelle à la seule instance configurée ;
+   depuis `d365Origin`) restreint l'exécution réelle à la seule instance configurée.
+   `ctx-main.js` ne peut pas lire cette constante : elle vit dans le monde isolé, lui dans celui
+   de la page. Il démarre donc **inerte** et n'est armé que par le message `tp-d365-reveil`,
+   émis par `ctx.js` après cette vérification. Sur une autre organisation Dynamics, personne ne
+   l'appelle : il ne sonde pas `Xrm` et ne publie rien ;
 2. **attestation d'appartenance** — la même que pour la popup, aucune requête sans elle ;
 3. **droits de l'utilisateur** — la lecture Dataverse (`/api/data/v9.2/`, même origine, cookie de
    session) passe par l'API OData officielle : elle refuse ce que l'utilisateur n'a pas le droit
    de voir. Aucune personnalisation, aucun privilège supplémentaire.
 
-**Domaine du client**, par ordre de fiabilité : site web du compte → domaine de l'adresse du
-contact principal → adresse du compte. Les domaines de comptes personnels Microsoft sont écartés.
-Le résultat est mis en cache par enregistrement, donc une session rouverte ne redéclenche rien.
+**Domaine du client**, par ordre de fiabilité : adresse du contact principal → adresse du compte
+→ site web du compte. **L'adresse passe avant le site web** : un tenant Microsoft 365 se rattache
+au domaine de messagerie, alors que le site web d'un compte est souvent une vitrine hébergée
+ailleurs. Les domaines de comptes personnels Microsoft sont écartés. Le résultat est mis en cache
+par enregistrement, donc une session rouverte ne redéclenche rien.
 
 **Sessions Omnicanal.** Chaque session vit dans une iframe : les scripts sont injectés dans toutes
 les frames, et chacune signale si elle est visible (une session en arrière-plan est masquée, son
@@ -360,13 +380,51 @@ Il se **superpose** à la section « Santé du client », il ne la remplace pas 
 et re-rendu par le framework de Dynamics, tout nœud inséré dans son arbre finirait écrasé au
 premier cycle. Le panneau vit donc dans un élément attaché à `<body>`, en position fixe, calé sur
 le rectangle de la section — et repliable d'un clic, ce qui redonne la section visible en dessous.
-L'état replié est mémorisé.
 
 L'ancrage ne s'appuie sur aucun sélecteur interne de Dynamics : la section est repérée par le
 **texte de son titre**, puis on remonte jusqu'à un conteneur de taille plausible. Un identifiant
 interne survit rarement à une mise à jour, un libellé visible oui. Si aucun titre ne correspond
 après une douzaine de tentatives, le panneau bascule en **tiroir ancré à droite** — mieux vaut un
 placement approximatif qu'un panneau absent.
+
+**La recherche d'ancre repart à chaque nouvelle fiche** (`relancerAncrage()`). Sans cela le tiroir
+était sans retour : le compteur de tentatives restait au-delà de son plafond, et le seul appel
+survivant à `attacher()` était conditionné à « pas en mode tiroir » — donc mort précisément quand
+il aurait servi. Fermer ses tickets suffisait à coller le panneau en haut à droite jusqu'au
+rechargement de la page.
+
+**Déplacement libre, à tout moment.** L'en-tête est une prise permanente : tirer dessus **détache**
+le panneau de la section et le pose où l'on veut. Le détachement est un choix, donc persistant —
+il survit au changement de fiche et au rechargement de la page. Pour revenir à l'ancrage, le bouton
+`⤢` de l'en-tête (visible seulement quand le panneau flotte) ou un double-clic dessus.
+
+Deux états mènent au même positionnement flottant, mais il ne faut pas les confondre : `modeTiroir`
+est un **repli automatique** faute d'ancre, `libre` un **détachement volontaire**. Seul le second
+survit à un ancrage redevenu possible — `relancerAncrage()` renonce immédiatement quand `libre`
+est vrai, sans quoi le panneau resauterait sur la section au ticket suivant.
+
+Détails d'implémentation : `pointer*` plutôt que `mouse*`, avec capture de pointeur, pour que le
+suivi survive au passage du curseur au-dessus d'une iframe Dynamics ; position bornée au cadre
+visible et mémorisée localement ; l'observateur de taille de la section est débranché au
+détachement, il rappellerait `positionner()` pour une géométrie que le panneau ne suit plus.
+
+> Une première version réservait la prise au mode tiroir. C'était la rendre invisible : le
+> ré-ancrage automatique ci-dessus fait que ce mode ne survient presque plus.
+
+**Interrupteur « Position libre » dans la popup.** La prise seule ne se devine pas : rien, dans
+une carte posée sur un formulaire, ne dit qu'elle se déplace. L'interrupteur rend le réglage
+visible et réversible sans avoir à retrouver le panneau. Il n'apparaît que si la permission
+Dynamics est accordée — sans panneau, il n'y a rien à déplacer.
+
+Le canal est `chrome.storage` (clé `tp_d365_pos_v1`), comme pour l'interrupteur d'activation :
+`panel.js` l'écoute via `storage.onChanged`, donc **le basculement s'applique aux onglets déjà
+ouverts**, sans rechargement. Un message runtime n'atteindrait pas les frames de session
+d'Omnicanal. L'écouteur ne réagit qu'au **basculement** ancré ↔ libre : les écritures de simple
+position, une à chaque fin de glissement, sont ignorées — sans quoi la position mémorisée
+écraserait celle qu'un autre onglet est en train de régler.
+
+Le ré-ancrage n'oublie **que** l'état détaché, jamais la position : réactiver le mode libre
+remet le panneau là où il avait été posé.
 
 Le suivi de position se fait par `ResizeObserver` sur la section, plus le redimensionnement et le
 défilement (en capture, car le défilement utile est celui des conteneurs internes de Dynamics et ne
@@ -382,14 +440,25 @@ occupe toute la hauteur de la section et son en-tête peut être hors de vue.
 **Deux registres visuels, volontairement.** Le *conteneur* imite une carte de formulaire Dynamics —
 fond uni, bordure d'un pixel, coins à 4 px, **aucune ombre portée** : il doit passer pour une
 section du formulaire, pas pour une fenêtre posée dessus. Le *résultat*, lui, reprend le hero de
-TenantPulse à l'identique (dégradés radiaux, GUID en monospace blanche, pastille de confiance,
-tuiles de redirection), repris de `popup.css`.
+TenantPulse à l'identique (bleu de marque et reflets blancs, filigrane Microsoft, GUID en
+monospace blanche, tuiles de redirection), repris de `popup.css`.
+
+Le panneau étant **toujours en clair**, c'est la variante claire du hero qui s'y applique sans
+condition ; la popup, elle, porte les deux. Une différence de mise en œuvre à connaître : le
+filigrane Microsoft est un `::after` avec une `url()` dans l'app et dans la popup, mais une vraie
+balise `<img>` dans le panneau — sa feuille y est adoptée comme `CSSStyleSheet` construite, et les
+URL relatives d'une telle feuille se résolvent contre le document Dynamics, pas contre
+l'extension.
 
 Le contenu reprend celui de la popup : domaine et provenance, Tenant ID avec bouton de copie,
-indice de confiance, puis la grille des centres d'administration dans l'ordre du profil synchronisé
+puis la grille des centres d'administration dans l'ordre du profil synchronisé
 depuis l'application, chaque tuile ouvrant son menu de raccourcis. Un clic ouvre **un** onglet,
 jamais plusieurs — les postes gérés bloquent les pop-ups. Les icônes sont servies depuis
-`web_accessible_resources`.
+`web_accessible_resources`, déclaré avec **`use_dynamic_url: true`** : l'URL des ressources est
+alors tirée au sort à chaque session. Sans cela, n'importe quelle page `*.dynamics.com` — pas
+seulement l'instance de l'organisation — pouvait sonder `chrome-extension://<id>/assets/TP.png`
+et détecter l'extension. `chrome.runtime.getURL()` rend l'URL dynamique, le code appelant est
+inchangé.
 
 Quand la fiche ne donne aucun domaine exploitable, un champ de saisie prend le relais ; la valeur
 est **mémorisée par compte**, vaut pour tous ses incidents, et prime ensuite sur ce que dit

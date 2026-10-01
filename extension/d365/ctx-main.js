@@ -9,8 +9,20 @@
    Ce script ne lit RIEN d'autre que l'identité de l'enregistrement au premier plan,
    n'écrit rien dans la page, et n'émet aucune requête. Il publie un message que le
    monde isolé (d365/ctx.js) récupère dans la même fenêtre, et qui est la seule voie
-   de sortie. Toute la suite — vérification d'origine, attestation, réseau — se passe
-   côté isolé.
+   de sortie. Toute la suite — attestation, réseau — se passe côté isolé.
+
+   ── Il démarre INERTE ──
+   Le « matches » de l'enregistrement ne peut être qu'un joker (*.dynamics.com couvre
+   toutes les organisations du monde) et ce script, injecté dans le monde de la page,
+   ne peut pas lire TP_D365_ORIGIN — cette constante vit dans le monde isolé. Il ne
+   s'arme donc qu'à réception du signal de réveil émis par d365/ctx.js, qui, lui, a
+   vérifié l'origine. Hors de l'instance configurée, personne ne l'appelle : rien n'est
+   sondé, rien n'est publié.
+
+   Une page hostile pourrait forger ce réveil. Elle n'y gagnerait rien : ce script ne
+   lit que l'enregistrement affiché par cette page-là, et le lui repose dans sa propre
+   fenêtre. Le garde-fou vise à ne pas TOURNER là où l'extension n'a rien à faire, pas
+   à protéger un secret qui n'existe pas.
 
    Omnicanal ouvre chaque session dans une iframe distincte, d'où l'injection dans
    toutes les frames : chacune décrit son propre enregistrement et signale si elle est
@@ -122,18 +134,27 @@
     }
   }
 
-  /* Réveil demandé par le monde isolé (rallumage de l'interrupteur) : la publication
-     n'a lieu que sur changement, et sans cet oubli volontaire du dernier état, une
-     fiche restée identique ne serait jamais redécrite. */
+  /* Réveil émis par le monde isolé. Il joue deux rôles :
+       • le PREMIER arme le script — c'est le garde-fou d'origine décrit en tête ;
+       • les suivants (rallumage de l'interrupteur) forcent une republication, la
+         publication n'ayant lieu que sur changement : sans cet oubli volontaire du
+         dernier état, une fiche restée identique ne serait jamais redécrite. */
+  let arme = false;
+
+  function demarrer() {
+    if (arme) return;
+    arme = true;
+    mode = 'attente';
+    battement();
+    syncPolling();
+    document.addEventListener('visibilitychange', syncPolling);
+  }
+
   window.addEventListener('message', (ev) => {
     if (ev.source !== window || ev.origin !== location.origin) return;
     if (!ev.data || ev.data.source !== 'tp-d365-reveil') return;
     last = null;
+    if (!arme) { demarrer(); return; }   // battement() publie déjà
     publish();
   });
-
-  mode = 'attente';
-  battement();
-  syncPolling();
-  document.addEventListener('visibilitychange', syncPolling);
 })();

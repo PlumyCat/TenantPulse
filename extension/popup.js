@@ -70,24 +70,6 @@ function setDeepLink(value) {
   }
 }
 
-/* Détail de l'indice de confiance — équivalent condensé de showConfTooltip
-   (tenantpulse.js) : mêmes pondérations, rendues dans une infobulle native. */
-function makeConfInfoIcon(ms) {
-  const rows = [
-    ['Tenant ID trouvé',      45, !!ms.tenantId],
-    ['GUID validé Microsoft', 30, !!ms.tenantValid],
-    ['Issuer présent',        15, !!ms.issuer],
-    ['Token endpoint',        10, !!ms.tokenEndpoint],
-  ];
-  const im = document.createElement('img');
-  im.src = 'assets/information.png';
-  im.alt = '';
-  im.className = 'conf-info-ic';
-  im.title = "Indice de confiance\n"
-    + rows.map(([label, pts, earned]) => `${earned ? '✓' : '—'} ${label} : ${earned ? '+' + pts : '0'} pts`).join('\n');
-  return im;
-}
-
 function makeMsLabel(text) {
   const d = document.createElement('div'); d.className = 'hero-label';
   const im = document.createElement('img'); im.src = 'assets/Microsoft.png'; im.alt = '';
@@ -257,10 +239,6 @@ function renderResult(ms, domain, input) {
     return;
   }
 
-  const confidence = computeConfidence(ms);
-  const confClass = confidence >= 80 ? 'high' : confidence >= 50 ? 'medium' : 'low';
-  const confLabel = confidence >= 80 ? 'Confiance élevée' : confidence >= 50 ? 'Confiance moyenne' : 'Confiance faible';
-
   hero.appendChild(makeMsLabel('Microsoft Tenant ID'));
 
   const guid = document.createElement('div'); guid.className = 'hero-guid';
@@ -274,11 +252,7 @@ function renderResult(ms, domain, input) {
       setTimeout(() => { copyBtn.textContent = 'Copier'; copyBtn.classList.remove('copied'); }, 1600);
     } catch { copyBtn.textContent = 'Échec'; }
   });
-  const badge = document.createElement('span');
-  badge.className = 'confidence-badge ' + confClass;
-  badge.appendChild(document.createTextNode(confidence + '% — ' + confLabel));
-  badge.appendChild(makeConfInfoIcon(ms));
-  guid.appendChild(sp); guid.appendChild(copyBtn); guid.appendChild(badge);
+  guid.appendChild(sp); guid.appendChild(copyBtn);
   hero.appendChild(guid);
 
   const dom = document.createElement('div');
@@ -473,6 +447,43 @@ function d365Message(etat, actif, vientDeBasculer) {
 const estActif = (bouton) => bouton.getAttribute('aria-checked') === 'true';
 const poserActif = (bouton, actif) => bouton.setAttribute('aria-checked', actif ? 'true' : 'false');
 
+/* ── Position libre du panneau Dynamics ──
+   Le panneau s'ancre normalement sur la section « Santé du client ». Le détacher se fait
+   aussi en tirant sur son en-tête, mais encore faut-il savoir que c'est possible : rien
+   dans une carte posée sur un formulaire ne dit qu'elle se déplace. D'où cet interrupteur,
+   qui rend le réglage visible et réversible sans avoir à retrouver le panneau.
+
+   Le canal est le même que pour l'interrupteur ci-dessus : chrome.storage, écouté par
+   d365/panel.js. Le changement s'applique donc aux onglets Dynamics DÉJÀ ouverts, sans
+   rechargement — un message runtime, lui, n'atteindrait pas les frames de session. */
+const D365_POS_KEY = 'tp_d365_pos_v1';
+
+const messageLibre = (libre) => libre
+  ? "Détaché : glissez l'en-tête pour le placer. Le bouton ⤢ le réancre."
+  : 'Le panneau suit la section « Santé du client ».';
+
+/* La position déjà choisie est préservée d'un basculement à l'autre : réactiver le mode
+   libre remet le panneau là où il avait été posé, pas au coin par défaut. */
+async function ecrireLibre(voulu) {
+  const stored = await storageGet(D365_POS_KEY);
+  const p = stored[D365_POS_KEY] || {};
+  const garde = (Number.isFinite(p.top) && Number.isFinite(p.left)) ? { top: p.top, left: p.left } : {};
+  storageSet({ [D365_POS_KEY]: { ...garde, libre: voulu } });
+}
+
+/* Réglage sans objet tant que la permission Dynamics n'est pas accordée : aucun panneau
+   n'existe alors, et proposer de le déplacer n'aurait aucun sens. */
+async function majD365Libre(actif) {
+  const box = el('d365Libre');
+  if (!actif) { box.hidden = true; return; }
+  const stored = await storageGet(D365_POS_KEY);
+  const p = stored[D365_POS_KEY];
+  const libre = !!(p && p.libre);
+  poserActif(el('d365LibreToggle'), libre);
+  el('d365LibreSub').textContent = messageLibre(libre);
+  box.hidden = false;
+}
+
 async function initD365Toggle() {
   const box = el('d365Optin');
   const bouton = el('d365Toggle');
@@ -495,6 +506,7 @@ async function initD365Toggle() {
   if (actif) sub.textContent = d365Message(await askD365Sync(), true, false);
   else sub.textContent = D365_SUB_DEFAUT;
   renderD365Diag(actif);
+  majD365Libre(actif);
 
   bouton.addEventListener('click', async () => {
     const voulu = !estActif(bouton);
@@ -525,6 +537,7 @@ async function initD365Toggle() {
     sub.textContent = d365Message(await askD365Sync(), obtenu, true);
     // Le message ci-dessus dit déjà de recharger : pas de seconde ligne redondante.
     el('d365Diag').hidden = true;
+    majD365Libre(obtenu);
   });
 }
 
@@ -573,6 +586,16 @@ function reportTheme() {
 
 function bindEvents() {
   el('searchForm').addEventListener('submit', e => { e.preventDefault(); runSearch(); });
+
+  /* Câblé une seule fois, ici : majD365Libre() est rappelée à chaque bascule de la
+     permission Dynamics et y attacher l'écouteur empilerait les doublons. */
+  el('d365LibreToggle').addEventListener('click', () => {
+    const bouton = el('d365LibreToggle');
+    const voulu = !estActif(bouton);
+    poserActif(bouton, voulu);
+    el('d365LibreSub').textContent = messageLibre(voulu);
+    ecrireLibre(voulu);
+  });
   // Un clic hors du panneau de raccourcis le referme (sauf sur un chevron, qui bascule).
   document.addEventListener('click', e => {
     if (!openShortcutKey) return;
@@ -602,7 +625,11 @@ async function init() {
   const auth = authState(mirror.auth);
   const banner = el('mirrorBanner');
   if (!auth.ok) {
-    // Extension verrouillée : on neutralise la saisie et on n'affiche pas l'historique.
+    /* Extension verrouillée : on neutralise la saisie, on masque l'historique — et on
+       EFFACE ce qui avait été recopié. sync.js fait déjà la même chose depuis l'origine
+       de l'application, mais il n'y tourne que si l'utilisateur la rouvre ; l'attestation
+       peut très bien expirer alors que seule la popup est utilisée. */
+    purgerDonneesLocales();
     banner.classList.add('locked');
     el('mirrorBannerText').textContent = MESSAGES_AUTH[auth.raison];
     banner.hidden = false;

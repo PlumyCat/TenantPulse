@@ -60,6 +60,21 @@
   /* Attestation courante. Initialisée depuis le miroir existant : un échec réseau sur
      /api/me ne doit jamais invalider une attestation encore valide. */
   let auth = null;
+  /* La purge n'a lieu qu'une fois par bascule vers l'état verrouillé : le sondage
+     repasse toutes les deux secondes, et réécrire le stockage à ce rythme pour rien
+     n'aurait aucun intérêt. */
+  let purgeFaite = false;
+
+  /* Attestation invalide (absente, périmée, compte bloqué) : plus rien n'est recopié, et
+     ce qui l'a déjà été est effacé. Verrouiller l'interface ne suffisait pas — l'annuaire
+     des classifications et l'historique restaient sur la machine d'un compte révoqué.
+     authState() vient de tp-client.js, chargé avant ce script. */
+  function verrouActif() {
+    const etat = authState(auth);
+    if (etat.ok) { purgeFaite = false; return false; }
+    if (!purgeFaite) { purgeFaite = true; purgerDonneesLocales(); }
+    return true;
+  }
 
   const readRaw = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
   const readJson = (key, fallback) => {
@@ -70,9 +85,16 @@
 
   /* Construit l'instantané à publier.
      L'opt-in historique de l'app est respecté : historique désactivé → miroir vide.
-     L'extension ne conserve jamais un historique que l'utilisateur a refusé. */
-  function buildSnapshot() {
+     L'extension ne conserve jamais un historique que l'utilisateur a refusé.
+
+     Verrouillé, le miroir ne porte plus que l'attestation : c'est elle qui dit à la
+     popup POURQUOI elle est verrouillée, et la retirer ferait retomber le message sur
+     « jamais activée ». */
+  function buildSnapshot(verrouille) {
     const historyEnabled = readRaw('tenantIdHistory_enabled') === 'true';
+    if (verrouille) {
+      return { profile: null, history: [], historyEnabled, adminAccounts: {}, auth };
+    }
     const history = historyEnabled ? readJson('tenantIdHistory_v1', []) : [];
     return {
       profile: readJson('tenantpulse_profile_v1', null),
@@ -87,7 +109,7 @@
      lire quatre clés est négligeable, écrire dans chrome.storage ne l'est pas). */
   function publish() {
     let snap;
-    try { snap = buildSnapshot(); } catch { return; }
+    try { snap = buildSnapshot(verrouActif()); } catch { return; }
     const serialized = JSON.stringify(snap);
     if (serialized === lastSerialized) return;
     lastSerialized = serialized;
@@ -106,15 +128,25 @@
   async function refreshAuth() {
     try {
       const r = await fetch('/api/me', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-      if (!r.ok) return;
-      const me = await r.json();
-      auth = {
-        authenticatedAt: new Date().toISOString(),
-        role: typeof me.role === 'string' ? me.role : 'user',
-        blocked: me.blocked === true,
-      };
-      publish();
+      /* Pas de retour anticipé ici : un 401 laisse l'attestation en place, et la suite
+         de la fonction doit s'exécuter quand même. */
+      if (r.ok) {
+        const me = await r.json();
+        auth = {
+          authenticatedAt: new Date().toISOString(),
+          role: typeof me.role === 'string' ? me.role : 'user',
+          blocked: me.blocked === true,
+        };
+        publish();
+      }
     } catch { /* backend injoignable : on garde l'attestation existante */ }
+
+    /* Recopie de l'annuaire seulement MAINTENANT, quel que soit le sort de l'appel
+       ci-dessus. refreshTags() s'arrête net si le verrou est actif : le lancer avant la
+       réponse de /api/me l'aurait fait renoncer sur une attestation périmée que cet appel
+       vient justement de renouveler, et la tentative suivante n'aurait eu lieu que dix
+       minutes plus tard. */
+    refreshTags();
   }
 
   /* ── Annuaire des tags ───────────────────────────────────────────────────────
@@ -129,6 +161,11 @@
      « approvedBy » est une adresse professionnelle : elle est écartée ici et n'entre
      jamais dans le stockage de l'extension. */
   async function refreshTags() {
+    /* Attestation invalide : aucune recopie. Le serveur refuse déjà ces deux endpoints à
+       un compte bloqué (403), mais s'arrêter ici évite d'écrire un journal de diagnostic
+       juste après avoir purgé, et couvre aussi l'attestation simplement périmée. */
+    if (verrouActif()) return;
+
     const [rAnnuaire, rDefs] = await Promise.all([
       lireJson('/api/classification?all=1'),
       lireJson('/api/tags'),
@@ -197,6 +234,7 @@
      l'annuaire global ne porte pas. Répond à une demande relayée par le service
      worker depuis la popup ou le panneau Dynamics. */
   async function detailTenant(tenantId) {
+    if (verrouActif()) return null;
     if (typeof tenantId !== 'string' || !/^[0-9a-f-]{36}$/i.test(tenantId)) return null;
     const d = (await lireJson('/api/classification?tenantId=' + encodeURIComponent(tenantId))).data;
     if (!d) return null;
@@ -250,9 +288,8 @@
     // L'événement « storage » ne se déclenche que pour les modifications venues d'un
     // AUTRE onglet de la même origine — complément indispensable au sondage local.
     window.addEventListener('storage', publish);
-    refreshAuth();
+    refreshAuth();   // enchaîne sur refreshTags() une fois l'attestation à jour
     seSignaler();
-    refreshTags();
     setInterval(refreshTags, TAGS_REFRESH_MS);
   }
 

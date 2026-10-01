@@ -8,7 +8,9 @@
 
    Trois garde-fous, dans cet ordre :
      1. l'origine doit être exactement celle configurée (le manifest cible un joker
-        « *.dynamics.com », qui couvre toutes les organisations du monde) ;
+        « *.dynamics.com », qui couvre toutes les organisations du monde). Ce contrôle
+        commande AUSSI le monde MAIN : ctx-main.js démarre inerte et n'est armé que par
+        le signal de réveil émis plus bas, donc après cette vérification ;
      2. l'attestation d'appartenance doit être valide, sinon aucune requête n'est émise ;
      3. la lecture Dataverse se fait avec les droits de l'utilisateur — l'API refuse
         ce qu'il n'a pas le droit de voir, aucune personnalisation n'est requise.
@@ -36,6 +38,25 @@
      accessible à un script de contenu déjà en place. */
   let integrationActive = true;
 
+  /* ── Réveil du monde MAIN ──
+     ctx-main.js démarre inerte : son « matches » ne peut être qu'un joker, et il ne peut
+     pas lire TP_D365_ORIGIN depuis le monde de la page. C'est donc ce message — émis
+     seulement ici, après le garde-fou d'origine — qui l'arme. Hors de l'instance
+     configurée, il n'est jamais envoyé et rien ne tourne.
+
+     L'ordre d'injection entre les deux mondes n'étant pas garanti, l'appel est répété,
+     de plus en plus espacé, jusqu'à la première description reçue. */
+  const REVEIL_DELAIS = [0, 150, 500, 1500, 4000];
+  let contexteRecu = false;
+
+  function reveiller() {
+    try { window.postMessage({ source: CHANNEL_REVEIL }, location.origin); } catch {}
+  }
+
+  function amorcerReveil() {
+    REVEIL_DELAIS.forEach(d => setTimeout(() => { if (!contexteRecu) reveiller(); }, d));
+  }
+
   function appliquerActivation(valeur) {
     const actif = valeur !== false;
     if (actif === integrationActive) return;
@@ -47,18 +68,20 @@
     /* Rallumage : la fiche a pu changer pendant l'arrêt, mais ctx-main ne republie que
        sur changement — il ne dirait donc rien. On le réveille pour qu'il redécrive
        l'enregistrement affiché, et l'état se remet à jour tout seul. */
-    try { window.postMessage({ source: CHANNEL_REVEIL }, location.origin); } catch {}
+    reveiller();
   }
 
   try {
     chrome.storage.local.get(D365_ACTIF_KEY, (res) => {
       if (!chrome.runtime.lastError && res) appliquerActivation(res[D365_ACTIF_KEY]);
+      // Interrupteur sur arrêt : on n'arme même pas le monde MAIN.
+      if (integrationActive) amorcerReveil();
     });
     chrome.storage.onChanged.addListener((changements, zone) => {
       if (zone !== 'local' || !changements[D365_ACTIF_KEY]) return;
       appliquerActivation(changements[D365_ACTIF_KEY].newValue);
     });
-  } catch {}
+  } catch { amorcerReveil(); }
 
   /* Signe de vie lu par la popup. Diagnostiquer par la console est peu fiable ici :
      Omnicanal en produit des centaines de lignes, la page vit dans des iframes, et
@@ -232,7 +255,7 @@
 
     const ms = await lookupByDomain(domaine);            // tp-client.js → service worker
     const etat = ms
-      ? { statut: 'resolu', cle, domaine, source, tenantId: ms.tenantId, confiance: computeConfidence(ms) }
+      ? { statut: 'resolu', cle, domaine, source, tenantId: ms.tenantId }
       : { statut: 'sans-tenant', cle, domaine, source };
 
     /* Nom de tenant SharePoint, déduit du CNAME DKIM : sans lui, la tuile SharePoint
@@ -348,6 +371,7 @@
     if (ev.source !== window || ev.origin !== location.origin) return;
     const data = ev.data;
     if (!data || data.source !== CHANNEL) return;
+    contexteRecu = true;              // monde MAIN armé : inutile de le rappeler
     if (!integrationActive) return;   // interrupteur sur arrêt : plus rien n'est calculé
     if (!data.visible) return;
 

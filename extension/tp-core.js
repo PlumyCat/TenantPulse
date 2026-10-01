@@ -13,9 +13,12 @@
      orderedRedirectButtons .......... 322
      extractDomain ................... 3011
      MS_GENERIC_GUIDS / extractGuid .. 3146
-     computeConfidence ............... 3300
      GUID_ONLY_RE .................... 3337
      MSA_DOMAINS ..................... 3576
+
+   NON recopié, volontairement : computeConfidence(). L'application l'a conservé
+   pour son rapport exporté, mais elle ne l'affiche plus dans le hero, et
+   l'extension n'exporte rien — le recopier n'ajouterait ici que du code mort.
    ────────────────────────────────────────────────────────────────────────────── */
 
 /* L'origine de l'application (TP_APP_ORIGIN) est définie dans app-origin.js, généré à
@@ -191,13 +194,3 @@ const MS_GENERIC_GUIDS = new Set(['9188040d-6c67-4c5b-b112-36a304b66dad','f8cdef
 
 const MSA_DOMAINS = new Set(['outlook.com','outlook.fr','outlook.be','outlook.es','outlook.de','outlook.it','outlook.co.uk','outlook.jp','outlook.pt','outlook.dk','outlook.at','outlook.ch','hotmail.com','hotmail.fr','hotmail.be','hotmail.es','hotmail.de','hotmail.it','hotmail.co.uk','hotmail.nl','hotmail.pt','hotmail.dk','hotmail.se','hotmail.no','live.com','live.fr','live.be','live.nl','live.co.uk','live.de','live.it','live.es','live.se','live.dk','live.no','live.ca','live.com.au','msn.com','passport.com','windowslive.com']);
 const isMsaPersonalDomain = d => MSA_DOMAINS.has(d.toLowerCase());
-
-function computeConfidence(ms) {
-  if (!ms) return 0;
-  let score = 0;
-  if (ms.tenantId)      score += 45;
-  if (ms.tenantValid)   score += 30;
-  if (ms.issuer)        score += 15;
-  if (ms.tokenEndpoint) score += 10;
-  return Math.min(score, 100);
-}

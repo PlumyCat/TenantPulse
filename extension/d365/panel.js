@@ -31,11 +31,26 @@ const tpPanneau = (function () {
   const ANCRE_TENTATIVES = 12;
   const ANCRE_DELAI_MS = 1500;
 
-  let hote = null, ombre = null, cadre = null, corps = null, chevron = null, piedBouton = null;
+  let hote = null, ombre = null, cadre = null, corps = null, tete = null, chevron = null, piedBouton = null;
+  let boutonReplacer = null;
   /* Fiche actuellement affichée : changer de fiche remet le panneau replié. */
   let cleAffichee = null;
   let ancre = null, decoupeEl = null, observateur = null, rafId = null;
   let replie = false, modeTiroir = false;
+  /* Chaîne de tentatives d'ancrage en cours. Mémorisée pour pouvoir l'annuler : sans
+     cela, relancer une recherche pendant qu'une autre court ferait tourner deux chaînes
+     en parallèle, chacune avec son propre compteur. */
+  let minuteurAncrage = null;
+  /* Position choisie à la main, en pixels ({top,left}) — null tant que l'utilisateur
+     n'a rien déplacé. */
+  let positionTiroir = null;
+  /* Panneau détaché à la main : l'ancre est ignorée, le panneau reste où il a été posé.
+     Distinct de `modeTiroir`, qui est un REPLI automatique quand la section « Santé du
+     client » reste introuvable. Les deux mènent au même positionnement flottant, mais
+     seul celui-ci résulte d'un choix — et lui seul survit à un ancrage redevenu
+     possible. */
+  let libre = false;
+  let glisse = null;
   /* Interrupteur de la popup : masque le panneau sans rien démonter, pour que le
      rallumer le fasse réapparaître à l'instant, là où il était. */
   let eteint = false;
@@ -100,19 +115,36 @@ const tpPanneau = (function () {
     return meilleur;
   }
 
+  /* Repart d'une feuille blanche : ancre oubliée, compteur remis à zéro, chaîne de
+     tentatives précédente annulée.
+
+     C'est ce qui manquait. Une fois les douze tentatives épuisées, plus RIEN ne
+     relançait la recherche : le compteur restait au-delà du plafond, et l'unique
+     appel à attacher() encore vivant — dans positionner() — était de surcroît
+     conditionné à « pas en mode tiroir », donc mort dès que le tiroir s'enclenchait.
+     Fermer ses fiches suffisait donc à coller le panneau en haut à droite jusqu'au
+     rechargement de la page. On relance désormais à chaque nouvelle fiche. */
+  function relancerAncrage() {
+    // Détaché à la main : l'ancre ne le concerne plus, y compris sur une nouvelle fiche.
+    if (libre) return;
+    if (minuteurAncrage !== null) { clearTimeout(minuteurAncrage); minuteurAncrage = null; }
+    if (observateur) { try { observateur.disconnect(); } catch {} }
+    ancre = null;
+    decoupeEl = null;
+    tentatives = 0;
+    attacher();
+  }
+
   /* La section n'existe pas au chargement : elle arrive avec le rendu du formulaire.
      On réessaie quelques fois, puis on se rabat sur le tiroir. */
   function attacher() {
+    minuteurAncrage = null;
     if (ancre && ancre.isConnected) return;
     ancre = trouverAncre();
 
     if (!ancre) {
-      if (++tentatives <= ANCRE_TENTATIVES) {
-        setTimeout(attacher, ANCRE_DELAI_MS);
-        if (!modeTiroir) basculerTiroir(true);   // visible en attendant mieux
-        return;
-      }
-      basculerTiroir(true);
+      if (!modeTiroir) basculerTiroir(true);   // visible en attendant mieux
+      if (++tentatives <= ANCRE_TENTATIVES) minuteurAncrage = setTimeout(attacher, ANCRE_DELAI_MS);
       return;
     }
 
@@ -151,15 +183,181 @@ const tpPanneau = (function () {
     return { haut: 0, bas: window.innerHeight };
   }
 
+  /* Le panneau flotte — position fixe indépendante de la section — dans deux cas :
+     un repli automatique faute d'ancre, ou un détachement volontaire. */
+  const estFlottant = () => libre || modeTiroir;
+
   function basculerTiroir(actif) {
     modeTiroir = actif;
     if (actif && observateur) { try { observateur.disconnect(); } catch {} }
+    majAffordances();
     positionner();
+  }
+
+  /* Curseur, infobulle et bouton de replacement suivent l'état courant. Regroupés ici
+     parce que trois chemins les font changer : le repli automatique, le détachement à
+     la main, et le retour à l'ancrage. */
+  function majAffordances() {
+    if (cadre) cadre.classList.toggle('est-flottant', estFlottant());
+    if (tete) {
+      tete.title = estFlottant()
+        ? 'Glisser pour déplacer · double-clic pour réancrer sur « Santé du client »'
+        : 'Glisser pour détacher le panneau et le poser où vous voulez';
+    }
+    if (boutonReplacer) boutonReplacer.hidden = !estFlottant();
   }
 
   function planifier() {
     if (rafId !== null) return;
     rafId = requestAnimationFrame(() => { rafId = null; positionner(); });
+  }
+
+  /* ── Déplacement à la main ───────────────────────────────────────────────────
+     Disponible À TOUT MOMENT, y compris quand le panneau est correctement ancré sur
+     « Santé du client » : tirer sur l'en-tête le DÉTACHE et le pose où on veut. Le
+     réserver au repli automatique revenait à ne jamais l'offrir — l'ancrage fonctionne,
+     donc ce cas ne survient presque plus.
+
+     Le détachement est un choix, il est donc persistant : il survit au changement de
+     fiche et au rechargement de la page. Pour revenir à l'ancrage, le bouton ⤢ de
+     l'en-tête ou un double-clic dessus. */
+  const POS_KEY = 'tp_d365_pos_v1';
+  const LARGEUR_TIROIR = 320;
+
+  /* Maintient le panneau atteignable : au moins un bandeau visible à l'écran, jamais
+     poussé hors cadre par un déplacement ou un redimensionnement de la fenêtre.
+     Largeur en dur plutôt que mesurée : positionner() appelle cette fonction à chaque
+     défilement, et un getBoundingClientRect y forcerait un recalcul de mise en page à
+     60 Hz pour une valeur qui ne bouge jamais. */
+  function borner(left, top) {
+    const maxL = Math.max(0, window.innerWidth - LARGEUR_TIROIR);
+    const maxT = Math.max(0, window.innerHeight - 40);
+    return {
+      left: Math.min(Math.max(0, left), maxL),
+      top: Math.min(Math.max(0, top), maxT),
+    };
+  }
+
+  function memoriserPosition() {
+    try {
+      if (positionTiroir || libre) chrome.storage.local.set({ [POS_KEY]: { ...positionTiroir, libre } });
+      else chrome.storage.local.remove(POS_KEY);
+    } catch {}
+  }
+
+  function chargerPosition() {
+    try {
+      chrome.storage.local.get(POS_KEY, (res) => {
+        if (chrome.runtime.lastError) return;
+        const p = res && res[POS_KEY];
+        if (!p) return;
+        if (Number.isFinite(p.top) && Number.isFinite(p.left)) {
+          positionTiroir = { top: p.top, left: p.left };
+        }
+        libre = p.libre === true;
+        majAffordances();
+        positionner();
+      });
+      /* L'interrupteur « Position libre » de la popup écrit dans cette même clé. Le
+         basculement s'applique donc aux onglets Dynamics déjà ouverts, sans rechargement :
+         un message runtime, lui, n'atteindrait pas les frames de session d'Omnicanal. */
+      chrome.storage.onChanged.addListener((changements, zone) => {
+        if (zone !== 'local' || !changements[POS_KEY]) return;
+        if (glisse) return;   // déplacement en cours : l'écriture vient de nous
+        appliquerLibre(changements[POS_KEY].newValue);
+      });
+    } catch {}
+  }
+
+  /* N'agit que sur le BASCULEMENT ancré ↔ libre. Les écritures de simple position — une
+     à chaque fin de glissement — déclenchent aussi cet écouteur, y compris dans l'onglet
+     qui vient de les produire : les ignorer évite un aller-retour inutile, et surtout
+     que la position mémorisée n'écrase celle qu'un autre onglet est en train de régler. */
+  function appliquerLibre(valeur) {
+    const veutLibre = !!(valeur && valeur.libre);
+    if (veutLibre === libre) return;
+
+    if (!veutLibre) { replacerPanneau(false); return; }
+
+    libre = true;
+    if (observateur) { try { observateur.disconnect(); } catch {} }
+    positionTiroir = (valeur && Number.isFinite(valeur.top) && Number.isFinite(valeur.left))
+      ? { top: valeur.top, left: valeur.left }
+      : null;
+    majAffordances();
+    positionner();
+  }
+
+  /* Distance à parcourir avant qu'une pression ne devienne un déplacement. Sans ce
+     seuil, un simple clic sur le titre détacherait le panneau de sa section — et un
+     double-clic, qui sert justement à le réancrer, le détacherait d'abord. */
+  const SEUIL_GLISSE = 4;
+
+  function debuterGlisse(e) {
+    if (e.button !== 0) return;
+    // Le chevron de repli et le bouton de replacement vivent ici : ce ne sont pas des prises.
+    if (e.target && e.target.closest && e.target.closest('button')) return;
+
+    const r = hote.getBoundingClientRect();
+    /* `actif` reste faux tant que le seuil n'est pas franchi : jusque-là, rien n'a
+       bougé, rien n'est détaché, et l'événement reste un clic ordinaire.
+       Pas de preventDefault ici — il supprimerait les événements souris de
+       compatibilité, donc le clic et le double-clic de l'en-tête. */
+    glisse = { dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, actif: false };
+    try { tete.setPointerCapture(e.pointerId); } catch {}
+  }
+
+  function suivreGlisse(e) {
+    if (!glisse) return;
+
+    if (!glisse.actif) {
+      if (Math.abs(e.clientX - glisse.x0) < SEUIL_GLISSE
+        && Math.abs(e.clientY - glisse.y0) < SEUIL_GLISSE) return;
+      glisse.actif = true;
+      /* Tirer sur un panneau ancré le DÉTACHE. L'observateur de taille de la section
+         n'a alors plus lieu d'être : il rappellerait positionner() à chaque re-rendu du
+         formulaire pour une géométrie que le panneau ne suit plus. */
+      if (!libre) {
+        libre = true;
+        if (observateur) { try { observateur.disconnect(); } catch {} }
+        majAffordances();
+        /* Le panneau détaché reprend la largeur du tiroir, souvent plus étroite que la
+           section qu'il occupait. Une prise saisie près du bord droit se retrouverait
+           alors hors du panneau, qui semblerait sauter loin du curseur. */
+        glisse.dx = Math.min(glisse.dx, LARGEUR_TIROIR - 24);
+      }
+      if (cadre) cadre.classList.add('en-glisse');
+    }
+
+    positionTiroir = borner(e.clientX - glisse.dx, e.clientY - glisse.dy);
+    planifier();
+    e.preventDefault();
+  }
+
+  function finirGlisse(e) {
+    if (!glisse) return;
+    const bouge = glisse.actif;
+    glisse = null;
+    try { tete.releasePointerCapture(e.pointerId); } catch {}
+    if (!bouge) return;   // pression sans déplacement : rien à mémoriser
+    if (cadre) cadre.classList.remove('en-glisse');
+    memoriserPosition();
+  }
+
+  /* Retour à l'ancrage : on relance la recherche de section. Si elle reste introuvable,
+     relancerAncrage() rebascule en tiroir.
+
+     La position choisie n'est PAS oubliée, seul l'état « détaché » l'est : réactiver le
+     mode libre — depuis la popup ou en tirant à nouveau sur l'en-tête — doit remettre le
+     panneau là où il avait été posé, pas dans un coin par défaut.
+
+     `memoriser` est faux quand l'ordre vient déjà du stockage (interrupteur de la popup) :
+     réécrire ce qu'on vient de lire ne servirait qu'à relancer l'écouteur. */
+  function replacerPanneau(memoriser = true) {
+    libre = false;
+    if (memoriser) memoriserPosition();
+    majAffordances();
+    relancerAncrage();
   }
 
   /* Positionnement en CSSOM : la CSP d'une page n'a pas prise sur element.style,
@@ -174,16 +372,34 @@ const tpPanneau = (function () {
        aussitôt, en tiroir, par-dessus une vue de liste. */
     if (eteint || !etatCourant) { hote.style.display = 'none'; return; }
 
-    if (modeTiroir || !ancre || !ancre.isConnected) {
-      if (!modeTiroir && ancre && !ancre.isConnected) { ancre = null; tentatives = 0; attacher(); return; }
+    /* Flottant — détaché à la main, ou replié faute d'ancre. L'ancre n'est ni consultée
+       ni recherchée : c'est ce qui rend le détachement stable d'une fiche à l'autre. */
+    if (estFlottant()) {
       hote.style.display = 'block';
-      hote.style.top = '96px';
-      hote.style.right = '16px';
-      hote.style.left = 'auto';
-      hote.style.width = '320px';
+      /* Découpe héritée du mode ancré : sans cette remise à zéro, un panneau rogné au
+         moment où l'ancre disparaît restait rogné — voire entièrement invisible — une
+         fois passé en flottant. */
+      hote.style.clipPath = '';
+      hote.style.width = LARGEUR_TIROIR + 'px';
       hote.style.height = replie ? 'auto' : 'min(420px, 60vh)';
+      if (positionTiroir) {
+        const p = borner(positionTiroir.left, positionTiroir.top);
+        hote.style.top = Math.round(p.top) + 'px';
+        hote.style.left = Math.round(p.left) + 'px';
+        hote.style.right = 'auto';
+      } else {
+        hote.style.top = '96px';
+        hote.style.right = '16px';
+        hote.style.left = 'auto';
+      }
       return;
     }
+
+    /* Ancre disparue alors qu'on la suivait (changement de fiche, re-rendu du
+       formulaire) : on repart en recherche. Un seul passage — relancerAncrage() bascule
+       aussitôt en tiroir si rien n'est trouvé, et les appels suivants prennent la
+       branche ci-dessus sans refaire de XPath. */
+    if (!ancre || !ancre.isConnected) { relancerAncrage(); return; }
 
     const r = ancre.getBoundingClientRect();
     const zone = zoneDecoupe();
@@ -243,14 +459,37 @@ const tpPanneau = (function () {
 
     cadre = creerEl('div', 'tp');
 
-    const tete = creerEl('div', 'tp-head');
+    tete = creerEl('div', 'tp-head');
+    /* Prise de déplacement. « pointer* » plutôt que « mouse* » : la capture de pointeur
+       garde le suivi même quand le curseur passe au-dessus d'une iframe de Dynamics,
+       qui mangerait les mousemove. */
+    tete.addEventListener('pointerdown', debuterGlisse);
+    tete.addEventListener('pointermove', suivreGlisse);
+    tete.addEventListener('pointerup', finirGlisse);
+    tete.addEventListener('pointercancel', finirGlisse);
+    tete.addEventListener('dblclick', () => { if (estFlottant()) replacerPanneau(); });
     /* Logo TP : le glyphe noir, comme dans la popup en thème clair. Le panneau ne suit
        pas le thème système (voir panel.css) — Omnicanal est toujours blanc. */
     const logo = creerEl('img', 'tp-logo');
     try { logo.src = chrome.runtime.getURL('assets/DarkTP.png'); } catch {}
     logo.alt = '';
+    /* Le glissement natif d'une image prendrait la main sur celui du panneau — et comme
+       on ne peut plus l'annuler depuis pointerdown (voir debuterGlisse), on le coupe ici. */
+    logo.draggable = false;
     tete.appendChild(logo);
     tete.appendChild(creerEl('span', 'tp-titre', 'TenantPulse'));
+
+    /* Retour à l'ancrage. Visible seulement quand le panneau flotte — le double-clic
+       fait la même chose, mais rien ne le laisse deviner : sans ce bouton, un panneau
+       déplacé par erreur n'a aucune issue apparente. */
+    boutonReplacer = creerEl('button', 'tp-bouton-replacer', '⤢');
+    boutonReplacer.type = 'button';
+    boutonReplacer.hidden = true;
+    boutonReplacer.title = 'Réancrer sur « Santé du client »';
+    boutonReplacer.setAttribute('aria-label', 'Réancrer le panneau sur la section « Santé du client »');
+    // Enveloppé : passer la fonction directement livrerait l'objet Event en `memoriser`.
+    boutonReplacer.addEventListener('click', () => replacerPanneau());
+    tete.appendChild(boutonReplacer);
 
     chevron = creerEl('button', 'tp-bouton-replier', '▾');
     chevron.type = 'button';
@@ -303,6 +542,7 @@ const tpPanneau = (function () {
     // et un événement de défilement ne remonte pas jusqu'à window.
     window.addEventListener('scroll', planifier, { passive: true, capture: true });
 
+    chargerPosition();
     attacher();
   }
 
@@ -319,12 +559,6 @@ const tpPanneau = (function () {
 
   // ── Contenu ──────────────────────────────────────────────────────────────────
 
-  function classeConfiance(v) {
-    if (v >= 80) return 'high';
-    if (v >= 50) return 'medium';
-    return 'low';
-  }
-
   /* Domaine analysé et sa provenance, sous le GUID — comme dans la popup. */
   function ligneDomaine(etat) {
     const d = creerEl('div', 'hero-domain');
@@ -336,11 +570,18 @@ const tpPanneau = (function () {
   /* Bloc résultat : le hero de TenantPulse, repris tel quel de la popup. C'est la
      signature visuelle de l'outil — le conteneur, lui, imite une carte Dynamics. */
   /* Structure calquée sur renderResult() de la popup, dans le même ordre : étiquette
-     avec le logo Microsoft, puis GUID + bouton de copie + pastille de confiance SUR LA
-     MÊME LIGNE, puis le domaine. Une disposition maison donnait un hero qui ne
-     ressemblait pas à celui de l'application. */
+     avec le logo Microsoft, puis GUID + bouton de copie SUR LA MÊME LIGNE, puis le
+     domaine. Une disposition maison donnait un hero qui ne ressemblait pas à celui de
+     l'application. */
   function bloqueHero(etat) {
     const hero = creerEl('div', 'tenant-hero' + (etat.tenantId ? '' : ' no-tenant'));
+
+    /* Filigrane Microsoft : une balise plutôt qu'un ::after, la feuille étant adoptée
+       comme CSSStyleSheet construite — ses url() se résoudraient contre Dynamics. */
+    const filigrane = creerEl('img', 'hero-filigrane');
+    try { filigrane.src = chrome.runtime.getURL('assets/MicrosoftN.png'); } catch {}
+    filigrane.alt = '';
+    hero.appendChild(filigrane);
 
     const label = creerEl('div', 'hero-label');
     const logoMs = creerEl('img');
@@ -356,16 +597,12 @@ const tpPanneau = (function () {
       return hero;
     }
 
-    const conf = etat.confiance || 0;
-    const libelleConf = conf >= 80 ? 'Confiance élevée' : conf >= 50 ? 'Confiance moyenne' : 'Confiance faible';
-
     const guid = creerEl('div', 'hero-guid');
     guid.appendChild(creerEl('span', null, etat.tenantId));
     const bouton = creerEl('button', 'hero-copy-btn', 'Copier');
     bouton.type = 'button';
     bouton.addEventListener('click', () => copier(etat.tenantId, bouton));
     guid.appendChild(bouton);
-    guid.appendChild(creerEl('span', 'confidence-badge ' + classeConfiance(conf), conf + ' % — ' + libelleConf));
     hero.appendChild(guid);
 
     hero.appendChild(ligneDomaine(etat));
@@ -625,7 +862,15 @@ const tpPanneau = (function () {
     const nouvelleFiche = !!etat.cle && etat.cle !== cleAffichee;
     etatCourant = etat;
     if (!hote) creer();
-    if (nouvelleFiche) { cleAffichee = etat.cle; appliquerRepli(true); }
+    if (nouvelleFiche) {
+      cleAffichee = etat.cle;
+      appliquerRepli(true);
+      /* Nouvelle fiche = nouveau formulaire, donc nouvelle section « Santé du client ».
+         C'est le seul moment où retenter l'ancrage a un sens — et c'est ce qui sort le
+         panneau du tiroir où il s'était installé pendant qu'aucune fiche n'était
+         ouverte. Sans cette relance, le tiroir était définitif jusqu'au rechargement. */
+      relancerAncrage();
+    }
 
     dessiner();
     positionner();
