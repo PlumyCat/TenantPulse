@@ -317,7 +317,7 @@ totale du fichier.
 > plus bas interdisent d'écrire en clair. Absent → aucun bouton, aucune requête.
 
 **Contrôle d'accès.** Graph est réservé par défaut aux rôles **manager et admin**. Deux
-dérogations, pilotées par un admin depuis l'onglet « Accès Graph » du panneau
+dérogations, pilotées par un admin depuis l'onglet « Graph » du panneau
 d'administration : le mode global `all` (ouvert à tout utilisateur connecté et non bloqué)
 et une liste nominative (ouverture individuelle sans changer le rôle).
 
