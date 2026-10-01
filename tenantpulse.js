@@ -4236,11 +4236,39 @@ function setStep(id, state, label) {
   const key    = id.replace('step-', '');
   const lbl    = label || STEP_LABELS[key]?.[state];
   if (lbl) { const labelEl = el.querySelector('.p-step-label'); if (labelEl) labelEl.textContent = lbl; }
+  majBarreProgression();
+}
+/* Barre d'avancement : part des etapes visibles qui sont closes, quelle qu'en soit
+   l'issue. Une etape annulee ou vide compte comme terminee, sinon la barre resterait
+   bloquee en deca de 100 % sur une analyse pourtant achevee. */
+function majBarreProgression() {
+  const fill = document.getElementById('progBarFill'); if (!fill) return;
+  const visibles = [...document.querySelectorAll('#progList .p-step')].filter(el => el.style.display !== 'none');
+  const closes = visibles.filter(el => /\b(done|fail|timeout)\b/.test(el.className)).length;
+  fill.style.width = (visibles.length ? Math.round(closes / visibles.length * 100) : 0) + '%';
+}
+/* La progression vit dans la colonne de resultats. Vider la colonne doit donc l'epargner :
+   la detruire ferait echouer tous les getElementById('progList') qui suivent. */
+function viderCentre(center) {
+  const prog = document.getElementById('progList');
+  if (prog) center.replaceChildren(prog); else center.replaceChildren();
+}
+/* Toujours en fin de colonne : seule (analyse lancee de zero), elle se centre via le
+   CSS ; apres des resultats (analyse complete enchainee, relance d'une etape), elle se
+   place dessous et sa disparition ne decale rien au-dessus. */
+function afficherProgression() {
+  const prog = document.getElementById('progList'), center = document.getElementById('centerCol');
+  if (!prog) return;
+  if (center && center.lastElementChild !== prog) center.appendChild(prog);
+  const dom = document.getElementById('progDomain');
+  if (dom) dom.textContent = currentState?.domain || emailInput.value.trim();
+  prog.style.display = 'flex';
+  majBarreProgression();
 }
 function showSteps(ids) {
   document.querySelectorAll('.p-step').forEach(el => el.style.display = 'none');
   ids.forEach(id => { const el = document.getElementById('step-' + id); if (el) el.style.display = 'flex'; });
-  document.getElementById('progList').style.display = 'flex';
+  afficherProgression();
 }
 function cancelStep(key) {
   const ctrl = stepControllers[key];
@@ -4250,9 +4278,8 @@ function cancelStep(key) {
 async function retryStep(key) {
   const fn = stepRetryFns[key]; if (!fn) return;
   // Rendre le prog-list visible si l'analyse précédente était terminée
-  const progList = document.getElementById('progList');
-  progList.style.display = 'flex';
   document.getElementById('step-' + key).style.display = 'flex';
+  afficherProgression();
   lockButtons();
   setStep('step-' + key, 'active');
   try {
@@ -7070,7 +7097,7 @@ function reorderResults(center) {
 // (ces données nécessitent une recherche par domaine, ajoutée séparément ensuite).
 async function checkFastById(tenantId) {
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
-  errBox.style.display = 'none'; center.replaceChildren(); closePanel();
+  errBox.style.display = 'none'; viderCentre(center); closePanel();
   exportBtn.classList.remove('visible'); lastReport = null;
   currentState = { domain: null, ms: null, dns: null, goog: null, health: null, others: null, host: null, graph: null, fullDone: false };
   lockButtons(); setFastLoading(true);
@@ -7139,7 +7166,7 @@ async function checkFast() {
   if (GUID_ONLY_RE.test(raw)) { await checkFastById(raw); return; }
   const domain = extractDomain(raw); if (!domain || !domain.includes('.')) { showError('Domaine invalide.'); return; }
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
-  errBox.style.display = 'none'; center.replaceChildren(); closePanel();
+  errBox.style.display = 'none'; viderCentre(center); closePanel();
   exportBtn.classList.remove('visible'); lastReport = null;
   currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, graph:null, fullDone:false };
   lockButtons(); setFastLoading(true);
@@ -7291,7 +7318,7 @@ async function checkFull() {
   if (GUID_ONLY_RE.test(raw)) { showError("L'analyse complète par Tenant ID n'est pas encore disponible — utilisez le bouton « Tenant ID » ou saisissez le domaine résolu."); return; }
   const domain = extractDomain(raw); if (!domain || !domain.includes('.')) { showError('Domaine invalide.'); return; }
   const center = document.getElementById('centerCol'), exportBtn = document.getElementById('exportBtn'), errBox = document.getElementById('errBox');
-  errBox.style.display = 'none'; center.replaceChildren(); closePanel();
+  errBox.style.display = 'none'; viderCentre(center); closePanel();
   exportBtn.classList.remove('visible'); lastReport = null;
   currentState = { domain, ms:null, dns:null, goog:null, health:null, others:null, host:null, graph:null, fullDone:false };
   lockButtons(); setFullLoading(true);
