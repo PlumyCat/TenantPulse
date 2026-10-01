@@ -1869,20 +1869,35 @@ function makeGdapContradiction(g, tags) {
   return b;
 }
 
-async function refreshHeroTags(tenantId, domain, zoneEl) {
+/* Dernière réponse de /api/classification, mémorisée le temps d'une analyse.
+   Le bloc d'en-tête est reconstruit quand l'analyse complète suit la rapide (et à
+   l'enregistrement du profil) : sans mémoire, chaque reconstruction refaisait le même
+   appel, et ses quatre lectures de table, à quelques secondes d'intervalle.
+   Seule la construction du bloc réutilise (reutiliser = true) ; un rafraîchissement
+   après une action sur un tag interroge toujours le serveur et met la mémoire à jour.
+   oublierClassification() la vide au lancement de chaque analyse. */
+let classifMemo = null; // { tenantId, promesse }
+function oublierClassification() { classifMemo = null; }
+
+async function refreshHeroTags(tenantId, domain, zoneEl, reutiliser = false) {
   const zone = zoneEl || document.querySelector('.hero-tags[data-tenant="' + (window.CSS && CSS.escape ? CSS.escape(tenantId) : tenantId) + '"]');
   if (!zone) return;
   const badges = zone.querySelector('.hero-tags-badges');
   if (!badges) return;
 
-  let data;
-  try {
-    const res = await fetch('/api/classification?tenantId=' + encodeURIComponent(tenantId), { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) return;
-    data = await res.json();
-  } catch {
-    return;
+  let data = null;
+  if (reutiliser && classifMemo && classifMemo.tenantId === tenantId) data = await classifMemo.promesse;
+  if (!data) {
+    const promesse = (async () => {
+      try {
+        const res = await fetch('/api/classification?tenantId=' + encodeURIComponent(tenantId), { headers: { 'Accept': 'application/json' } });
+        return res.ok ? await res.json() : null;
+      } catch { return null; }
+    })();
+    classifMemo = { tenantId, promesse };
+    data = await promesse;
   }
+  if (!data) return;
 
   // S'assure que les tags personnalisés sont en cache pour résoudre leurs
   // libellés/couleurs/descriptions (lecture seule pour tous les rôles)
@@ -5517,8 +5532,9 @@ function renderHero(ms, domain, confidence) {
       const tagZone = buildHeroTagZone(ms.tenantId, domain);
       if (tagZone) {
         hero.appendChild(tagZone);
-        // On passe la zone directement : le hero n'est pas encore dans le document
-        if (typeof refreshHeroTags === 'function') refreshHeroTags(ms.tenantId, domain, tagZone);
+        // On passe la zone directement : le hero n'est pas encore dans le document.
+        // Reconstruction du bloc : la réponse déjà obtenue pendant l'analyse suffit.
+        if (typeof refreshHeroTags === 'function') refreshHeroTags(ms.tenantId, domain, tagZone, true);
       }
       const profile = loadProfile();
       const enabled = orderedRedirectButtons(profile).filter(b => profile[b.key] !== false);
@@ -7219,6 +7235,7 @@ async function checkFastById(tenantId) {
   currentState = { domain: null, ms: null, dns: null, goog: null, health: null, others: null, host: null, graph: null, fullDone: false };
   lockButtons(); setFastLoading(true);
   showSteps(['ms']);
+  oublierClassification();
   stepRetryFns.ms = () => checkFastById(tenantId);
   try {
     setStep('step-ms', 'active', 'Validation du Tenant ID…');
@@ -7398,7 +7415,7 @@ async function checkFast() {
   // L'étape Graph n'apparaît que si l'utilisateur y est connecté : sans connexion
   // elle n'a rien à faire, et une étape vide dans la liste ferait croire à un échec.
   showSteps(graphConnecte() ? ['ms', 'graph', 'dns'] : ['ms', 'dns']);
-  viderCacheDns();
+  viderCacheDns(); oublierClassification();
   const E = etapesAnalyse(domain);
   Object.assign(stepRetryFns, { ms: E.ms, dns: E.dns });
   try {
@@ -7496,7 +7513,7 @@ async function checkFull() {
   const etapes = graphConnecte() ? ['ms', 'graph', 'dns', 'health', 'others', 'host'] : ['ms', 'dns', 'health', 'others', 'host'];
   showSteps(etapes);
   etapes.forEach(k => setStep('step-' + k, 'pending'));
-  viderCacheDns();
+  viderCacheDns(); oublierClassification();
   const E = etapesAnalyse(domain);
   // Peupler stepRetryFns pour que le bouton "Relancer" fonctionne en mode full
   Object.assign(stepRetryFns, { ms: E.ms, dns: E.dns, health: E.health, others: E.others, host: E.host });
