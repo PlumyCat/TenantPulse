@@ -77,6 +77,40 @@ cd api && func start
 
 ---
 
+## Hébergement — GitHub Pages
+
+L'application n'est plus hébergée sur Azure Static Web Apps : elle est publiée sur
+**GitHub Pages** par `.github/workflows/github-pages.yml`, à chaque push sur `main`. Aucun
+build ; le workflow copie une **liste blanche** (`*.html`, `*.js`, `*.css`, `assets/`, `ML/`)
+dans `_site/`. `api/`, `extension/` et la documentation ne sont pas publiés — un nouveau
+dossier du front doit être ajouté à la ligne `cp` du workflow. Prérequis côté dépôt, une
+fois : Settings → Pages → Source = « GitHub Actions ».
+
+`azure-static-web-apps.yml` et `staticwebapp.config.json` restent en place pour un éventuel
+retour ; le workflow Azure ne part plus que manuellement (`workflow_dispatch`).
+
+Conséquences à garder en tête :
+
+- **Pas de backend.** `TP_BACKEND` (`tenantpulse.js`) vaut `false` quand `/api/me` répond
+  404 ou n'est pas joignable. Ce qui dépend des Functions est alors masqué ou sauté : tags,
+  administration, bandeau, boutons libres, bouton Déconnexion, invitation à installer
+  l'extension (son attestation passe par `/api/me`). Graph disparaît de lui-même, faute
+  d'identifiant client. Toute nouvelle fonction appuyée sur `/api/*` doit tester
+  `TP_BACKEND === false` plutôt que de laisser partir une requête vouée au 404. Une réponse
+  5xx compte comme backend présent : une panne passagère ne retire rien.
+- **Sous-chemin.** Le site est servi sous `/<dépôt>/`, pas à la racine. Les chemins du front
+  doivent rester **relatifs** (`assets/…`, `ML/…`) ; un chemin absolu (`/foo`) vise la racine
+  du domaine `github.io` et répond 404. Exceptions assumées : les `/api/*` (leur 404 est
+  justement le signal d'absence de backend) et le retour Graph (`TP_GRAPH_CALLBACK`,
+  `graph-callback.js`), inatteignable sans backend.
+- **Pas d'en-têtes HTTP.** GitHub Pages ne permet pas d'en poser : seule la CSP en `<meta>`
+  s'applique. `frame-ancestors`, HSTS, COOP et les autres en-têtes de
+  `staticwebapp.config.json` ne sont pas servis.
+- **Page publique.** Aucune authentification devant le site. L'application ne traite aucune
+  donnée côté serveur et son code est déjà public : rien de nouveau n'est exposé.
+
+---
+
 ## Architecture
 
 ### Three apps in one shell, wired by iframes + postMessage
@@ -406,7 +440,8 @@ Opt-in by design. Keys:
 ### Optional backend — Azure Functions + Azure Table Storage
 
 Deployed as Azure Static Web Apps with Entra ID authentication (AAD_CLIENT_ID / AAD_CLIENT_SECRET
-env vars). Auth context is injected by the SWA runtime as the `x-ms-client-principal` header
+env vars). **Plus déployé à ce jour** — voir « Hébergement — GitHub Pages » ; ce qui suit vaut
+pour un retour sur Azure. Auth context is injected by the SWA runtime as the `x-ms-client-principal` header
 (base64 JWT) and decoded in `api/shared/auth.js` via `getAuthContext()`.
 
 **Tables in Azure Table Storage:**

@@ -1357,7 +1357,13 @@ function syncExtensionUI() {
   const prefere = isEdgeBrowser()
     ? [TP_EXTENSION.urlEdge, TP_EXTENSION.url]
     : [TP_EXTENSION.url, TP_EXTENSION.urlEdge];
-  const href = prefere.map(u => (u ? safeStoreUrl(u) : null)).find(Boolean) || null;
+  /* Sans backend, l'extension ne peut pas fonctionner : elle n'opère qu'après une
+     attestation lue sur GET /api/me. Rien à installer, donc, sur un hébergement
+     statique — ni tant que /api/me n'a pas répondu, sans quoi le bouton apparaîtrait
+     puis disparaîtrait. */
+  const href = TP_BACKEND === true
+    ? prefere.map(u => (u ? safeStoreUrl(u) : null)).find(Boolean) || null
+    : null;
   if (href) { cta.href = href; cta.hidden = false; } else { cta.hidden = true; }
 }
 
@@ -1403,9 +1409,13 @@ window.addEventListener('load', () => {
   syncHistoryToggleUI();
   renderHistory();
   syncCacheIndicator();
-  initAuth();
-  loadBanner(); surveillerBanner();
-  loadNavLinks();
+  /* Le bandeau et les boutons libres viennent du backend : rien à demander quand
+     /api/me a établi qu'il n'y en a pas (GitHub Pages, serveur local). */
+  initAuth().then(() => {
+    if (TP_BACKEND === false) return;
+    loadBanner(); surveillerBanner();
+    loadNavLinks();
+  });
   bindAdminEvents();
   watchExtensionMarker();
   /* Avant applyHashQuery : au retour d'Entra le fragment porte le code
@@ -1453,11 +1463,20 @@ const TP_AUTH = {
   }
 };
 
+/* Présence d'un backend derrière /api, établie par initAuth() :
+   null tant que /api/me n'a pas répondu, false sur un hébergement purement statique
+   (GitHub Pages, serveur local), true dès qu'une Function répond — même en erreur.
+   Sans backend, les appels qui en dépendent sont sautés plutôt que de produire des 404,
+   et ce qui ne peut pas fonctionner sans lui (déconnexion, extension) n'est pas proposé. */
+let TP_BACKEND = null;
+
 /* Récupère l'identité + le rôle depuis l'API et met à jour l'UI.
    En local (file:// ou pas d'API), échoue silencieusement → reste en "user". */
 async function initAuth() {
   try {
     const res = await fetch('/api/me', { headers: { 'Accept': 'application/json' } });
+    // 404 : aucune Function derrière /api. Toute autre réponse prouve qu'un backend existe.
+    TP_BACKEND = res.status !== 404;
     if (res.ok) {
       const data = await res.json();
       TP_AUTH.email  = data.email || null;
@@ -1483,10 +1502,14 @@ async function initAuth() {
       }
     }
   } catch {
-    // Pas d'API disponible (dev local) — on reste en utilisateur anonyme.
+    /* Pas d'API joignable (GitHub Pages, dev local) — on reste en utilisateur anonyme.
+       Couvre aussi l'hébergeur qui renvoie sa page HTML pour toute route inconnue :
+       le 200 passe, puis la lecture JSON échoue ici. */
+    TP_BACKEND = false;
   }
   /* Hors du try, et sans retour anticipé : le bouton d'installation s'appuie sur la
-     fiche versionnée, il ne doit donc pas disparaître parce que /api/me est en erreur. */
+     fiche versionnée, il ne doit donc pas disparaître parce que /api/me est en erreur
+     (seule l'absence avérée de backend le retire, voir syncExtensionUI). */
   syncExtensionUI();
   syncDnsRelayUI();
   if (typeof syncGraphUI === 'function') syncGraphUI();
@@ -1516,6 +1539,11 @@ function applyAuthToUI() {
       footerRole.hidden = true;
     }
   }
+
+  // Déconnexion : /logout est une route d'Azure Static Web Apps, absente d'un
+  // hébergement statique où elle mènerait à une page 404.
+  const logout = document.getElementById('topbarLogout');
+  if (logout) logout.hidden = TP_BACKEND !== true;
 
   // Bouton d'accès : visible pour tout utilisateur connecté.
   // Libellé "Annuaire des tenants" pour les utilisateurs, "Administration" pour les autres.
@@ -4845,6 +4873,7 @@ async function resolveKnownDomainForTenantId(tenantId) {
   const t = tenantId.toLowerCase();
   const local = loadHistory().find(i => i.tenantId?.toLowerCase() === t);
   if (local?.domain) return local.domain;
+  if (TP_BACKEND === false) return null;   // pas d'annuaire partagé sans backend
   try {
     const r = await fetch('/api/classification?all=1', { headers: { Accept: 'application/json' } });
     if (r.ok) {

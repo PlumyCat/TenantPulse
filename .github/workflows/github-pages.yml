@@ -1,0 +1,54 @@
+name: GitHub Pages
+
+# Publication de TenantPulse sur GitHub Pages. Site 100 % statique : aucun build,
+# les fichiers du front sont copiés tels quels.
+#
+# Le backend (api/, Azure Functions) n'est pas publié — GitHub Pages ne sert que des
+# fichiers — et l'application fonctionne sans lui : l'analyse ne repose que sur des API
+# publiques appelées depuis le navigateur. Ce qui en dépend (tags, administration,
+# bandeau, extension, Graph) n'apparaît simplement pas, voir TP_BACKEND dans
+# tenantpulse.js.
+#
+# Prérequis, une seule fois : Settings → Pages → Build and deployment →
+# Source = « GitHub Actions ».
+
+on:
+  # Déclenchement manuel : bouton « Run workflow » dans l'onglet Actions.
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Une publication à la fois. Celle en cours va à son terme : l'interrompre pourrait
+# laisser le site entre deux versions.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Publier sur GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      # Liste blanche : seuls les fichiers du front partent en ligne. api/, extension/,
+      # la documentation et la configuration Azure restent dans le dépôt.
+      - name: Assembler le site
+        run: |
+          mkdir _site
+          cp -r *.html *.js *.css assets ML _site/
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - name: Déployer
+        id: deployment
+        uses: actions/deploy-pages@v5

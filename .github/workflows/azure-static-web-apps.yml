@@ -3,20 +3,15 @@ name: Azure Static Web Apps CI/CD
 # Déploiement TenantPulse vers Azure Static Web Apps (ressource « tenantpulse-prod »,
 # RG gr-tenantpulse-prod). Site 100 % statique : aucun build (skip_app_build).
 # Le jeton de déploiement est stocké dans le secret repo AZURE_STATIC_WEB_APPS_API_TOKEN.
+#
+# L'application n'est plus hébergée sur Azure : elle est publiée sur GitHub Pages
+# (github-pages.yml). Ce workflow ne part donc plus que manuellement — déclenché à chaque
+# push, il échouerait faute de ressource. Il reste en place pour un éventuel retour sur
+# Azure : rétablir alors les déclencheurs push et pull_request sur main.
 
 on:
   # Déclenchement manuel : bouton « Run workflow » dans l'onglet Actions.
-  # Ajouté après un push qui a bien mis à jour la référence sans créer
-  # d'exécution — sans ce filet, un déclencheur automatique défaillant
-  # laisse le déploiement bloqué sans aucun recours depuis l'interface.
   workflow_dispatch:
-  push:
-    branches:
-      - main
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
-    branches:
-      - main
 
 jobs:
   build_and_deploy_job:

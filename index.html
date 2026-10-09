@@ -225,7 +225,8 @@
       <span class="admin-badge admin-badge-req" id="adminBadgeReq" title="Demandes en attente" hidden>0</span>
       <span class="admin-badge admin-badge-alert" id="adminBadgeAlert" title="Alertes de rétention" hidden>0</span>
     </button>
-    <a class="topbar-logout" href="/logout" title="Se déconnecter">Déconnexion</a>
+    <!-- Masqué jusqu'à la réponse de /api/me : sans backend (GitHub Pages), /logout n'existe pas. -->
+    <a class="topbar-logout" id="topbarLogout" href="/logout" title="Se déconnecter" hidden>Déconnexion</a>
   </div>
 </div>
 
