@@ -93,11 +93,23 @@ Conséquences à garder en tête :
 
 - **Pas de backend.** `TP_BACKEND` (`tenantpulse.js`) vaut `false` quand `/api/me` répond
   404 ou n'est pas joignable. Ce qui dépend des Functions est alors masqué ou sauté : tags,
-  administration, bandeau, boutons libres, bouton Déconnexion, invitation à installer
-  l'extension (son attestation passe par `/api/me`). Graph disparaît de lui-même, faute
-  d'identifiant client. Toute nouvelle fonction appuyée sur `/api/*` doit tester
-  `TP_BACKEND === false` plutôt que de laisser partir une requête vouée au 404. Une réponse
-  5xx compte comme backend présent : une panne passagère ne retire rien.
+  annuaire, bandeau, bouton Déconnexion, invitation à installer l'extension (son
+  attestation passe par `/api/me`). Graph disparaît de lui-même, faute d'identifiant
+  client. Toute nouvelle fonction appuyée sur `/api/*` doit tester `TP_BACKEND === false`
+  plutôt que de laisser partir une requête vouée au 404. Une réponse 5xx compte comme
+  backend présent : une panne passagère ne retire rien.
+- **Mode local = administrateur.** Sans backend, `initAuth()` pose `role: 'admin'` et
+  `loaded: true` : l'utilisateur est seul sur sa copie. Ce rôle n'ouvre rien côté serveur
+  et ne remplace pas les gardes `TP_BACKEND` — c'est pour ça que `buildHeroTagZone()` et
+  `refreshAdminBadges()` testent les deux. Dans le panneau d'administration, seuls les
+  sous-onglets marqués **`data-local`** restent visibles (`applyAdminRoleVisibility()`) ;
+  un onglet ne le reçoit que s'il fonctionne entièrement sur le stockage du navigateur.
+  Aujourd'hui : « Bouton » seul.
+- **Boutons libres en local.** `lireNavLinksLocaux()` / `publishNavLinkLocal()` remplacent
+  `/api/navlink` et rejouent ses contrôles (`verifierNavLinkLocal()` : HTTPS, 32 caractères,
+  5 boutons, échéance future à un an maximum). Clé absente = `NAVLINKS_DEFAUT` (bouton
+  « Accès conditionnel » vers Entra, sans tenant : il ouvre l'annuaire de l'utilisateur).
+  Avec un backend, la clé locale n'est ni lue ni écrite.
 - **Sous-chemin.** Le site est servi sous `/<dépôt>/`, pas à la racine. Les chemins du front
   doivent rester **relatifs** (`assets/…`, `ML/…`) ; un chemin absolu (`/foo`) vise la racine
   du domaine `github.io` et répond 404. Exceptions assumées : les `/api/*` (leur 404 est
@@ -433,6 +445,10 @@ Opt-in by design. Keys:
   `tenantpulse_graph_dev_clientid` (localStorage) est une dérogation **lue uniquement sur
   localhost** : sans Functions en local, `/api/me` ne sert aucun identifiant client et rien
   ne serait testable. En production, seul `/api/me` fait autorité.
+- Boutons libres, **mode local uniquement** : `tenantpulse_navlinks_v1` — tableau JSON
+  `{id, label, url, color, expiresAt}`. Absente = boutons par défaut ; écrite dès la première
+  modification, liste vide comprise, pour qu'un bouton par défaut retiré ne revienne pas.
+  Revalidée à chaque lecture (`lireNavLinksLocaux()`), échéances comprises.
 - Bandeau : `tenantpulse_banner_hidden_v1` — identifiant du dernier message masqué par
   l'utilisateur. Masquer ne vaut donc que pour **ce** message : l'`id` renvoyé par l'API change
   à chaque publication, si bien qu'une nouvelle annonce réapparaît chez tout le monde.

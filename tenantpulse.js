@@ -1409,12 +1409,12 @@ window.addEventListener('load', () => {
   syncHistoryToggleUI();
   renderHistory();
   syncCacheIndicator();
-  /* Le bandeau et les boutons libres viennent du backend : rien à demander quand
-     /api/me a établi qu'il n'y en a pas (GitHub Pages, serveur local). */
+  /* Après /api/me, qui établit s'il y a un backend : sans lui, les boutons libres
+     viennent du navigateur, et le bandeau n'a aucune source à interroger. */
   initAuth().then(() => {
+    loadNavLinks();
     if (TP_BACKEND === false) return;
     loadBanner(); surveillerBanner();
-    loadNavLinks();
   });
   bindAdminEvents();
   watchExtensionMarker();
@@ -1507,6 +1507,15 @@ async function initAuth() {
        le 200 passe, puis la lecture JSON échoue ici. */
     TP_BACKEND = false;
   }
+  /* Mode local : sans backend, l'utilisateur est seul sur sa copie de l'application et
+     en est l'administrateur. Ce rôle n'ouvre rien côté serveur — il n'y en a pas — et
+     ne donne accès qu'aux réglages qui vivent dans le navigateur : les onglets marqués
+     data-local du panneau d'administration. Ce qui exige le backend reste masqué par
+     les gardes TP_BACKEND, rôle ou pas. */
+  if (TP_BACKEND === false) {
+    TP_AUTH.role = 'admin';
+    TP_AUTH.loaded = true;
+  }
   /* Hors du try, et sans retour anticipé : le bouton d'installation s'appuie sur la
      fiche versionnée, il ne doit donc pas disparaître parce que /api/me est en erreur
      (seule l'absence avérée de backend le retire, voir syncExtensionUI). */
@@ -1533,7 +1542,8 @@ function applyAuthToUI() {
   if (footerRole && footerRoleValue) {
     if (TP_AUTH.loaded) {
       footerRoleValue.textContent = roleLabel(TP_AUTH.role);
-      footerRole.title = TP_AUTH.email ? ('Connecté : ' + TP_AUTH.email) : '';
+      footerRole.title = TP_AUTH.email ? ('Connecté : ' + TP_AUTH.email)
+        : (TP_BACKEND === false ? 'Mode local, sans serveur : réglages enregistrés dans ce navigateur' : '');
       footerRole.hidden = false;
     } else {
       footerRole.hidden = true;
@@ -1626,9 +1636,10 @@ function defaultTagsSync() {
 }
 
 /* Construit la zone de tags du hero : conteneur badges + bouton (+).
-   Retourne null si l'utilisateur n'est pas connecté (dev local). */
+   Retourne null si l'utilisateur n'est pas connecté, ou sans backend : les tags vivent
+   dans Azure Table Storage, le rôle admin du mode local n'y change rien. */
 function buildHeroTagZone(tenantId, domain) {
-  if (!TP_AUTH.loaded || !tenantId) return null;
+  if (!TP_AUTH.loaded || TP_BACKEND === false || !tenantId) return null;
 
   const zone = document.createElement('div');
   zone.className = 'hero-tags';
@@ -2262,11 +2273,14 @@ function bindAdminEvents() {
   });
 }
 
-/* Affiche/masque les sous-onglets selon le rôle. */
+/* Affiche/masque les sous-onglets selon le rôle. Sans backend, seuls restent ceux
+   marqués data-local, qui fonctionnent sur le stockage du navigateur. */
 function applyAdminRoleVisibility() {
-  document.querySelectorAll('.admin-subtab[data-min-role]').forEach(btn => {
+  const local = TP_BACKEND === false;
+  document.querySelectorAll('.admin-subtab').forEach(btn => {
     const required = btn.dataset.minRole;
-    btn.hidden = !TP_AUTH.hasRole(required);
+    btn.hidden = (local && !('local' in btn.dataset))
+      || (required ? !TP_AUTH.hasRole(required) : false);
   });
 }
 
@@ -2606,6 +2620,57 @@ function renderBanner(b) {
 const NAVLINK_COLOR_RE = /^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/;
 const NAVLINK_COULEUR_DEFAUT = '#4B3FBE';
 const NAVLINK_MAX = 5;
+const NAVLINK_LIBELLE_MAX = 32;
+const NAVLINK_URL_MAX = 2048;
+const NAVLINK_ECHEANCE_MAX_MS = 365 * 24 * 3600 * 1000;
+
+/* ── Mode local (sans backend) : les boutons vivent dans le navigateur ──
+   Clé absente = boutons par défaut. Dès la première modification la liste est écrite
+   telle quelle, liste vide comprise, pour qu'un bouton par défaut retiré ne revienne
+   pas au rechargement. Avec un backend, cette clé n'est ni lue ni écrite. */
+const NAVLINKS_LOCAL_KEY = 'tenantpulse_navlinks_v1';
+const NAVLINKS_DEFAUT = [
+  { id: 'acces-conditionnel', label: 'Accès conditionnel', color: NAVLINK_COULEUR_DEFAUT, expiresAt: null,
+    url: 'https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Overview/menuId//fromNav/Identity' },
+];
+
+/* Le stockage n'est jamais cru tel quel : chaque ligne repasse les contrôles de
+   makeNavLink, et les boutons échus disparaissent ici, faute de serveur pour les purger. */
+function lireNavLinksLocaux() {
+  let liste = null;
+  try {
+    const brut = localStorage.getItem(NAVLINKS_LOCAL_KEY);
+    if (brut !== null) liste = JSON.parse(brut);
+  } catch { /* illisible : repli sur les boutons par défaut */ }
+  if (!Array.isArray(liste)) liste = NAVLINKS_DEFAUT;
+  const maintenant = Date.now();
+  return liste
+    .filter(l => l && typeof l.id === 'string' && typeof l.label === 'string' && l.label.trim()
+      && safeNavLinkUrl(l.url) && !(l.expiresAt && new Date(l.expiresAt).getTime() <= maintenant))
+    .slice(0, NAVLINK_MAX);
+}
+
+function ecrireNavLinksLocaux(liste) {
+  try { localStorage.setItem(NAVLINKS_LOCAL_KEY, JSON.stringify(liste)); return true; }
+  catch { return false; }
+}
+
+/* Les contrôles de POST /api/navlink, rejoués ici puisqu'aucun serveur ne les impose.
+   Renvoie le message d'erreur, ou null si le bouton est acceptable. */
+function verifierNavLinkLocal(p, liste) {
+  if (!p.label) return 'Le libellé est obligatoire';
+  if (p.label.length > NAVLINK_LIBELLE_MAX) return 'Libellé trop long (' + NAVLINK_LIBELLE_MAX + ' caractères max)';
+  if (p.url.length > NAVLINK_URL_MAX || !safeNavLinkUrl(p.url)) return 'Adresse invalide — une URL HTTPS complète est requise';
+  if (p.expiresAt) {
+    const t = new Date(p.expiresAt).getTime();
+    if (isNaN(t)) return 'Date de fin invalide';
+    if (t <= Date.now()) return 'La date de fin doit être dans le futur';
+    if (t - Date.now() > NAVLINK_ECHEANCE_MAX_MS) return 'Date de fin trop lointaine (un an maximum)';
+  }
+  if (p.id && !liste.some(l => l.id === p.id)) return 'Bouton introuvable';
+  if (!p.id && liste.length >= NAVLINK_MAX) return 'Maximum atteint (' + NAVLINK_MAX + ' boutons)';
+  return null;
+}
 
 /* Défense en profondeur, sur le modèle de safeStoreUrl() : l'API valide déjà le
    protocole, mais un href n'est jamais posé depuis une réponse réseau sans être
@@ -2674,6 +2739,7 @@ function renderNavLinks(liens) {
 }
 
 async function loadNavLinks() {
+  if (TP_BACKEND === false) { renderNavLinks(lireNavLinksLocaux()); return; }
   try {
     const r = await fetch('/api/navlink', { headers: { 'Accept': 'application/json' } });
     if (!r.ok) return;
@@ -2693,7 +2759,8 @@ async function loadAdminNavLink() {
   pane.replaceChildren();
 
   let liens = [];
-  try {
+  if (TP_BACKEND === false) liens = lireNavLinksLocaux();
+  else try {
     const r = await fetch('/api/navlink', { headers: { 'Accept': 'application/json' } });
     if (r.ok) liens = (await r.json()).navlinks || [];
   } catch { /* hors ligne : on affiche quand même le formulaire */ }
@@ -2744,7 +2811,8 @@ async function loadAdminNavLink() {
   const aide = document.createElement('div'); aide.className = 'analysis-mode-hint';
   aide.textContent = "Adresse HTTPS obligatoire, le bouton s'ouvre dans un nouvel onglet. "
     + "La couleur teinte le bouton ; le libellé passe automatiquement en sombre sur une teinte claire. "
-    + "Date de fin facultative : laissée vide, le bouton reste jusqu'à ce qu'un admin le retire.";
+    + "Date de fin facultative : laissée vide, le bouton reste jusqu'à ce qu'un admin le retire."
+    + (TP_BACKEND === false ? " Mode local : les boutons sont enregistrés dans ce navigateur uniquement." : '');
 
   const valider = document.createElement('button');
   valider.type = 'button'; valider.className = 'admin-btn admin-btn-approve';
@@ -2832,6 +2900,7 @@ async function publishNavLink(payload) {
   if (!safeNavLinkUrl(payload.url)) {
     heroTagFeedback('Adresse invalide — une URL HTTPS complète est requise', true); return;
   }
+  if (TP_BACKEND === false) { publishNavLinkLocal(payload); return; }
   try {
     const r = await fetch('/api/navlink', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2846,7 +2915,38 @@ async function publishNavLink(payload) {
   } catch { heroTagFeedback('Erreur réseau', true); }
 }
 
+/* Équivalent local de POST /api/navlink : même forme de ligne, même ordre (une
+   modification garde sa place, un ajout va en fin de barre). */
+function publishNavLinkLocal(payload) {
+  const liste = lireNavLinksLocaux();
+  const erreur = verifierNavLinkLocal(payload, liste);
+  if (erreur) { heroTagFeedback(erreur, true); return; }
+  const lien = {
+    id: payload.id || crypto.randomUUID(),
+    label: payload.label,
+    url: safeNavLinkUrl(payload.url),
+    color: navLinkHexEtendu(payload.color) || NAVLINK_COULEUR_DEFAUT,
+    expiresAt: payload.expiresAt || null
+  };
+  const i = liste.findIndex(l => l.id === lien.id);
+  if (i >= 0) liste[i] = lien; else liste.push(lien);
+  if (!ecrireNavLinksLocaux(liste)) { heroTagFeedback('Stockage du navigateur indisponible', true); return; }
+  heroTagFeedback(payload.id ? 'Bouton modifié' : 'Bouton ajouté');
+  _navLinkEdition = null;
+  renderNavLinks(liste);
+  loadAdminNavLink();
+}
+
 async function removeNavLink(id) {
+  if (TP_BACKEND === false) {
+    const liste = lireNavLinksLocaux().filter(l => l.id !== id);
+    if (!ecrireNavLinksLocaux(liste)) { heroTagFeedback('Stockage du navigateur indisponible', true); return; }
+    heroTagFeedback('Bouton retiré');
+    if (_navLinkEdition === id) _navLinkEdition = null;
+    renderNavLinks(liste);
+    loadAdminNavLink();
+    return;
+  }
   try {
     const r = await fetch('/api/navlink', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
@@ -3065,7 +3165,7 @@ async function removeBanner() {
 /* Met à jour les badges (topbar + sous-onglets) :
    gris = demandes en attente, rouge = alertes de rétention. */
 async function refreshAdminBadges() {
-  if (!TP_AUTH.hasRole('moderator')) return;
+  if (TP_BACKEND === false || !TP_AUTH.hasRole('moderator')) return;
 
   // Badge gris — demandes en attente
   let pendingCount = 0;

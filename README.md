@@ -59,10 +59,15 @@ SPF/DKIM/DMARC, WHOIS/RDAP, hosting provider), the email-header analyzer, local 
 profiles and settings — everything that runs in the browser.
 
 What needs the Azure backend and is **hidden** on GitHub Pages: shared tenant tags and the
-admin panel, the information banner and custom nav buttons, the Microsoft Graph connection
-(its client ID is served by `/api/me`), the browser extension (gated on a `/api/me`
-attestation) and the **Logout** button. Detection is automatic (`TP_BACKEND` in
-`tenantpulse.js`: `/api/me` answering 404 means a static host).
+tenant directory, the information banner, the Microsoft Graph connection (its client ID is
+served by `/api/me`), the browser extension (gated on a `/api/me` attestation) and the
+**Logout** button. Detection is automatic (`TP_BACKEND` in `tenantpulse.js`: `/api/me`
+answering 404 means a static host).
+
+Without a backend the visitor is **admin of their own copy**: the *Administration* panel
+shows the tabs that work from browser storage alone — today, the custom nav buttons
+(*Bouton*), saved in `localStorage`. A default **Accès conditionnel** button (Entra
+Conditional Access) is provided and can be edited or removed.
 
 The page is **public**: GitHub Pages has no sign-in. The app processes no data server-side,
 and its source is already public in this repository.

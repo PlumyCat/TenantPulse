@@ -509,8 +509,10 @@
         <img src="assets/information.png" class="admin-subtab-ico icon-adaptive" alt="">
         Bandeau
       </button>
-      <!-- Libellés courts pour tenir sur une ligne ; le nom complet est dans l'infobulle. -->
-      <button class="admin-subtab" data-subtab="navlink" data-min-role="admin" role="tab" type="button" title="Boutons de la barre de navigation" hidden>
+      <!-- Libellés courts pour tenir sur une ligne ; le nom complet est dans l'infobulle.
+           data-local : l'onglet fonctionne sans backend (boutons en localStorage), il reste
+           donc visible en mode local. Voir applyAdminRoleVisibility(). -->
+      <button class="admin-subtab" data-subtab="navlink" data-min-role="admin" data-local role="tab" type="button" title="Boutons de la barre de navigation" hidden>
         <img src="assets/Redirect.png" class="admin-subtab-ico icon-adaptive-inv" alt="">
         Bouton
       </button>

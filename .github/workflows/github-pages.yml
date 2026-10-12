@@ -5,9 +5,9 @@ name: GitHub Pages
 #
 # Le backend (api/, Azure Functions) n'est pas publié — GitHub Pages ne sert que des
 # fichiers — et l'application fonctionne sans lui : l'analyse ne repose que sur des API
-# publiques appelées depuis le navigateur. Ce qui en dépend (tags, administration,
-# bandeau, extension, Graph) n'apparaît simplement pas, voir TP_BACKEND dans
-# tenantpulse.js.
+# publiques appelées depuis le navigateur. Ce qui en dépend (tags, annuaire, bandeau,
+# extension, Graph) n'apparaît simplement pas, et l'utilisateur est administrateur de
+# sa copie : voir TP_BACKEND dans tenantpulse.js.
 #
 # Prérequis, une seule fois : Settings → Pages → Build and deployment →
 # Source = « GitHub Actions ».
